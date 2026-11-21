@@ -1,0 +1,13 @@
+FOR CLAUDE CODE - PASTE THIS WHOLE FILE INTO CLAUDE CODE ON WINDOWS
+
+Hi, I am Claude Code on Brant's Windows PC. Brant does not have a Mac.
+
+Your job:
+1. This folder is the Lumber Empire game project. Read README.md, GAME_SPEC.md, and COLLABORATION.md first.
+2. Build the game using Expo + React Native + TypeScript, so it can be built on Windows and submitted to the iPhone App Store with EAS Build. Do NOT use Swift or Xcode.
+3. Start with the chop wood screen, Money and Gold in the top bar, and the Shop. Make it actually work and look good.
+4. After you finish each part, test it with npx expo start, fix any errors, and tell Brant what works and what to test next.
+5. If Brant does not have a GitHub repo yet, help him make one: ask for his GitHub username, create an empty repo called lumber-empire on github.com, then push this folder to it with git. Walk him through it step by step, one command at a time.
+6. Do not ask Brant confusing setup questions. Just do the work and tell him in plain words what you did.
+
+Brant is the boss. Muse is the game designer. You are the coder.

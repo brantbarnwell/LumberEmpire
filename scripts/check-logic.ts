@@ -1,0 +1,21 @@
+import { newGame, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, applyOffline } from '../src/game/logic';
+const ok = (c: boolean, m: string) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
+let s = devSpawnGolden(newGame(0), 0);
+let gold: any = null;
+for (let i = 0; i < 18; i++) { const r = chop(s, 1000, () => 0.5); s = r.state; if (r.result.golden) gold = r.result.golden; }
+ok(gold && gold.gold >= 3 && gold.gold <= 10 && s.gold === gold.gold, `golden tree gives 3-10 Gold (got ${gold?.gold})`);
+let t = devSpawnGolden(newGame(0), 0); for (let i = 0; i < 18; i++) t = chop(t, 61_000, () => 0.5).state;
+ok(t.gold === 0, 'golden tree expires after 60s');
+let g = grantProduct(newGame(0), 'com.lumberempire.gold550', 'tx1', 0)!;
+ok(g.gold === 550, 'gold pack grants 550');
+ok(grantProduct(g, 'com.lumberempire.gold550', 'tx1', 0) === null, 'same transaction never granted twice');
+let pk = grantProduct(newGame(0), 'com.lumberempire.propack', 'tx2', 0)!;
+ok(pk.gold === 2500 && pk.axeIndex === 5 && pk.owned.pendingHelpers === 3 && pk.boosts[0].mult === 2, 'Pro Logger Pack: gold, Diamond Axe, helpers, 2x money');
+let v = claimVip({ ...newGame(0), vipActive: true }, 0)!;
+ok(v.gold === 100 && claimVip(v, 0) === null, 'VIP daily 100 Gold once per day');
+let w = { ...newGame(0), axeDurability: 0, money: 100 };
+ok(repairCost(w, 100) === 12 && repairCost(w, 50) === 6 && repair(w, 100)!.money === 88, 'Rusty Axe full repair $12, half $6');
+let br = chop({ ...newGame(0), axeIndex: 2, axeDurability: 0 }, 0, () => 0.5).result;
+ok(Math.abs(br.wood - 0.8) < 1e-9, 'broken axe chops like a rusty axe');
+let off = applyOffline({ ...newGame(0), wood: 500, lastSaved: 0 }, 3600_000);
+ok(off.sold > 0 && off.earned > 0, `offline selling works (sold ${off.sold}, earned $${off.earned.toFixed(2)})`);

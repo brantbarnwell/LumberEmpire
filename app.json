@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Lumber Empire",
+    "slug": "lumber-empire",
+    "scheme": "lumberempire",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#17301f",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#17301f"
+    },
+    "ios": {
+      "bundleIdentifier": "com.lumberempire.game",
+      "supportsTablet": true,
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.lumberempire.game",
+      "adaptiveIcon": {
+        "backgroundColor": "#17301f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": { "deploymentTarget": "17.0" }
+        }
+      ]
+    ]
+  }
+}
