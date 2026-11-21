@@ -4,7 +4,7 @@ This is the single source of truth. Claude Code: build exactly this. Muse: use t
 
 ## 0. Balance v2 - a little harder (Brant, Nov 2026)
 
-- All Money prices are about 20% higher than the first draft: axes, helpers, tools, repairs, land, buildings, workshop.
+- All Money prices are about 20% higher than the first draft. Helpers, land and workshop were raised again in section 16.
 - Rusty Axe starts at 0.8 wood per chop. Stone Axe is $75 and Iron Axe is $350 (a bit more than +20%).
 - Wood sells for about $0.12 at normal demand (player still sets the price with the slider).
 - Pacing targets: first axe about 5 minutes, first helper about 20 minutes, first land about 1 hour, first workshop about 2 hours.
@@ -59,9 +59,9 @@ One-time packs:
 - com.lumberempire.noads - Remove Ads - $4.99 - one-time, removes all ads forever
 
 Subscriptions:
-- com.lumberempire.vip.monthly - VIP Tycoon Monthly - $9.99 per month
-- com.lumberempire.vip.yearly - VIP Tycoon Yearly - $59.99 per year
-- VIP: 2x earnings, 100 free Gold every day, exclusive VIP axe, no ads.
+- com.lumberempire.vip.monthly - VIP Tycoon Monthly - $4.99 per month
+- com.lumberempire.vip.yearly - VIP Tycoon Yearly - $39.99 per year
+- VIP: 2x earnings, 100 free Gold every day, exclusive VIP cosmetics, no ads (video rewards are instant).
 
 Shop tab must show all packs with real dollar prices, working Buy buttons, a Restore Purchases button, loading states, success and error messages. Include a StoreKit Configuration / sandbox test setup for testing. Brant must create these same products with the same IDs and prices in App Store Connect before real money works.
 
@@ -77,12 +77,12 @@ Rusty Axe (start, 0.8 wood per chop), Stone Axe $75 (2), Iron Axe $350 (5), Stee
 
 Helpers tab. Helpers chop automatically every second, even when the player is not tapping.
 
-- Apprentice Helper - $180 - 2 wood/sec
-- Lumberjack Helper - $600 - 5 wood/sec
-- Veteran Logger - $2,400 - 15 wood/sec
-- Tree Feller Pro - $12,000 - 50 wood/sec
-- Master Lumberjack - $60,000 - 200 wood/sec
-- Elite Logging Crew - $300,000 - 1,000 wood/sec
+- Apprentice Helper - $450 - 2 wood/sec
+- Lumberjack Helper - $1,500 - 5 wood/sec
+- Veteran Logger - $6,000 - 15 wood/sec
+- Tree Feller Pro - $30,000 - 50 wood/sec
+- Master Lumberjack - $150,000 - 200 wood/sec
+- Elite Logging Crew - $750,000 - 1,000 wood/sec
 
 Each helper can be leveled up 10 times. Each level is +25% output and costs more Money. Player can hire multiple copies. Helpers appear working in the forest. Add a manager helper that auto-sells wood and auto-collects Money.
 
@@ -120,12 +120,12 @@ Every axe and tool starts at 100% durability and wears out with use.
 Land tab and Empire Map. Land increases max wood storage, unlocks new tree types, and produces passive wood. Land can be upgraded with Plant Trees, Fertilizer, and Irrigation. Trees get chopped down and regrow, so the player must plant new trees or buy more land.
 
 Land list:
-- Small Clearing $1,200, 10 trees, +5 wood/sec
-- Pine Grove $6,000, 25 trees, +20 wood/sec
-- Hillside Forest $24,000, 50 trees, +75 wood/sec
-- River Valley Forest $90,000, 100 trees, +250 wood/sec
-- Redwood Forest $300,000, 250 trees, +800 wood/sec, unlocks rare redwood
-- Mountain Timberland $1,200,000, 500 trees, +3,000 wood/sec
+- Small Clearing $3,000, 10 trees, +5 wood/sec
+- Pine Grove $15,000, 25 trees, +20 wood/sec
+- Hillside Forest $60,000, 50 trees, +75 wood/sec
+- River Valley Forest $225,000, 100 trees, +250 wood/sec
+- Redwood Forest $750,000, 250 trees, +800 wood/sec, unlocks rare redwood
+- Mountain Timberland $3,000,000, 500 trees, +3,000 wood/sec
 - Global Timber Estate, Gold only, +10,000 wood/sec
 
 More land means more trees for helpers to chop. Better tools mean helpers chop faster.
@@ -210,14 +210,14 @@ Weather affects chopping, selling, and the price the player should set.
 
 Crafting building chain, bought and upgraded with Money. Each upgrade makes more Money and unlocks new things to build and sell.
 
-1. Backyard Shed $600, slow crafting, 1 slot
-2. Work Trailer $3,000, faster, 2 slots, unlocks tables
-3. Small Workshop $12,000, 3 slots, unlocks desks and bookshelves
-4. Lumber Shop $48,000, 4 slots, unlocks cabinets and dining tables, customers can visit
-5. Warehouse $180,000, 5 slots, bulk crafting, storage for 500 finished items
-6. Furniture Factory $600,000, 6 slots, fast crafting, unlocks sculptures
-7. Timber Plant $1,800,000, 8 slots, very fast, unlocks luxury furniture
-8. Global Manufacturing Hub $6,000,000, 10 slots, instant crafting boost, unlocks masterpiece sculptures
+1. Backyard Shed $600 (locked until you own your first land), slow crafting, 1 slot
+2. Work Trailer $5,000, faster, 2 slots, unlocks tables
+3. Small Workshop $20,000, 3 slots, unlocks desks and bookshelves
+4. Lumber Shop $80,000, 4 slots, unlocks cabinets and dining tables, customers can visit
+5. Warehouse $300,000, 5 slots, bulk crafting, storage for 500 finished items
+6. Furniture Factory $1,000,000, 6 slots, fast crafting, unlocks sculptures
+7. Timber Plant $3,000,000, 8 slots, very fast, unlocks luxury furniture
+8. Global Manufacturing Hub $10,000,000, 10 slots, instant crafting boost, unlocks masterpiece sculptures
 
 Each upgrade costs more Money, takes time to build unless sped up with Gold, increases crafting speed, slots, quality, and sell value.
 
@@ -258,3 +258,25 @@ No multiplayer. Leaderboard is a ranking list only, not live play against real p
 - Save locally, autosave every 10 seconds, offline earnings when the player returns.
 - Works on iPhone and iPad, portrait mode.
 - Every button must work. No placeholder or fake functionality.
+
+
+## 16. Part 2 balance - helpers, land, workshop (from Muse, Nov 21 2026)
+
+Muse's own copy of this section is the source of truth; this is what the code uses.
+
+- Helpers cost 3x the first draft: Apprentice $450, Lumberjack $1,500, Veteran $6,000, Tree Feller $30,000, Master $150,000, Elite Crew $750,000. No helper wages yet.
+- Land asking prices 3x: Small Clearing $3,000, Pine Grove $15,000, Hillside $60,000, River Valley $225,000, Redwood $750,000, Mountain $3,000,000. Seller secret minimums scale the same.
+- Workshop: Backyard Shed stays $600 but is locked until the first land ("Buy your first land to unlock the workshop"). Others 2x: Trailer $5,000, Small Workshop $20,000, Lumber Shop $80,000, Warehouse $300,000, Factory $1,000,000, Timber Plant $3,000,000, Global Hub $10,000,000.
+- Coder choices (BALANCE, change freely): each extra copy of a helper costs 15% more; level-ups cost hire price x 1.6 per level; Backyard Shed takes 60 minutes to build (Gold can finish it); land upgrades cost 25% / 40% / 60% of asking for +20% / +30% / +50%.
+- Not built yet: AI rival companies, timed land auctions, the manager helper, tools, wood quality, storage limits.
+
+## 17. Part 3 - make money and keep players (from Muse, Nov 21 2026)
+
+Sell time, not power. About 5% of players pay, so the game must be fully fun for free. No hard paywall, no pay-to-win, clear prices.
+
+1. Rewarded video ads, opt-in only. Never forced, never while tapping, never forced on payers. Welcome Back screen: watch for 2x offline earnings or a plain Collect button. 2x production for 30 minutes per video (watching again adds 30 min, up to 4 hours). Free Gold from videos capped at 5 a day (5 Gold each). Boosts add, never multiply (2x + 2x = 3x). VIP and Remove Ads players get video rewards instantly with no video.
+2. VIP: $4.99 per month, $39.99 per year. 2x earnings, 100 Gold a day, exclusive cosmetics, no ads.
+3. Retention: 7-day daily rewards with a big Day 7; missing a day pauses the streak, never resets it. 3 daily quests and 1 weekly quest. Weekly Timber Rush (Friday to Sunday): 2x output on one wood type you own. Prestige (Timber Baron) at $200,000,000 earned in one run, about 2.8 days of normal play (4 x 30 min sessions a day); run 2 is about 2x to 3.7x faster depending on when you take it (speed = 1 + square root of run earnings / $200M).
+4. Push notifications: ask after the first upgrade, not on first launch. Max 1 a day, quiet hours 9pm to 9am, personal ("Your helpers stacked up 12,400 logs").
+5. Offline earnings: helpers and land at 50% rate, 8 hour cap.
+6. Gold shop (sells time): 2x Wood 1 hour 20 Gold, 2x Wood 24 hours 150 Gold, 2x Money 1 hour 20 Gold, instant axe repair 10 Gold, finish workshop builds and crafts at 1 Gold per 3 minutes left.

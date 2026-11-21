@@ -24,8 +24,8 @@ Purchases do **not** work in Expo Go or the web preview. The Shop says so and sh
 | com.lumberempire.megapack | Non-Consumable | $49.99 |
 | com.lumberempire.landpack | Non-Consumable | $29.99 |
 | com.lumberempire.noads | Non-Consumable | $4.99 |
-| com.lumberempire.vip.monthly | Auto-Renewable Subscription (group "VIP") | $9.99 / month |
-| com.lumberempire.vip.yearly | Auto-Renewable Subscription (group "VIP") | $59.99 / year |
+| com.lumberempire.vip.monthly | Auto-Renewable Subscription (group "VIP") | $4.99 / month |
+| com.lumberempire.vip.yearly | Auto-Renewable Subscription (group "VIP") | $39.99 / year |
 
 5. Users and Access > Sandbox: create a Sandbox tester (a new email you don't use for anything else). On the iPhone: Settings > App Store > Sandbox Account, sign in with it. Sandbox purchases are free.
 
@@ -65,3 +65,19 @@ A development build (`--profile development`) also works and lets you use `npx e
 - Each Apple transaction is only granted once, tracked in the save file.
 - Helpers, Sawmill and Redwood Forest from packs are saved now and handed out when those features are built.
 - Xcode StoreKit Configuration files need a Mac, so we test with Sandbox and TestFlight instead.
+
+## Rewarded video ads (Google AdMob)
+
+Until these are set, the app shows Google's **test** videos (they never pay).
+
+1. Make an account at admob.google.com and add an iOS app (Lumber Empire).
+2. Create one **Rewarded** ad unit.
+3. Put the IDs in EAS (never in git):
+
+```bash
+npx eas-cli@latest env:create --name ADMOB_IOS_APP_ID --value ca-app-pub-XXXX~YYYY --environment production --visibility plaintext
+npx eas-cli@latest env:create --name EXPO_PUBLIC_ADMOB_IOS_REWARDED_ID --value ca-app-pub-XXXX/ZZZZ --environment production --visibility plaintext
+```
+
+4. The app asks for non-personalized ads only, so it does not show Apple's tracking popup. In App Store Connect > App Privacy, declare that the app uses AdMob (device ID / advertising data, not linked to the user, not used for tracking).
+5. Videos and notifications need a real build (development build or TestFlight), not Expo Go.

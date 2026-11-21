@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getState, update, useGame } from '../game/store';
 import {
-  bestPrice, boostMult, chop, demandFor, demandLabel, devSpawnGolden, durabilityPower, marketPriceFor,
+  bestPrice, boostMult, chop, demandFor, helperCount, passiveWoodPerSec, rushInfo, demandLabel, devSpawnGolden, durabilityPower, marketPriceFor,
   moneyMult, repair, repairCost, salesPerSec, woodPerChop,
 } from '../game/logic';
-import { AXES, CRIT_CHANCE, CRIT_MULT, PRICE_MAX_FACTOR, PRICE_MIN_FACTOR } from '../game/data';
+import { AXES, CRIT_CHANCE, CRIT_MULT, HELPERS, PRICE_MAX_FACTOR, PRICE_MIN_FACTOR, WOOD_NAMES, AD_BOOST_MINUTES } from '../game/data';
+import { adFree, canAdBoost, rewardAdBoost } from '../game/meta';
+import { runReward } from './reward';
 import { duration, money, small, whole } from '../game/format';
 import { recordWood } from '../game/rate';
 import { haptic } from '../services/haptics';
@@ -67,6 +69,8 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
   };
 
   const boosts = s.boosts.filter((b) => b.until > now);
+  const rush = rushInfo(s, now);
+  const [adMsg, setAdMsg] = useState<string | null>(null);
   const dur = s.axeDurability;
   const fullCost = repairCost(s, 100);
 
@@ -74,12 +78,30 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
     <View style={{ flex: 1 }}>
       <Background />
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
+        {rush.active && (
+          <Text style={styles.rush}>🔥 Timber Rush: 2x {WOOD_NAMES[rush.type]} output this weekend</Text>
+        )}
+        <View style={styles.boostRow}>
+          {canAdBoost(s, now) && (
+            <Text
+              style={[styles.boost, styles.adChip]}
+              onPress={async () => {
+                setAdMsg(null);
+                const err = await runReward((st) => rewardAdBoost(st, Date.now()));
+                if (err) setAdMsg(err);
+              }}
+            >
+              {adFree(s) ? '⚡' : '▶'} 2x wood {AD_BOOST_MINUTES} min{adFree(s) ? ' (free)' : ''}
+            </Text>
+          )}
+        </View>
+        {adMsg && <Text style={styles.adMsg} onPress={() => setAdMsg(null)}>{adMsg}</Text>}
         {(boosts.length > 0 || s.vipActive) && (
           <View style={styles.boostRow}>
             {s.vipActive && <Text style={[styles.boost, { backgroundColor: '#5b2d8e' }]}>👑 VIP 2x Money</Text>}
             {boosts.map((b, i) => (
               <Text key={i} style={styles.boost}>
-                {b.kind === 'wood' ? '🪵' : '💵'} {b.mult}x {b.kind === 'wood' ? 'Wood' : 'Money'} · {duration(b.until - now)}
+                {b.kind === 'wood' ? '🪵' : '💵'} {b.mult}x {b.kind === 'wood' ? 'Wood' : 'Money'}{b.source === 'ad' ? ' (video)' : ''} · {duration(b.until - now)}
               </Text>
             ))}
           </View>
@@ -95,6 +117,8 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
           />
           <Text style={styles.tapHint}>Tap the tree to chop!</Text>
         </View>
+
+        {helperCount(s) > 0 || Object.keys(s.lands).length > 0 ? <Crew /> : null}
 
         <Card style={styles.axeCard}>
           <View style={styles.axeRow}>
@@ -131,6 +155,35 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
         <SellPanel now={now} />
       </ScrollView>
     </View>
+  );
+}
+
+/** Helpers working in the forest. */
+function Crew() {
+  const s = useGame();
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(bob, { toValue: 1, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(bob, { toValue: 0, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const icons: string[] = [];
+  for (const h of HELPERS) for (let i = 0; i < Math.min(s.helpers[h.id]?.count ?? 0, 4); i++) icons.push(h.icon);
+  return (
+    <Card style={styles.crew}>
+      <View style={styles.crewRow}>
+        {icons.slice(0, 12).map((ic, i) => (
+          <Animated.Text key={i} style={{ fontSize: 22, transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: i % 2 ? [0, -4] : [-4, 0] }) }] }}>
+            {ic}🪓
+          </Animated.Text>
+        ))}
+        {Object.keys(s.lands).length > 0 && <Text style={{ fontSize: 22 }}>🌲🌲</Text>}
+      </View>
+      <Text style={styles.crewText}>Your crew and land: +{small(passiveWoodPerSec(s, Date.now()))} wood/sec</Text>
+    </Card>
   );
 }
 
@@ -256,6 +309,12 @@ const styles = StyleSheet.create({
   },
   hill: { position: 'absolute', left: -60, right: -60, bottom: 0, height: 120, borderTopLeftRadius: 400, borderTopRightRadius: 400, backgroundColor: '#7cb66a' },
   ground: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70, backgroundColor: '#5e9a52' },
+  rush: { backgroundColor: '#d9661f', color: '#fff', fontWeight: '900', fontSize: 12.5, textAlign: 'center', borderRadius: 10, paddingVertical: 5, overflow: 'hidden' },
+  adChip: { backgroundColor: '#2e8a3e' },
+  adMsg: { textAlign: 'center', fontSize: 12, fontWeight: '800', color: C.ink, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 8, padding: 6, overflow: 'hidden' },
+  crew: { paddingVertical: 8, alignItems: 'center' },
+  crewRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4 },
+  crewText: { fontSize: 12.5, fontWeight: '900', color: C.leaf, marginTop: 4 },
   boostRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },
   boost: { backgroundColor: C.bark, color: '#fff', fontWeight: '800', fontSize: 12, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, overflow: 'hidden' },
   treeArea: { alignItems: 'center', paddingTop: 4 },

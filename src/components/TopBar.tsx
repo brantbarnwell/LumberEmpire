@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../game/store';
-import { rankInfo } from '../game/logic';
+import { passiveWoodPerSec, rankInfo } from '../game/logic';
 import { money, small, whole } from '../game/format';
 import { recentWoodPerSec } from '../game/rate';
 import { GoldCoin, ProgressBar } from './ui';
@@ -38,14 +38,14 @@ export function TopBar({ onShop }: { onShop: () => void }) {
       </View>
       <View style={[styles.row, { marginTop: 6 }]}>
         <Text style={styles.stat}>🪵 {whole(s.wood)} wood</Text>
-        <Text style={styles.stat}>⚡ {small(wps)}/sec</Text>
+        <Text style={styles.stat}>⚡ {small(wps + passiveWoodPerSec(s, Date.now()))}/sec</Text>
         <View style={{ flex: 1 }} />
         <Text style={styles.rank} numberOfLines={1}>🏆 {rank.name}</Text>
       </View>
       <View style={[styles.row, { marginTop: 5 }]}>
         <ProgressBar value={rank.progress} />
         <Text style={styles.next} numberOfLines={1}>
-          {rank.next ? `Next: ${rank.next} at ${money(rank.nextAt!)} earned` : 'Top rank!'}
+          {rank.next ? `Next: ${rank.next} at ${money(rank.nextAt!)} earned` : 'Top rank!'}{s.prestige.count ? ` · 👑 x${s.prestige.count}` : ''}
         </Text>
       </View>
     </LinearGradient>

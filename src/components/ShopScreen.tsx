@@ -3,7 +3,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { canClaimVip, claimVip, grantProduct } from '../game/logic';
-import { PRODUCTS, ShopProduct, VIP_DAILY_GOLD, productById } from '../game/data';
+import { PRODUCTS, ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY } from '../game/data';
+import { adFree, buyGoldItem, goldRepair, goldVideosLeft, rewardGoldVideo } from '../game/meta';
+import { runReward } from './reward';
 import { whole } from '../game/format';
 import { buy, restore, useStore } from '../services/purchases';
 import { haptic } from '../services/haptics';
@@ -97,7 +99,7 @@ export function ShopScreen() {
       {/* VIP */}
       <LinearGradient colors={['#3b1d63', '#6a35a8']} style={styles.vip}>
         <Text style={styles.vipTitle}>👑 VIP Tycoon</Text>
-        <Text style={styles.vipPerks}>2x earnings · {VIP_DAILY_GOLD} free Gold every day · Exclusive VIP axe · No ads</Text>
+        <Text style={styles.vipPerks}>2x earnings · {VIP_DAILY_GOLD} free Gold every day · Exclusive VIP cosmetics · No ads (video rewards are instant)</Text>
         {s.vipActive ? (
           <View style={{ gap: 8, marginTop: 8 }}>
             <Text style={styles.vipActive}>You are VIP! Thanks for the support.</Text>
@@ -127,6 +129,47 @@ export function ShopScreen() {
         )}
         {!s.vipActive && <Text style={styles.vipFine}>Renews automatically. Cancel any time in your iPhone Settings › Apple ID › Subscriptions.</Text>}
       </LinearGradient>
+
+      <Text style={styles.section}>Spend Gold</Text>
+      <Text style={styles.note}>Gold buys time, never power you can't earn by playing.</Text>
+      <Card style={styles.packCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.packTitle}>Free Gold</Text>
+          <Text style={styles.perk}>+{AD_GOLD_PER_VIDEO} Gold {adFree(s) ? '(instant for you)' : 'for an optional video'} · {goldVideosLeft(s, now)}/{AD_GOLD_VIDEOS_PER_DAY} left today</Text>
+        </View>
+        <Button
+          small
+          label={adFree(s) ? 'Claim' : '▶ Watch'}
+          loading={busy === 'adgold'}
+          disabled={!!busy || goldVideosLeft(s, now) === 0}
+          onPress={async () => {
+            setMsg(null);
+            setBusy('adgold');
+            const err = await runReward((st) => rewardGoldVideo(st, Date.now()));
+            setBusy(null);
+            setMsg(err ? { kind: 'info', text: err } : { kind: 'ok', text: `+${AD_GOLD_PER_VIDEO} Gold!` });
+          }}
+        />
+      </Card>
+      {GOLD_SHOP.map((g) => (
+        <Card key={g.id} style={styles.packCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.packTitle}>{g.title}</Text>
+            <Text style={styles.perk}>Adds to your other boosts.</Text>
+          </View>
+          <Button small variant="gold" label={`${g.gold} Gold`} disabled={s.gold < g.gold} onPress={() => {
+            if (update((st) => buyGoldItem(st, g.id, Date.now()))) { haptic.success(); setMsg({ kind: 'ok', text: `${g.title} started!` }); }
+          }} />
+        </Card>
+      ))}
+      <Card style={styles.packCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.packTitle}>Instant axe repair</Text>
+          <Text style={styles.perk}>Back to 100% with no Money cost. You can always repair with Money too.</Text>
+        </View>
+        <Button small variant="gold" label={`${GOLD_REPAIR_ALL} Gold`} disabled={s.gold < GOLD_REPAIR_ALL || s.axeDurability >= 100}
+          onPress={() => { if (update((st) => goldRepair(st))) { haptic.success(); setMsg({ kind: 'ok', text: 'Axe repaired!' }); } }} />
+      </Card>
 
       <Text style={styles.section}>Special Packs</Text>
       {packs.map((p) => {

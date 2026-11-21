@@ -52,11 +52,14 @@ lumber-empire/
     App.tsx         - top bar, tabs, game loop, autosave, offline earnings
     game/
       data.ts       - ALL prices and balance numbers live here
-      logic.ts      - game rules (chop, sell, repair, golden trees, purchases)
+      logic.ts      - game rules (chop, sell, helpers, land deals, workshop, offline)
+      meta.ts       - daily rewards, quests, video rewards, Gold shop, prestige
       store.ts, save.ts, format.ts, rate.ts
-    components/     - TopBar, ChopScreen, Tree, UpgradesScreen, ShopScreen, TabBar
+    components/     - one file per screen (Chop, Upgrades, Helpers, Land, Workshop, Goals, Shop) + TopBar, TabBar, WelcomeBack
     services/
       purchases.ts  - real App Store purchases via RevenueCat
+      ads.ts        - opt-in rewarded videos (AdMob); ads.web.ts for the browser preview
+      notify.ts     - local notifications; notify-plan.ts has the timing rules
       haptics.ts
   scripts/
     check-logic.ts  - npm test
@@ -67,17 +70,19 @@ lumber-empire/
 
 ## Status
 
-- Spec: complete, in `GAME_SPEC.md` (Balance v2, a little harder, in section 0)
-- Built (part 1): Chop screen, top bar (Money, Gold, Wood, wood/sec, Empire Rank + progress), Upgrades tab (axes, durability, repair), Shop tab (all App Store products, Buy, Restore, VIP daily Gold), price slider for selling wood, golden trees, autosave every 10 seconds, offline sales.
-- Expo SDK 58. Typecheck, iOS bundle, web preview and logic tests all pass.
-- Not built yet: Helpers, Tools, Land, Market tab, Workshop, Empire Map, Leaderboard, weather, sounds.
-- App Store: not submitted yet. See `docs/STORE_SETUP.md`.
+- Part 1: Chop screen, top bar, axes and repairs, wood selling with a price slider, golden trees, Shop with App Store purchases.
+- Part 2: Helpers (hire copies, level up 10 times), Land (seller negotiation, reputation, land upgrades), Workshop (8 buildings, 24 crafted items, selling items with sell chance and time).
+- Part 3: opt-in video rewards (Welcome Back 2x, 2x wood 30 min, 5 free Gold videos a day), VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop for time boosts.
+- Typecheck, 35 logic tests, iOS bundle and web click-through all pass.
+- Not built yet: Tools tab, Market tab (bulk orders, sales graph), AI rival companies and land auctions, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
 
 ## Testing on your iPhone
 
 Fast way (no purchases): install **Expo Go** from the App Store, run `npx expo start` on the PC, and scan the QR code with the iPhone camera. Phone and PC must be on the same Wi-Fi.
 
 Real app (purchases work): `npx eas-cli@latest build --platform ios --profile production`, then `npx eas-cli@latest submit --platform ios` and install from TestFlight.
+
+Videos and notifications need a real build (TestFlight or development build), not Expo Go.
 
 Developer test trick: in Expo Go / development builds only, press and hold the tree for 1.5 seconds to make a Golden Tree. This does not exist in the App Store build.
 

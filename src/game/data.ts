@@ -45,7 +45,8 @@ export const PRICE_MAX_FACTOR = 3;
 // 2x price sells ~30%, half price sells ~2x.
 export const PRICE_SENSITIVITY = 1.2;
 export const BUYERS_PER_WOOD_IN_STOCK = 0.02; // more wood in the yard draws more buyers. BALANCE
-export const OFFLINE_MAX_HOURS = 8; // BALANCE
+export const OFFLINE_MAX_HOURS = 8; // spec Part 3: keep 8 hour cap
+export const OFFLINE_RATE = 0.5; // spec Part 3: helpers and land work at 50% while you are away
 
 // Empire ranks (spec section 10). Thresholds are total Money earned, +20% in Balance v2. BALANCE
 export const RANKS = [
@@ -119,17 +120,17 @@ export const PRODUCTS: ShopProduct[] = [
   },
   {
     id: 'com.lumberempire.noads', kind: 'pack', title: 'Remove Ads', usd: '$4.99',
-    perks: ['Removes all ads forever'], grant: { noAds: true },
+    perks: ['No ads ever: video rewards become instant'], grant: { noAds: true },
   },
 
   // Subscriptions
   {
-    id: 'com.lumberempire.vip.monthly', kind: 'vip', title: 'VIP Tycoon Monthly', usd: '$9.99 / month',
-    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP axe', 'No ads'], grant: {},
+    id: 'com.lumberempire.vip.monthly', kind: 'vip', title: 'VIP Tycoon Monthly', usd: '$4.99 / month',
+    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP cosmetics', 'No ads: video rewards are instant'], grant: {},
   },
   {
-    id: 'com.lumberempire.vip.yearly', kind: 'vip', title: 'VIP Tycoon Yearly', usd: '$59.99 / year', badge: 'Save 50%',
-    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP axe', 'No ads'], grant: {},
+    id: 'com.lumberempire.vip.yearly', kind: 'vip', title: 'VIP Tycoon Yearly', usd: '$39.99 / year', badge: 'Save 33%',
+    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP cosmetics', 'No ads: video rewards are instant'], grant: {},
   },
 ];
 
@@ -140,53 +141,158 @@ export function productById(id: string) {
   return PRODUCTS.find((p) => p.id === id);
 }
 
-// ---------------- Prices for parts not built yet (Balance v2, all +20%) ----------------
-// Kept here so the whole economy lives in one file. Output numbers are unchanged from the spec.
+// ======================= PART 2: helpers, land, workshop =======================
+// Prices from GAME_SPEC section 16 (Balance v2 for Part 2). Output numbers unchanged from the spec.
 
-export const PACING_TARGETS = {
-  firstAxeMinutes: 5,
-  firstHelperMinutes: 20,
-  firstLandMinutes: 60,
-  firstWorkshopMinutes: 120,
+export const PACING_TARGETS = { firstAxeMinutes: 5, firstHelperMinutes: 20, firstLandMinutes: 60, firstWorkshopMinutes: 120 };
+
+export type WoodType = 'pine' | 'oak' | 'maple' | 'redwood' | 'spruce';
+export const WOOD_NAMES: Record<WoodType, string> = { pine: 'Pine', oak: 'Oak', maple: 'Maple', redwood: 'Redwood', spruce: 'Spruce' };
+export const HOME_WOOD: WoodType = 'pine'; // your own trees and your helpers chop pine
+
+export interface HelperDef { id: string; name: string; cost: number; woodPerSec: number; icon: string }
+export const HELPERS: HelperDef[] = [
+  { id: 'apprentice', name: 'Apprentice Helper', cost: 450, woodPerSec: 2, icon: '🧒' },
+  { id: 'lumberjack', name: 'Lumberjack Helper', cost: 1_500, woodPerSec: 5, icon: '🧔' },
+  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 15, icon: '👷' },
+  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 50, icon: '🦺' },
+  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 200, icon: '🧙' },
+  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 1_000, icon: '🚜' },
+];
+export const HELPER_COPY_SCALE = 1.15; // each extra copy of the same helper costs 15% more. BALANCE
+export const HELPER_MAX_LEVEL = 10; // spec
+export const HELPER_LEVEL_BONUS = 0.25; // spec: +25% output per level
+export const HELPER_LEVEL_COST_BASE = 1.0; // level 1 costs 1x the hire price... BALANCE
+export const HELPER_LEVEL_COST_GROWTH = 1.6; // ...and each level after costs 1.6x more. BALANCE
+
+export type Personality = 'flexible' | 'stubborn' | 'desperate' | 'greedy';
+export const PERSONALITY: Record<Personality, { label: string; blurb: string; minLo: number; minHi: number }> = {
+  flexible: { label: 'Flexible Seller', blurb: 'Accepts close to asking', minLo: 0.85, minHi: 0.95 },
+  stubborn: { label: 'Stubborn Seller', blurb: 'Wants full price or more', minLo: 1.0, minHi: 1.08 },
+  desperate: { label: 'Desperate Seller', blurb: 'Will take a low offer', minLo: 0.6, minHi: 0.75 },
+  greedy: { label: 'Greedy Seller', blurb: 'Always counters high', minLo: 0.92, minHi: 1.02 },
 };
-
-export const HELPERS = [
-  { id: 'apprentice', name: 'Apprentice Helper', cost: 180, woodPerSec: 2 },
-  { id: 'lumberjack', name: 'Lumberjack Helper', cost: 600, woodPerSec: 5 },
-  { id: 'veteran', name: 'Veteran Logger', cost: 2_400, woodPerSec: 15 },
-  { id: 'feller', name: 'Tree Feller Pro', cost: 12_000, woodPerSec: 50 },
-  { id: 'master', name: 'Master Lumberjack', cost: 60_000, woodPerSec: 200 },
-  { id: 'crew', name: 'Elite Logging Crew', cost: 300_000, woodPerSec: 1_000 },
+export const SELLER_NAMES = [
+  'Old Man Jenkins', 'Martha Hollis', 'Dale Pruitt', 'Rosie Kincaid', 'Hank Bodine', 'Lorna Fisk', 'Earl Tibbets',
+  'June Calloway', 'Walt Breckner', 'Ida Sorensen', 'Cyrus Moody', 'Nell Avery',
 ];
 
-export const TOOLS = [
-  { id: 'stone', name: 'Sharpening Stone', cost: 120 },
-  { id: 'handsaw', name: 'Hand Saw', cost: 360 },
-  { id: 'handle', name: 'Heavy Duty Axe Handle', cost: 960 },
-  { id: 'chainsaw', name: 'Chainsaw', cost: 1_800 },
-  { id: 'splitter', name: 'Log Splitter', cost: 6_000 },
-  { id: 'chipper', name: 'Wood Chipper', cost: 14_400 },
-  { id: 'truck', name: 'Logging Truck', cost: 30_000 },
-  { id: 'crane', name: 'Crane', cost: 90_000 },
-  { id: 'harvester', name: 'Harvester Machine', cost: 240_000 },
+export interface LandDef {
+  id: string; name: string; asking: number; acres: number; trees: number; woodPerSec: number; wood: WoodType; icon: string;
+  goldOnly?: boolean;
+}
+// Asking prices are 3x the first draft (section 16). Seller secret minimums scale with the asking price.
+export const LAND: LandDef[] = [
+  { id: 'clearing', name: 'Small Clearing', asking: 3_000, acres: 2, trees: 10, woodPerSec: 5, wood: 'pine', icon: '🌱' },
+  { id: 'pine', name: 'Pine Grove', asking: 15_000, acres: 6, trees: 25, woodPerSec: 20, wood: 'pine', icon: '🌲' },
+  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 75, wood: 'oak', icon: '⛰️' },
+  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 250, wood: 'maple', icon: '🏞️' },
+  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 800, wood: 'redwood', icon: '🌳' },
+  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 3_000, wood: 'spruce', icon: '🏔️' },
+];
+export const LAND_UPGRADES = [
+  { id: 'plant', name: 'Plant Trees', costFrac: 0.25, bonus: 0.2 },
+  { id: 'fert', name: 'Fertilizer', costFrac: 0.4, bonus: 0.3 },
+  { id: 'irrig', name: 'Irrigation', costFrac: 0.6, bonus: 0.5 },
+]; // BALANCE
+export const SELLER_WALKAWAY_HOURS = 24; // spec
+export const MAX_REJECTIONS = 3; // spec
+
+export interface WorkshopDef { id: string; name: string; cost: number; slots: number; speed: number; buildMinutes: number; icon: string }
+// Shed stays $600 but needs your first land. Others are 2x the first draft (section 16).
+export const WORKSHOPS: WorkshopDef[] = [
+  { id: 'shed', name: 'Backyard Shed', cost: 600, slots: 1, speed: 1, buildMinutes: 60, icon: '🛖' }, // 60 min build puts the first workshop near 2 hours
+  { id: 'trailer', name: 'Work Trailer', cost: 5_000, slots: 2, speed: 1.25, buildMinutes: 30, icon: '🚐' },
+  { id: 'workshop', name: 'Small Workshop', cost: 20_000, slots: 3, speed: 1.5, buildMinutes: 60, icon: '🏚️' },
+  { id: 'shop', name: 'Lumber Shop', cost: 80_000, slots: 4, speed: 2, buildMinutes: 120, icon: '🏪' },
+  { id: 'warehouse', name: 'Warehouse', cost: 300_000, slots: 5, speed: 2.5, buildMinutes: 240, icon: '🏬' },
+  { id: 'factory', name: 'Furniture Factory', cost: 1_000_000, slots: 6, speed: 3, buildMinutes: 480, icon: '🏭' },
+  { id: 'plant', name: 'Timber Plant', cost: 3_000_000, slots: 8, speed: 4, buildMinutes: 720, icon: '🏗️' },
+  { id: 'hub', name: 'Global Manufacturing Hub', cost: 10_000_000, slots: 10, speed: 6, buildMinutes: 1440, icon: '🌐' },
+]; // buildMinutes, slots and speed are BALANCE except slots (spec)
+
+export interface ItemDef { id: string; name: string; tier: number; wood: number; minutes: number; value: number; icon: string }
+const ITEM_NAMES: [string, string][][] = [
+  [['stool', 'Wooden Stool'], ['birdhouse', 'Birdhouse'], ['chair', 'Wooden Chair']],
+  [['smalltable', 'Small Table'], ['bench', 'Bench'], ['crate', 'Wooden Crate']],
+  [['coffeetable', 'Coffee Table'], ['bookshelf', 'Bookshelf'], ['bedframe', 'Bed Frame']],
+  [['diningtable', 'Dining Table'], ['cabinet', 'Cabinet'], ['desk', 'Office Desk']],
+  [['diningset', 'Large Dining Set'], ['wardrobe', 'Wardrobe'], ['gardenset', 'Garden Bench Set']],
+  [['sculpture', 'Wood Sculpture'], ['luxchair', 'Luxury Chair'], ['carvedtable', 'Carved Table']],
+  [['artsculpture', 'Art Sculpture'], ['luxbed', 'Luxury Bed Set'], ['designer', 'Designer Furniture']],
+  [['masterpiece', 'Masterpiece Sculpture'], ['royalset', 'Royal Furniture Set'], ['customart', 'Custom Art Piece']],
+];
+const ITEM_ICONS = ['🪑', '🪵', '🗄️', '🛏️', '🖼️', '🗿', '👑', '🏆'];
+// Each tier: more wood and time, more profit per wood. BALANCE
+export const ITEMS: ItemDef[] = ITEM_NAMES.flatMap((tier, t) =>
+  tier.map(([id, name], k) => {
+    const wood = Math.round(20 * Math.pow(3, t) * (1 + k * 0.8));
+    return {
+      id, name, tier: t, wood,
+      minutes: Math.round((2 + k * 1.5) * Math.pow(1.6, t)),
+      value: Math.round(wood * MARKET_BASE_PRICE * 2.5 * Math.pow(1.25, t)),
+      icon: ITEM_ICONS[t],
+    };
+  }),
+);
+export const GOLD_PER_MINUTE_SKIP = 1 / 3; // speed-ups cost 1 Gold per 3 minutes left, min 1. BALANCE
+
+// ======================= PART 3: money and retention =======================
+
+// Rewarded videos (opt-in only)
+export const AD_GOLD_PER_VIDEO = 5; // BALANCE
+export const AD_GOLD_VIDEOS_PER_DAY = 5; // spec
+export const AD_BOOST_MINUTES = 30; // spec: 2x production for 30 minutes
+export const AD_BOOST_MAX_MINUTES = 240; // watching again adds 30 min, up to 4 hours. BALANCE
+export const AD_OFFLINE_MULT = 2; // spec
+
+// Gold shop: sell time, not power. Prices BALANCE.
+export const GOLD_SHOP = [
+  { id: 'wood1h', title: '2x Wood for 1 hour', gold: 20, kind: 'wood' as const, hours: 1 },
+  { id: 'wood24h', title: '2x Wood for 24 hours', gold: 150, kind: 'wood' as const, hours: 24 },
+  { id: 'money1h', title: '2x Money for 1 hour', gold: 20, kind: 'money' as const, hours: 1 },
+];
+export const GOLD_REPAIR_ALL = 10; // spec
+
+// 7-day login rewards. Money is "minutes of your income". BALANCE
+export const DAILY_REWARDS: { money?: number; gold?: number; boostMin?: number; big?: boolean }[] = [
+  { money: 10 },
+  { gold: 3 },
+  { money: 20 },
+  { boostMin: 30 },
+  { money: 40 },
+  { gold: 5 },
+  { gold: 25, money: 90, boostMin: 60, big: true },
 ];
 
-export const LAND = [
-  { id: 'clearing', name: 'Small Clearing', cost: 1_200, trees: 10, woodPerSec: 5 },
-  { id: 'pine', name: 'Pine Grove', cost: 6_000, trees: 25, woodPerSec: 20 },
-  { id: 'hillside', name: 'Hillside Forest', cost: 24_000, trees: 50, woodPerSec: 75 },
-  { id: 'river', name: 'River Valley Forest', cost: 90_000, trees: 100, woodPerSec: 250 },
-  { id: 'redwood', name: 'Redwood Forest', cost: 300_000, trees: 250, woodPerSec: 800 },
-  { id: 'mountain', name: 'Mountain Timberland', cost: 1_200_000, trees: 500, woodPerSec: 3_000 },
+export type Metric = 'chops' | 'felled' | 'woodSold' | 'moneyEarned' | 'helpersHired' | 'itemsCrafted' | 'landOffers';
+export interface QuestDef { id: string; metric: Metric; label: (n: string) => string; base: number; scale?: 'income'; needs?: 'workshop' | 'helpers' }
+export const DAILY_QUESTS: QuestDef[] = [
+  { id: 'chop', metric: 'chops', label: (n) => `Chop ${n} times`, base: 300 },
+  { id: 'fell', metric: 'felled', label: (n) => `Cut down ${n} trees`, base: 15 },
+  { id: 'sell', metric: 'woodSold', label: (n) => `Sell ${n} wood`, base: 30, scale: 'income' },
+  { id: 'earn', metric: 'moneyEarned', label: (n) => `Earn ${n}`, base: 30, scale: 'income' },
+  { id: 'hire', metric: 'helpersHired', label: (n) => `Hire ${n} helper`, base: 1, needs: 'helpers' },
+  { id: 'craft', metric: 'itemsCrafted', label: (n) => `Craft ${n} items`, base: 3, needs: 'workshop' },
+  { id: 'offer', metric: 'landOffers', label: (n) => `Make ${n} offer on land`, base: 1 },
 ];
+export const WEEKLY_QUESTS: QuestDef[] = [
+  { id: 'wchop', metric: 'chops', label: (n) => `Chop ${n} times this week`, base: 3_000 },
+  { id: 'wearn', metric: 'moneyEarned', label: (n) => `Earn ${n} this week`, base: 400, scale: 'income' },
+  { id: 'wfell', metric: 'felled', label: (n) => `Cut down ${n} trees this week`, base: 150 },
+];
+export const DAILY_QUEST_GOLD = 3; // BALANCE
+export const DAILY_QUEST_MONEY_MIN = 15; // minutes of income. BALANCE
+export const WEEKLY_QUEST_GOLD = 25; // BALANCE
 
-export const WORKSHOPS = [
-  { id: 'shed', name: 'Backyard Shed', cost: 600, slots: 1 },
-  { id: 'trailer', name: 'Work Trailer', cost: 3_000, slots: 2 },
-  { id: 'workshop', name: 'Small Workshop', cost: 12_000, slots: 3 },
-  { id: 'shop', name: 'Lumber Shop', cost: 48_000, slots: 4 },
-  { id: 'warehouse', name: 'Warehouse', cost: 180_000, slots: 5 },
-  { id: 'factory', name: 'Furniture Factory', cost: 600_000, slots: 6 },
-  { id: 'plant', name: 'Timber Plant', cost: 1_800_000, slots: 8 },
-  { id: 'hub', name: 'Global Manufacturing Hub', cost: 6_000_000, slots: 10 },
-];
+// Timber Rush: every Friday to Sunday, 2x output on one wood type
+export const RUSH_DAYS = [5, 6, 0]; // Fri, Sat, Sun
+export const RUSH_BONUS = 1; // +100% (2x), added to other boosts
+
+// Prestige (spec: after about $1M; Part 3: reachable in 2-4 days, run 2 about 2-4x faster)
+export const PRESTIGE_AT = 200_000_000; // Money earned this run. About 2.8 days of normal play in npm run pacing. BALANCE
+export const PRESTIGE_NAME = 'Timber Baron';
+
+// Push notifications
+export const NOTIF_QUIET_START = 21; // 9pm
+export const NOTIF_QUIET_END = 9; // 9am
