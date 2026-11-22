@@ -3,16 +3,18 @@
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
   makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
-  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower,
+  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
 import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
 
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-const T0 = new Date(2026, 10, 23, 10, 0, 0).getTime(); // a Monday morning (no Timber Rush)
+const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).getTime(); // START=days after Monday Nov 23
 
 function upkeep(s: GameState) {
+  const bp = process.env.FIXED_PRICE ? s.sellPrice : bestPrice(s.dayKey); // a sensible player follows the best-price tip
+  if (Math.abs(s.sellPrice - bp) > 0.001) s = { ...s, sellPrice: bp };
   if (s.axeDurability < 50 && s.money >= repairCost(s, 100)) s = repair(s, 100) ?? s;
   const worn = Object.values(s.tools).some((t) => t.durability < 50);
   if (worn && s.money >= repairAllCost(s)) s = repairAll(s) ?? s;
@@ -44,14 +46,14 @@ const plan: Step[] = [
   { label: 'Backyard Shed (workshop)', key: 'workshop', buy: (s, now) => startBuild(s, now), cost: () => WORKSHOPS[0].cost },
 ];
 
-function early(tps: number) {
-  let s = newGame(T0);
+function early(tps: number, t0 = T0) {
+  let s = newGame(t0);
   let carry = 0;
   let i = 0;
   const firsts: Record<string, number> = {};
   const out: string[] = [];
   for (let t = 0; t < 4 * 3600 && i < plan.length; t += 0.25) {
-    const now = T0 + t * 1000;
+    const now = t0 + t * 1000;
     carry += tps * 0.25;
     while (carry >= 1) { carry--; s = chop(s, now, rand).state; }
     s = upkeep(tick(s, 0.25, now));
@@ -79,6 +81,14 @@ for (const tps of [1.5, 2, 3]) {
   console.log('   ' + r.out.join(' > '));
 }
 
+// same, 2 taps/sec, starting on each day of a week (demand changes every day)
+{
+  const keys = ['axe', 'helper', 'land', 'workshop'];
+  const runs = Array.from({ length: 7 }, (_, i) => early(2, new Date(2026, 10, 23 + i, 10).getTime()).firsts);
+  const med = (k: string) => { const v = runs.map((r) => r[k]).sort((a, b) => a - b); return `${v[3].toFixed(0)}m (${v[0].toFixed(0)}-${v[6].toFixed(0)})`; };
+  console.log('2 taps/sec, 7 different start days, typical (range): ' + keys.map((k) => `${k} ${med(k)}`).join(' | '));
+}
+
 // ---------- 2. a few days of normal play, smart buying ----------
 // 4 sessions a day of 30 minutes at 1 tap/sec, offline in between (50% rate, 8h cap).
 function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameState | null } | null {
@@ -100,7 +110,7 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
   for (const t of TOOLS) {
     if (s.tools[t.id]) continue;
     const gain = (t.chopFlat ?? 0) * 0.15 + (t.chopPct ?? 0) * 0.2 + (t.helperPct ?? 0) * helperWps
-      + (t.needsHelpers && !nHelpers ? 0 : t.passiveFlat ?? 0) + (t.woodSalePct ?? 0) * helperWps + (t.craftSalePct ? 0.01 : 0);
+      + (t.needsHelpers && !nHelpers ? 0 : t.passiveFlat ?? 0) + (t.woodSalePct ?? 0) * helperWps + (t.plankSalePct ? 0.01 : 0);
     if (gain > 0) opts.push({ cost: t.cost, gain, buy: () => buyTool(s, t.id) });
   }
   // a full yard means more output is wasted: storage first
@@ -126,6 +136,7 @@ function days(nDays: number) {
         s = { ...s, lastSaved: now };
         const off = computeOffline(s, start);
         s = off.result ? collectOffline(off.state, off.result, 1) : off.state;
+        if (process.env.TRACE && d < 2) console.log(`  offline to ${h}h: +$${Math.round(off.result?.earned ?? 0)} sold ${Math.round(off.result?.sold ?? 0)} made ${Math.round(off.result?.produced ?? 0)} wood=${Math.round(s.wood)} price=${s.sellPrice} buyers=${s.buyers.wood.toFixed(1)} owed=${Math.round(s.wagesOwed)}`);
         now = start;
       }
       for (let t = 0; t < 1800; t += 1) {
@@ -140,6 +151,7 @@ function days(nDays: number) {
           s = n;
         }
         if (prestigeAt === null && canPrestige(s)) { prestigeAt = (now - T0) / 86400_000; gainAt = prestigeGain(s); }
+        if (process.env.TRACE && d < 2 && t === 1799) console.log(`  session ${h}h end: earned ${Math.round(s.runMoneyEarned)} money ${Math.round(s.money)} wood=${Math.round(s.wood)} helpers=${Object.values(s.helpers).reduce((a, x) => a + x.count, 0)} price=${s.sellPrice} rate=${(require('../src/game/logic').salesPerSec(s)).toFixed(2)} buyers=${s.buyers.wood.toFixed(1)}`);
         while (marks.length && s.runMoneyEarned >= marks[0]) hits.push(`$${marks.shift()! / 1e6}M after ${((now - T0) / 86400_000).toFixed(1)} days`);
       }
     }
@@ -149,7 +161,7 @@ function days(nDays: number) {
 }
 
 console.log('\n=== Prestige (4 sessions x 30 min a day, offline between) ===');
-const r = days(6);
+const r = days(process.env.TRACE ? 2 : 6);
 r.log.forEach((l) => console.log(l));
 console.log('Money earned this run: ' + r.hits.join(' | '));
 console.log(`Prestige needs $${PRESTIGE_AT.toLocaleString()} earned. Reached after ${r.prestigeAt ? r.prestigeAt.toFixed(1) + ' days' : 'more than 6 days'}. Run 2 speed if taken then: ${(1 + r.gain).toFixed(1)}x`);

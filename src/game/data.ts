@@ -37,7 +37,7 @@ export const GOLDEN_GOLD_MAX = 10; // spec
 export const GOLDEN_MONEY_PER_POWER = 25; // bonus Money = 25 x axe power. BALANCE
 
 // Selling wood (simple first version of the Market, spec section 9)
-export const MARKET_BASE_PRICE = 0.12; // $ per wood at normal demand. Tuned so the Stone Axe takes ~5 min. BALANCE
+export const MARKET_BASE_PRICE = 0.1; // $ per wood at normal demand. Re-tuned in Part 5 after the demand fix. BALANCE
 // Price slider goes from 20% to 300% of market price
 export const PRICE_MIN_FACTOR = 0.2;
 export const PRICE_MAX_FACTOR = 3;
@@ -316,7 +316,8 @@ export interface ToolDef {
   passiveFlat?: number; // + wood/sec
   needsHelpers?: boolean; // only works if you have helpers
   woodSalePct?: number; // more Money from selling wood
-  craftSalePct?: number; // more Money from selling crafted items
+  plankSalePct?: number; // more Money from selling planks
+  goldCost?: number; // can also be bought instantly with Gold
   fellsTrees?: boolean; // each chop fells the whole tree
   wearChops?: number; // loses 1% every N player chops
   wearMinutes?: number; // loses 1% every N minutes while working
@@ -329,14 +330,14 @@ export const TOOLS: ToolDef[] = [
   { id: 'handsaw', name: 'Hand Saw', cost: 360, icon: '🪚', effect: '+1 wood per chop', chopFlat: 1, wearChops: 20, repairCost: 60 },
   { id: 'handle', name: 'Heavy Duty Axe Handle', cost: 960, icon: '🦯', effect: '+20% chop speed (you and helpers)', chopPct: 0.2, helperPct: 0.2, wearChops: 20, wearMinutes: 20, repairCost: 150 },
   { id: 'chainsaw', name: 'Chainsaw', cost: 1_800, icon: '⚙️', effect: '+5 wood per chop, +20% chop speed', chopFlat: 5, chopPct: 0.2, helperPct: 0.2, wearChops: 10, wearMinutes: 15, repairCost: 300 },
-  { id: 'splitter', name: 'Log Splitter', cost: 6_000, icon: '🪓', effect: '2x Money from selling crafted items', craftSalePct: 1, wearMinutes: 30, repairCost: 720 },
+  { id: 'splitter', name: 'Log Splitter', cost: 6_000, icon: '🪓', effect: '2x Money from selling planks', plankSalePct: 1, wearMinutes: 30, repairCost: 720 },
   { id: 'chipper', name: 'Wood Chipper', cost: 14_400, icon: '🌀', effect: '+15% wood from every chop (you and helpers)', chopPct: 0.15, helperPct: 0.15, wearChops: 15, wearMinutes: 20, repairCost: 1_200 },
   { id: 'truck', name: 'Logging Truck', cost: 30_000, icon: '🚚', effect: '+50% Money from selling wood', woodSalePct: 0.5, wearMinutes: 15, repairCost: 1_200 },
   { id: 'crane', name: 'Crane', cost: 90_000, icon: '🏗️', effect: '+100 wood/sec (needs helpers)', passiveFlat: 100, needsHelpers: true, wearMinutes: 15, repairCost: 3_600 },
   { id: 'harvester', name: 'Harvester Machine', cost: 240_000, icon: '🚜', effect: '+500 wood/sec, every chop fells the whole tree', passiveFlat: 500, fellsTrees: true, wearChops: 5, wearMinutes: 10, repairCost: 6_000 },
+  // Part 5 (section 19): Money or Gold, never Gold-only. Wear and repair are BALANCE.
+  { id: 'goldchainsaw', name: 'Golden Chainsaw', cost: 500_000, goldCost: 1_500, icon: '✨', effect: '+100 wood per chop', chopFlat: 100, wearChops: 8, repairCost: 12_000 },
 ];
-// Golden Chainsaw (Gold only, +100 wood per chop) is NOT built: it is power bought with Gold, which clashes with
-// "sell time, not power". Waiting on Brant / Muse.
 
 // Helper wages per hour (Part 4), +10% per helper level. Unpaid = helpers at 50% until paid.
 export const HELPER_WAGES: Record<string, number> = {
@@ -358,3 +359,40 @@ export const STORAGE_LEVELS = [
   { cap: 15_000_000, cost: 234_000_000 },
   { cap: 40_000_000, cost: 648_000_000 },
 ]; // each upgrade costs about 3 hours of the extra wood sales it allows. BALANCE
+
+// ======================= PART 5: Market (section 9) =======================
+
+export type Product = 'wood' | 'planks' | 'furniture';
+export const PLANK_BASE_PRICE = 0.25; // $ per plank at normal demand. BALANCE
+export const PLANK_WOOD = 2; // wood per plank (a plank also takes 2 spaces in storage). BALANCE
+export const PLANK_CUT_PER_SEC = 2; // planks you cut per second while cutting is on. BALANCE
+// Buyers: at market price on a normal day, about 10% more buyers than the wood you produce (never fewer than 2 a second).
+// Raise the price and fewer of them say yes; the rest of your wood piles up.
+export const MARKET_SIZE_MULT = 1.1;
+export const MIN_BUYERS_PER_SEC = 2;
+
+// Sell chance curve for every product (spec section 9 chair example):
+// half price 95% in ~5 min, base price 70% in ~1 hour, 2x 30% in ~6 hours, 4x 5% (may never sell).
+export const SELL_CURVE = [
+  { r: 0.25, chance: 0.99, min: 2 },
+  { r: 0.5, chance: 0.95, min: 5 },
+  { r: 1, chance: 0.7, min: 60 },
+  { r: 2, chance: 0.3, min: 360 },
+  { r: 4, chance: 0.05, min: 1440 },
+];
+
+// News events, one per day at most (seeded by date). Multiplies demand.
+export const MARKET_EVENTS = [
+  { id: 'boom', name: 'Housing Boom', text: 'Builders want lumber. Demand for wood and planks up 50%.', demand: { wood: 1.5, planks: 1.5 } },
+  { id: 'fair', name: 'Furniture Fair', text: 'Shoppers are out. Furniture demand up 40%.', demand: { furniture: 1.4 } },
+  { id: 'cold', name: 'Cold Snap', text: 'Everyone needs firewood. Wood demand up 30%.', demand: { wood: 1.3 } },
+  { id: 'crash', name: 'Market Crash', text: 'Buyers are scared. Demand down 40%: lower your price to sell.', demand: { wood: 0.6, planks: 0.6, furniture: 0.6 } },
+  { id: 'reno', name: 'Renovation Craze', text: 'Everyone is remodeling. Plank demand up 60%.', demand: { planks: 1.6 } },
+] as const;
+export const MARKET_EVENT_CHANCE = 0.35; // chance a day has a news event. BALANCE
+
+// Bulk orders: 2 a day, a buyer wants a big batch at a fixed price. You can accept, reject or ask for 10% more once.
+export const BULK_BUYERS = ['BuildRight Homes', 'Cabin Co.', 'Fireside Fuel', 'Maple Street Builders', 'Northwoods Decking', 'Big Sky Framing'];
+export const BULK_ORDERS_PER_DAY = 2;
+export const BULK_COUNTER_BONUS = 0.1;
+export const BULK_COUNTER_CHANCE = 0.5;

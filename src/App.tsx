@@ -3,7 +3,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getState, setState, update, useGame } from './game/store';
-import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, migrate, tick } from './game/logic';
+import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, ensureOrders, migrate, tick } from './game/logic';
 import { canClaimLogin, ensureQuests, questProgress } from './game/meta';
 import { loadGame, saveGame } from './game/save';
 import { initStore } from './services/purchases';
@@ -17,6 +17,7 @@ import { HelpersScreen } from './components/HelpersScreen';
 import { LandScreen } from './components/LandScreen';
 import { WorkshopScreen } from './components/WorkshopScreen';
 import { GoalsScreen } from './components/GoalsScreen';
+import { MarketScreen } from './components/MarketScreen';
 import { ShopScreen } from './components/ShopScreen';
 import { PopupView } from './components/PopupView';
 import { WelcomeBack } from './components/WelcomeBack';
@@ -39,7 +40,7 @@ function catchUp(s: GameState, now: number): GameState {
 }
 
 function daily(s: GameState, now: number) {
-  return ensureQuests(ensureListings(s, now), now);
+  return ensureOrders(ensureQuests(ensureListings(s, now), now), now);
 }
 
 export default function App() {
@@ -126,11 +127,12 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     <>
       <TopBar onShop={() => setTab('shop')} />
       <View style={{ flex: 1 }}>
-        {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} />}
+        {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} onOpenMarket={() => setTab('market')} />}
         {tab === 'upgrades' && <UpgradesScreen />}
         {tab === 'helpers' && <HelpersScreen />}
         {tab === 'land' && <LandScreen />}
         {tab === 'workshop' && <WorkshopScreen />}
+        {tab === 'market' && <MarketScreen />}
         {tab === 'goals' && <GoalsScreen />}
         {tab === 'shop' && <ShopScreen />}
       </View>

@@ -189,7 +189,7 @@ function GoldButton({ gold, have, label, onPress }: { gold: number; have: number
   );
 }
 
-function SellPanel({ itemId, saleId, start, onDone }: { itemId: string; saleId?: number; start?: number; onDone: () => void }) {
+export function SellPanel({ itemId, saleId, start, onDone }: { itemId: string; saleId?: number; start?: number; onDone: () => void }) {
   const s = useGame();
   const it = ITEMS.find((x) => x.id === itemId)!;
   const [price, setPrice] = useState(start ?? bestItemPrice(s, itemId));

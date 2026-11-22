@@ -74,8 +74,9 @@ lumber-empire/
 - Part 2: Helpers (hire copies, level up 10 times), Land (seller negotiation, reputation, land upgrades), Workshop (8 buildings, 24 crafted items, selling items with sell chance and time).
 - Part 3: opt-in video rewards (Welcome Back 2x, 2x wood 30 min, 5 free Gold videos a day), VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop for time boosts.
 - Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit and upgrades, ranks up to $200M.
-- Typecheck, 53 logic tests, iOS bundle and web click-through all pass.
-- Not built yet: Golden Chainsaw, Market tab (bulk orders, sales graph), AI rival companies and land auctions, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
+- Part 5: Market tab (wood, planks, furniture, demand, news, bulk orders, 7-day graph), Golden Chainsaw ($500,000 or 1,500 Gold).
+- Typecheck, 65 logic tests, iOS bundle and web click-through all pass. `npm run price-test` shows how price changes selling.
+- Not built yet: AI rival companies and land auctions, manager helper, wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
 
 ## Testing on your iPhone
 
@@ -95,4 +96,5 @@ npx expo start       # run the game (press w for a browser preview)
 npm run typecheck    # check for code errors
 npm test             # check game rules
 npm run pacing       # see how long upgrades take
+npm run price-test   # see how price changes selling
 ```

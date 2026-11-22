@@ -80,5 +80,5 @@ const styles = StyleSheet.create({
   btnSub: { fontSize: 11, fontWeight: '700', marginTop: 1 },
   dur: { height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.15)', overflow: 'hidden' },
   durFill: { height: '100%', borderRadius: 4 },
-  prog: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', overflow: 'hidden' },
+  prog: { flexGrow: 1, flexShrink: 1, alignSelf: 'stretch', backgroundColor: 'rgba(0,0,0,0.3)', overflow: 'hidden' },
 });

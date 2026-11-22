@@ -3,8 +3,9 @@ import {
   newGame, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, computeOffline, collectOffline, hireHelper, hireCost,
   levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, listForSale, woodMultFor, moneyMult,
   passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
-  buyStorage, wagePerHour, rankInfo, repairAllCost,
+  buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed, salesPerSec,
 } from '../src/game/logic';
+import { demandOf, shownChance, timeToSell, marketPriceOf, bestCommodityPrice } from '../src/game/market';
 import {
   claimLogin, canClaimLogin, rewardGoldVideo, goldVideosLeft, rewardAdBoost, canPrestige, doPrestige, ensureQuests, claimQuest,
   questProgress, goldRepair,
@@ -135,5 +136,35 @@ ok(storageCap(st) === 10000 && chop(st, MON, () => 0.5).state.wood === 10000 && 
 ok(tick({ ...wg, wood: 10000, selling: false }, 60, MON).wood === 10000, 'full storage stops helpers too');
 ok(storageCap(buyStorage(rich(newGame(MON)))!) === 25000, 'storage upgrade costs Money and raises the cap');
 ok(rankInfo(200_000_000).name === 'Global Timber Tycoon' && rankInfo(50_000_000).name === 'National Lumber Co.', 'top rank is now $200M with ranks in between');
+
+// ---- Part 5: Market ----
+const DK = '2026-11-23';
+ok(shownChance(DK, 'wood', 2) < shownChance(DK, 'wood', 1) && shownChance(DK, 'wood', 1) < shownChance(DK, 'wood', 0.5), 'higher price = lower sell chance');
+ok(timeToSell(DK, 'wood', 0.3, 5000, 0.02, 2.2) > timeToSell(DK, 'wood', 0.1, 5000, 0.02, 2.2) * 2, 'higher price = slower to sell a pile');
+function run4h(f: number) {
+  let x: GameState = { ...newGame(MON), helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6 };
+  x = { ...x, sellPrice: marketPriceOf(x.dayKey, 'wood') * f };
+  for (let t = 0; t < 4 * 3600; t += 5) x = tick(x, 5, MON + t * 1000);
+  return x.money - 1e6;
+}
+const best = bestCommodityPrice(newGame(MON).dayKey, 'wood') / marketPriceOf(newGame(MON).dayKey, 'wood');
+ok(run4h(3) < run4h(best) * 0.8, `with helpers working, 3x price earns much less than the best-price tip (${best.toFixed(2)}x)`);
+let days14 = Array.from({ length: 14 }, (_, i) => demandOf(`2026-12-${i + 1}`, 'wood'));
+ok(Math.max(...days14) - Math.min(...days14) > 0.2, 'demand really changes day to day');
+let pl = tick({ ...newGame(MON), wood: 100, cutting: true, selling: false, plankSelling: false }, 10, MON);
+ok(Math.abs(pl.planks - 20) < 1e-9 && Math.abs(pl.wood - 60) < 1e-9 && storageUsed(pl) === 100, 'cutting: 2 wood -> 1 plank, 2 a second, planks take 2 yard spaces');
+let spl = { ...newGame(MON), planks: 5000, plankSelling: true, tools: { splitter: { durability: 100, chopWear: 0, minuteWear: 0 } } };
+ok(tick(spl, 60, MON).money > tick({ ...spl, tools: {} }, 60, MON).money * 1.9, 'Log Splitter doubles plank Money');
+let ord = ensureOrders({ ...newGame(MON), wood: 0 }, MON);
+const o = ord.market.orders[0];
+ok(ord.market.orders.length === 2 && acceptOrder(ord, o.id, MON) === null, '2 bulk orders a day, need the stock to deliver');
+let del = acceptOrder({ ...ord, wood: 1e6, planks: 1e6 }, o.id, MON)!;
+ok(del.money > 0 && del.market.orders[0].status === 'done' && del.market.log.length === 1 && del.market.days.length === 1, 'bulk order pays, logs and shows in the 7-day graph');
+const co = counterOrder(ord, o.id)!;
+ok(co.agreed ? co.state.market.orders[0].price > o.price : co.state.market.orders[0].status === 'gone', 'asking +10%: buyer agrees or walks');
+let gc = buyTool(rich(newGame(MON)), 'goldchainsaw')!;
+ok(gc.money === 1e9 - 500_000 && Math.abs(woodPerChop(gc, MON) - 100.8) < 1e-9, 'Golden Chainsaw: $500,000 Money, +100 wood per chop');
+ok(buyToolWithGold({ ...newGame(MON), gold: 1500 }, 'goldchainsaw')!.gold === 0 && buyToolWithGold({ ...newGame(MON), gold: 1499 }, 'goldchainsaw') === null, 'Golden Chainsaw: or 1,500 Gold');
+ok(buyToolWithGold({ ...newGame(MON), gold: 9999 }, 'chainsaw') === null, 'other tools cannot be bought with Gold');
 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

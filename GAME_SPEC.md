@@ -6,7 +6,7 @@ This is the single source of truth. Claude Code: build exactly this. Muse: use t
 
 - All Money prices are about 20% higher than the first draft. Helpers, land and workshop were raised again in section 16.
 - Rusty Axe starts at 0.8 wood per chop. Stone Axe is $75 and Iron Axe is $350 (a bit more than +20%).
-- Wood sells for about $0.12 at normal demand (player still sets the price with the slider).
+- Wood sells for about $0.10 at normal demand (re-tuned in Part 5; player sets the price with the slider).
 - Pacing targets: first axe about 5 minutes, first helper about 20 minutes, first land about 1 hour, first workshop about 2 hours.
 - The player should still feel progress every few minutes. If the first 10 minutes feel slow, it is too hard.
 - Real-money App Store prices and Gold pack amounts are NOT changed.
@@ -286,8 +286,24 @@ Sell time, not power. About 5% of players pay, so the game must be fully fun for
 
 - Packs fixed so they sell time, not power: Pro Logger Pack = 2500 Gold + Diamond Axe skin + 2x Money 7 days. Land Baron Pack = 1000 Gold + 2x Wood 7 days + Small Clearing (or +500 Gold if owned). Pack land is not given again after prestige.
 - Tools from section 7 (prices +20%) with durability: they wear by chops and/or by time while working, work at 75% at or below 50%, at 50% at or below 25%, do nothing at 0% (red wrench), repair with Money (full or to 50%), Repair All, or 10 Gold for everything.
-  - Coder choices: Stone and Hand Saw help your chops only; Axe Handle, Chainsaw and Wood Chipper also boost helpers; Log Splitter = 2x Money from crafted items (planks are not built); Logging Truck = +50% Money from wood sales; Crane = +100 wood/sec if you have helpers; Harvester = +500 wood/sec and every chop fells the tree.
-  - Not built: Golden Chainsaw (Gold-only power, clashes with "sell time, not power"), equipping tools to single helpers, Repair Shop building.
+  - Coder choices: Stone and Hand Saw help your chops only; Axe Handle, Chainsaw and Wood Chipper also boost helpers; Log Splitter = 2x Money from selling planks (Part 5); Logging Truck = +50% Money from wood sales; Crane = +100 wood/sec if you have helpers; Harvester = +500 wood/sec and every chop fells the tree.
+  - Not built: equipping tools to single helpers, Repair Shop building. Golden Chainsaw added in Part 5.
 - Helper wages per hour: Apprentice $50, Lumberjack $150, Veteran $500, Tree Feller $1,500, Master $5,000, Elite Crew $20,000, +10% per level. Paid from Money continuously (also while away). If you can't pay, helpers work at 50% until it is paid (auto-paid as soon as you have the Money). Nobody quits.
 - Wood storage starts at 10,000. Full = chopping and helpers add nothing. Upgrades: 25K $390K, 60K $900K, 150K $2.34M, 400K $6.6M, 1M $15.6M, 2.5M $39M, 6M $90M, 15M $234M, 40M $648M (BALANCE).
 - Pacing (npm run pacing): day 2 earnings about $2.5M (was $5.2M), day 3 about $32M (was $142M), prestige at $200M in about 3.3 days. First hour unchanged.
+
+
+## 19. Part 5 - Market and Golden Chainsaw (from Brant, Nov 21 2026)
+
+Muse's own section 19 is the source of truth; this is what the code does.
+
+- Market tab for wood, planks and furniture. Set the price with a slider or by typing it. Shows sell chance %, time to sell your stock, estimated profit per hour, demand for each product, today's news event, 7-day sales graph (Money, wood sold, average wood price), sales history, best price tip.
+- How selling works: each second some buyers show up (about 10% more than the wood you make, at least 2 a second). The higher your price, the fewer say yes (half price 95%, market 70%, 2x 30%, 4x 5%, times demand). A small pile also can't serve many buyers, which is why a bigger yard sells faster (Part 4 brake kept). If you price too high, wood piles up and the yard fills; the screen warns you.
+- Best price tip = the highest price where buyers still take everything you make.
+- Demand changes every day: 0.85 to 1.2, times season (winter wood +10%, spring furniture +10%) and news events on about 1 day in 3: Housing Boom, Furniture Fair, Cold Snap, Market Crash, Renovation Craze.
+- Planks: turn on "Cut planks" to turn 2 wood into 1 plank, 2 planks a second. Planks sell for about $0.25 (2.5x wood) and take 2 yard spaces. Log Splitter doubles plank Money.
+- Furniture: priced one by one (same as the Workshop), with today's furniture demand.
+- Bulk orders: 2 a day, a buyer wants a big batch at a fixed price. Accept, say no, or ask for 10% more once (half agree, half walk).
+- Golden Chainsaw: $500,000 Money in the Tools tab, or 1,500 Gold to buy it instantly. +100 wood per chop. Wears out like other tools (1% per 8 chops, $12,000 full repair). It resets on prestige like every tool.
+- Bug fixed: the daily random roll barely changed day to day, so demand, sellers, quests and Timber Rush were nearly the same every day. Fixed; wood price re-tuned to $0.10 so approved pacing holds.
+- Not built (as asked): rivals and auctions, manager helper, Sawmill, wood quality.

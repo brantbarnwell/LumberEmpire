@@ -7,7 +7,9 @@ import {
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
+  PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
+import { bestCommodityPrice, commodityRate, demandOf, hash, marketPriceOf, sellCurve, demandLabel as demandLabelM } from './market';
 
 export interface Boost {
   kind: 'wood' | 'money';
@@ -112,7 +114,27 @@ export interface GameState {
   storageLevel: number;
   wagesOwed: number;
   equippedSkin: string | null;
+
+  // Part 5: Market
+  planks: number;
+  plankPrice: number;
+  plankSelling: boolean;
+  plankCarry: number;
+  cutting: boolean;
+  chopRate: number; // wood/sec from your own chopping, smoothed
+  chopAcc: number;
+  buyers: { wood: number; planks: number }; // buyers a second at market price, updated every tick
+  market: {
+    days: DayStats[]; // last 7 days
+    orders: BulkOrder[];
+    ordersDay: string;
+    log: SaleLog[]; // bulk orders and furniture sales, newest first
+  };
 }
+
+export interface DayStats { day: string; wood: number; planks: number; furniture: number; money: number; woodMoney: number }
+export interface BulkOrder { id: string; buyer: string; product: 'wood' | 'planks'; amount: number; price: number; status: 'open' | 'done' | 'gone'; countered: boolean }
+export interface SaleLog { what: string; units: number; price: number; at: number; minutes: number | null }
 
 export function dayKeyOf(now: number) {
   const d = new Date(now);
@@ -153,6 +175,14 @@ export function freshRun(now: number) {
     tools: {} as GameState['tools'],
     storageLevel: 0,
     wagesOwed: 0,
+    planks: 0,
+    plankPrice: PLANK_BASE_PRICE,
+    plankSelling: true,
+    plankCarry: 0,
+    cutting: false,
+    chopRate: 0,
+    chopAcc: 0,
+    buyers: { wood: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT, planks: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT },
   };
 }
 
@@ -186,17 +216,14 @@ export function newGame(now = Date.now()): GameState {
     firstWin: false,
     pendingOffline: null,
     equippedSkin: null,
+    market: { days: [], orders: [], ordersDay: '', log: [] },
     ...freshRun(now),
   };
 }
 
 // ---------- seeded random ----------
 
-export function hash(str: string) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
-  return (h >>> 0) / 4294967295;
-}
+export { hash };
 
 // ---------- money ----------
 
@@ -290,7 +317,7 @@ export function toolPower(s: GameState, id: string) {
 
 /** What all your tools add up to right now (worn tools give less, broken give nothing). */
 export function toolFx(s: GameState) {
-  const fx = { chopPct: 0, chopFlat: 0, helperPct: 0, passiveFlat: 0, woodSalePct: 0, craftSalePct: 0, fellsTrees: false };
+  const fx = { chopPct: 0, chopFlat: 0, helperPct: 0, passiveFlat: 0, woodSalePct: 0, plankSalePct: 0, fellsTrees: false };
   const hasHelpers = helperCount(s) > 0;
   for (const d of TOOLS) {
     const p = toolPower(s, d.id);
@@ -300,7 +327,7 @@ export function toolFx(s: GameState) {
     fx.helperPct += (d.helperPct ?? 0) * p;
     if (!d.needsHelpers || hasHelpers) fx.passiveFlat += (d.passiveFlat ?? 0) * p;
     fx.woodSalePct += (d.woodSalePct ?? 0) * p;
-    fx.craftSalePct += (d.craftSalePct ?? 0) * p;
+    fx.plankSalePct += (d.plankSalePct ?? 0) * p;
     if (d.fellsTrees) fx.fellsTrees = true;
   }
   return fx;
@@ -310,6 +337,12 @@ export function buyTool(s: GameState, id: string): GameState | null {
   const d = TOOLS.find((x) => x.id === id);
   if (!d || s.tools[id] || s.money < d.cost) return null;
   return { ...s, money: s.money - d.cost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0 } }, firstWin: true };
+}
+
+export function buyToolWithGold(s: GameState, id: string): GameState | null {
+  const d = TOOLS.find((x) => x.id === id);
+  if (!d || !d.goldCost || s.tools[id] || s.gold < d.goldCost) return null;
+  return { ...s, gold: s.gold - d.goldCost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0 } }, firstWin: true };
 }
 
 export function toolRepairCost(s: GameState, id: string, to: number) {
@@ -346,7 +379,7 @@ export function fixEverything(s: GameState): GameState {
 function toolInUse(s: GameState, id: string) {
   const d = TOOLS.find((x) => x.id === id)!;
   if (d.woodSalePct) return s.selling && s.wood >= 1;
-  if (d.craftSalePct) return s.workshop.forSale.length > 0;
+  if (d.plankSalePct) return s.plankSelling && s.planks >= 1;
   if (d.helperPct || d.needsHelpers) return helperCount(s) > 0;
   return true;
 }
@@ -390,8 +423,13 @@ export function buyStorage(s: GameState): GameState | null {
   return { ...s, money: s.money - cost, storageLevel: s.storageLevel + 1 };
 }
 
+/** Wood and planks share the yard (a plank takes the space of the wood it was cut from). */
+export function storageUsed(s: GameState) {
+  return s.wood + s.planks * PLANK_WOOD;
+}
+
 function addWood(s: GameState, amount: number): { state: GameState; added: number } {
-  const room = Math.max(0, storageCap(s) - s.wood);
+  const room = Math.max(0, storageCap(s) - storageUsed(s));
   const added = Math.max(0, Math.min(amount, room));
   if (added === 0) return { state: s, added };
   return { state: { ...s, wood: s.wood + added, totalWoodChopped: s.totalWoodChopped + added }, added };
@@ -674,27 +712,12 @@ export function finishCraftWithGold(s: GameState, index: number, now: number): G
   return { ...s, gold: s.gold - g, workshop: { ...s.workshop, queue } };
 }
 
-// Sell chance and time for crafted items (spec section 9 chair example).
-const SELL_POINTS = [
-  { r: 0.25, chance: 0.99, min: 2 },
-  { r: 0.5, chance: 0.95, min: 5 },
-  { r: 1, chance: 0.7, min: 60 },
-  { r: 2, chance: 0.3, min: 360 },
-  { r: 4, chance: 0.05, min: 1440 },
-];
-
+// Sell chance and time for crafted items (spec section 9 chair example), with today's furniture demand.
 export function sellOdds(s: GameState, itemId: string, price: number) {
   const it = ITEMS.find((x) => x.id === itemId)!;
-  const r = Math.max(0.25, Math.min(4, price / it.value));
-  let i = 0;
-  while (i < SELL_POINTS.length - 2 && r > SELL_POINTS[i + 1].r) i++;
-  const a = SELL_POINTS[i];
-  const b = SELL_POINTS[i + 1];
-  const t = (Math.log(r) - Math.log(a.r)) / (Math.log(b.r) - Math.log(a.r));
-  const demand = demandFor(s.dayKey);
-  const chance = Math.min(0.99, (a.chance + (b.chance - a.chance) * t) * demand);
-  const minutes = Math.exp(Math.log(a.min) + (Math.log(b.min) - Math.log(a.min)) * t) / demand;
-  return { chance, minutes };
+  const c = sellCurve(price / it.value);
+  const demand = demandOf(s.dayKey, 'furniture');
+  return { chance: Math.min(0.99, c.chance * demand), minutes: c.minutes / demand };
 }
 
 /** Price with the most Money per item on average. */
@@ -759,7 +782,11 @@ function tickWorkshop(s: GameState, now: number): GameState {
   }
   if (w.forSale.some((x) => x.sellAt !== null && x.sellAt <= now)) {
     const sold = w.forSale.filter((x) => x.sellAt !== null && x.sellAt <= now);
-    const mm = moneyMult(st, now) * (1 + toolFx(st).craftSalePct);
+    const mm = moneyMult(st, now);
+    for (const x of sold) {
+      const it = ITEMS.find((i) => i.id === x.itemId)!;
+      st = recordSale(st, 'furniture', 1, x.price * mm, x.sellAt!, { what: it.name, price: x.price * mm, minutes: Math.round((x.sellAt! - x.listedAt) / 60000) });
+    }
     const history = [
       ...sold.map((x) => ({ itemId: x.itemId, price: x.price * mm, minutes: Math.round((x.sellAt! - x.listedAt) / 60000), at: x.sellAt! })),
       ...w.history,
@@ -828,7 +855,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
   }
 
   const added = addWood(st, wood + fellBonus);
-  st = added.state;
+  st = { ...added.state, chopAcc: added.state.chopAcc + added.added };
   const storageFull = added.added < wood + fellBonus - 1e-9;
   st = {
     ...wearTools(st, 1, 0),
@@ -850,30 +877,29 @@ export function devSpawnGolden(s: GameState, now: number): GameState {
 // ---------- market ----------
 
 export function demandFor(dayKey: string) {
-  return 0.7 + hash('demand:' + dayKey) * 0.7;
+  return demandOf(dayKey, 'wood');
 }
 
 export function demandLabel(d: number) {
-  if (d < 0.85) return 'Low';
-  if (d < 1.05) return 'Normal';
-  if (d < 1.25) return 'High';
-  return 'Very High';
+  return demandLabelM(d);
 }
 
 export function marketPriceFor(dayKey: string) {
-  return MARKET_BASE_PRICE * (0.9 + hash('price:' + dayKey) * 0.2);
+  return marketPriceOf(dayKey, 'wood');
 }
 
 export function salesPerSec(s: GameState, price = s.sellPrice, wood = s.wood) {
-  if (!s.selling || wood < 1) return 0;
-  const market = marketPriceFor(s.dayKey);
-  const r = price / market;
-  const priceFactor = Math.exp(-PRICE_SENSITIVITY * (r - 1));
-  return demandFor(s.dayKey) * priceFactor * Math.max(1, wood * BUYERS_PER_WOOD_IN_STOCK);
+  if (!s.selling) return 0;
+  return commodityRate(s.dayKey, 'wood', price, wood, BUYERS_PER_WOOD_IN_STOCK, s.buyers.wood);
+}
+
+export function plankSalesPerSec(s: GameState, price = s.plankPrice, planks = s.planks) {
+  if (!s.plankSelling) return 0;
+  return commodityRate(s.dayKey, 'planks', price, planks, BUYERS_PER_WOOD_IN_STOCK, s.buyers.planks);
 }
 
 export function bestPrice(dayKey: string) {
-  return marketPriceFor(dayKey) / PRICE_SENSITIVITY;
+  return bestCommodityPrice(dayKey, 'wood');
 }
 
 /** Rough Money per minute right now (helpers, land and steady chopping). Used to size rewards. */
@@ -896,8 +922,27 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
 
   next = payWages(next, dtSec);
   const passive = passiveWoodPerSec(next, now) * (offline ? OFFLINE_RATE : 1);
+  if (dtSec > 0) {
+    const a = 1 - Math.exp(-dtSec / 30);
+    const chopRate = next.chopRate + a * (next.chopAcc / dtSec - next.chopRate);
+    const made = passive + chopRate;
+    next = {
+      ...next,
+      chopRate,
+      chopAcc: 0,
+      buyers: {
+        wood: MARKET_SIZE_MULT * Math.max(MIN_BUYERS_PER_SEC, made),
+        planks: MARKET_SIZE_MULT * Math.max(MIN_BUYERS_PER_SEC, next.cutting ? PLANK_CUT_PER_SEC : 0),
+      },
+    };
+  }
   if (passive > 0) next = addWood(next, passive * dtSec).state;
   if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
+
+  if (next.cutting && next.wood >= PLANK_WOOD && dtSec > 0) {
+    const n = Math.min(PLANK_CUT_PER_SEC * dtSec, next.wood / PLANK_WOOD);
+    next = { ...next, wood: next.wood - n * PLANK_WOOD, planks: next.planks + n };
+  }
 
   const rate = salesPerSec(next);
   if (rate > 0) {
@@ -909,6 +954,20 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
       const earned = sold * next.sellPrice * moneyMult(next, now) * (1 + toolFx(next).woodSalePct);
       next = { ...next, wood: next.wood - sold, sellCarry: carry, soldToday: next.soldToday + sold };
       next = addMoney(bump(next, 'woodSold', sold), earned);
+      if (sold > 0) next = recordSale(next, 'wood', sold, earned, now);
+    }
+  }
+
+  const prate = plankSalesPerSec(next);
+  if (prate > 0) {
+    const units = prate * dtSec + next.plankCarry;
+    const whole = Math.floor(units);
+    const sold = Math.min(whole, Math.floor(next.planks));
+    const carry = sold < whole ? 0 : units - whole;
+    if (sold > 0 || carry !== next.plankCarry) {
+      const earned = sold * next.plankPrice * moneyMult(next, now) * (1 + toolFx(next).plankSalePct);
+      next = addMoney({ ...next, planks: next.planks - sold, plankCarry: carry }, earned);
+      if (sold > 0) next = recordSale(next, 'planks', sold, earned, now);
     }
   }
   return tickWorkshop(next, now);
@@ -1074,3 +1133,68 @@ export function claimVip(s: GameState, now: number): GameState | null {
 }
 
 export { PRODUCTS };
+
+// ---------- market: history and bulk orders ----------
+
+export function recordSale(s: GameState, p: Product, units: number, money: number, at: number, log?: { what: string; price: number; minutes: number | null }): GameState {
+  const day = dayKeyOf(at);
+  const days = [...s.market.days];
+  let d = days.find((x) => x.day === day);
+  if (!d) {
+    d = { day, wood: 0, planks: 0, furniture: 0, money: 0, woodMoney: 0 };
+    days.push(d);
+  }
+  const nd = { ...d, [p]: d[p] + units, money: d.money + money, woodMoney: d.woodMoney + (p === 'wood' ? money : 0) };
+  const out = days.map((x) => (x.day === day ? nd : x)).slice(-7);
+  const logs = log ? [{ what: log.what, units, price: log.price, at, minutes: log.minutes }, ...s.market.log].slice(0, 25) : s.market.log;
+  return { ...s, market: { ...s.market, days: out, log: logs } };
+}
+
+export function ensureOrders(s: GameState, now: number): GameState {
+  const dk = dayKeyOf(now);
+  if (s.market.ordersDay === dk) return s;
+  const orders: BulkOrder[] = [];
+  const cap = storageCap(s);
+  for (let i = 0; i < BULK_ORDERS_PER_DAY; i++) {
+    const r = (k: string) => hash(`order:${dk}:${i}:${k}`);
+    const product: 'wood' | 'planks' = s.workshop.level >= 0 && r('p') < 0.4 ? 'planks' : 'wood';
+    const raw = (product === 'wood' ? 0.2 : 0.06) * cap * (0.6 + r('a') * 0.8);
+    const mag = Math.pow(10, Math.max(1, Math.floor(Math.log10(raw)) - 1));
+    const amount = Math.max(100, Math.round(raw / mag) * mag);
+    const price = Math.round(marketPriceOf(dk, product) * (0.85 + r('price') * 0.5) * 100) / 100;
+    orders.push({ id: `${dk}-${i}`, buyer: BULK_BUYERS[(Math.floor(r('b') * BULK_BUYERS.length) + i) % BULK_BUYERS.length], product, amount, price, status: 'open', countered: false });
+  }
+  return { ...s, market: { ...s.market, orders, ordersDay: dk } };
+}
+
+export function acceptOrder(s: GameState, id: string, now: number): GameState | null {
+  const o = s.market.orders.find((x) => x.id === id);
+  if (!o || o.status !== 'open') return null;
+  const have = o.product === 'wood' ? s.wood : s.planks;
+  if (have < o.amount) return null;
+  const fx = toolFx(s);
+  const bonus = o.product === 'wood' ? fx.woodSalePct : fx.plankSalePct;
+  const money = o.amount * o.price * moneyMult(s, now) * (1 + bonus);
+  let st: GameState = o.product === 'wood' ? { ...s, wood: s.wood - o.amount } : { ...s, planks: s.planks - o.amount };
+  if (o.product === 'wood') st = bump(st, 'woodSold', o.amount);
+  st = addMoney(st, money);
+  st = recordSale(st, o.product, o.amount, money, now, { what: `Bulk order: ${o.product} for ${o.buyer}`, price: money, minutes: null });
+  return { ...st, market: { ...st.market, orders: st.market.orders.map((x) => (x.id === id ? { ...x, status: 'done' as const } : x)) } };
+}
+
+export function rejectOrder(s: GameState, id: string): GameState | null {
+  const o = s.market.orders.find((x) => x.id === id);
+  if (!o || o.status !== 'open') return null;
+  return { ...s, market: { ...s.market, orders: s.market.orders.map((x) => (x.id === id ? { ...x, status: 'gone' as const } : x)) } };
+}
+
+/** Ask for 10% more, once. Half the buyers agree, the rest walk away. */
+export function counterOrder(s: GameState, id: string): { state: GameState; agreed: boolean } | null {
+  const o = s.market.orders.find((x) => x.id === id);
+  if (!o || o.status !== 'open' || o.countered) return null;
+  const agreed = hash('counter:' + id) < BULK_COUNTER_CHANCE;
+  const next: BulkOrder = agreed
+    ? { ...o, countered: true, price: Math.round(o.price * (1 + BULK_COUNTER_BONUS) * 100) / 100 }
+    : { ...o, countered: true, status: 'gone' };
+  return { state: { ...s, market: { ...s.market, orders: s.market.orders.map((x) => (x.id === id ? next : x)) } }, agreed };
+}

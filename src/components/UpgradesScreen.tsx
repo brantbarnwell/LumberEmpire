@@ -1,7 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
 import {
-  buyAxe, buyStorage, buyTool, durabilityPower, equipSkin, repair, repairAll, repairAllCost, repairCost, repairTool, storageCap,
+  buyAxe, buyStorage, buyTool, buyToolWithGold, durabilityPower, equipSkin, repair, repairAll, repairAllCost, repairCost, repairTool, storageCap,
   storageUpgradeCost, toolPower, toolRepairCost,
 } from '../game/logic';
 import { AXES, AXE_SKINS, CRIT_CHANCE, CRIT_MULT, STORAGE_LEVELS, TOOLS } from '../game/data';
@@ -134,8 +134,14 @@ export function UpgradesScreen() {
                 )}
               </View>
               {!owned && (
-                <Button small variant={s.money >= t.cost ? 'green' : 'ghost'} label={money(t.cost)} disabled={s.money < t.cost}
-                  onPress={() => update((st) => buyTool(st, t.id)) && haptic.success()} />
+                <View style={{ gap: 4 }}>
+                  <Button small variant={s.money >= t.cost ? 'green' : 'ghost'} label={money(t.cost)} disabled={s.money < t.cost}
+                    onPress={() => update((st) => buyTool(st, t.id)) && haptic.success()} />
+                  {t.goldCost ? (
+                    <Button small variant="gold" label={`or ${whole(t.goldCost)} Gold`} disabled={s.gold < t.goldCost}
+                      onPress={() => update((st) => buyToolWithGold(st, t.id)) && haptic.success()} />
+                  ) : null}
+                </View>
               )}
             </View>
             {owned && full > 0 && (

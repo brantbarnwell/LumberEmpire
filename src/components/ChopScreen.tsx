@@ -45,7 +45,7 @@ function Background() {
   );
 }
 
-export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
+export function ChopScreen({ onOpenUpgrades, onOpenMarket }: { onOpenUpgrades: () => void; onOpenMarket?: () => void }) {
   const s = useGame();
   const now = useNow();
   const axe = AXES[s.axeIndex];
@@ -153,6 +153,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
         </Card>
 
         <SellPanel now={now} />
+        {onOpenMarket && <Button variant="brown" label="📈 Open Market: planks, furniture, bulk orders" onPress={onOpenMarket} />}
       </ScrollView>
     </View>
   );
