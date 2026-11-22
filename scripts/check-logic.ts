@@ -4,6 +4,7 @@ import {
   levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, listForSale, woodMultFor, moneyMult,
   passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
   buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed, salesPerSec,
+  hireManager, setManagerOn, managerCollect, collectOfflineBonus, managerActive,
 } from '../src/game/logic';
 import { demandOf, shownChance, timeToSell, marketPriceOf, bestCommodityPrice } from '../src/game/market';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
@@ -211,5 +212,25 @@ let gs = buyToolWithGold({ ...newGame(MON), gold: 1500, runMoneyEarned: PRESTIGE
 ok(!!doPrestige(gs, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Gold is kept through prestige');
 let ms = buyTool({ ...rich(newGame(MON)), runMoneyEarned: PRESTIGE_AT }, 'goldchainsaw')!;
 ok(!doPrestige(ms, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Money is lost on prestige');
+
+// ---- Part 7: manager ----
+let mg = hireManager({ ...newGame(MON), money: 25_000 })!;
+ok(mg.money === 5_000 && mg.manager.hired && mg.manager.on && hireManager({ ...mg, money: 1e6 }) === null, 'manager costs $20,000, only one for the whole empire');
+ok(setManagerOn(mg, false)!.manager.on === false, 'manager has an on/off switch');
+const base: GameState = { ...mg, helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6, selling: false, sellPrice: 0.123 };
+let full = { ...base, wood: 9_500 };
+ok(managerActive(full) && !managerActive({ ...full, wood: 7_000 }), 'manager starts at 80% full');
+let after = full;
+for (let i = 1; i <= 720; i++) after = tick(after, 5, MON + i * 5000);
+ok(after.wood <= 8_000 + 1 && after.wood >= 7_900 && after.manager.soldToday > 0 && after.sellPrice === 0.123, 'manager sells back down to 80% at your price, even with selling paused, never changes price');
+ok(tick({ ...base, wood: 5_000 }, 60, MON).manager.soldToday === 0, 'manager does not sell below 80%');
+let plain: GameState = { ...base, wood: 9_500, manager: { ...base.manager, on: false } };
+for (let i = 1; i <= 720; i++) plain = tick(plain, 5, MON + i * 5000);
+ok(after.axeDurability === plain.axeDurability && Object.keys(after.lands).length === 0 && after.totalChops === 0 && after.totalWoodChopped >= plain.totalWoodChopped, 'manager does not chop, buy land, or repair (he only frees yard space)');
+const offR = { away: 3600, earned: 500, gross: 500, sold: 5000, produced: 5000 };
+const col = managerCollect({ ...mg, money: 0 }, offR);
+ok(col.state.money === 500 && col.result.collectedBy === 'manager' && col.state.manager.collectedToday === 500, 'manager collects Welcome Back Money for you');
+ok(collectOfflineBonus(col.state, col.result).money === 1000, 'optional video still adds the 2x bonus on top');
+ok(managerCollect({ ...newGame(MON), money: 0 }, offR).state.money === 0, 'no manager: you collect it yourself');
 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

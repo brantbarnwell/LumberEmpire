@@ -1,7 +1,8 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
-import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor } from '../game/logic';
-import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH } from '../game/data';
+import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed } from '../game/logic';
+import { Switch } from 'react-native';
+import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT } from '../game/data';
 import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card } from './ui';
@@ -22,6 +23,7 @@ export function HelpersScreen() {
         {mult !== 1 && <Text style={[styles.sub, { color: C.leaf }]}>Boosts active: x{small(mult)}</Text>}
         {wagePerHour(s) > 0 && <Text style={styles.sub}>Wages: {money(wagePerHour(s))} per hour, paid from your Money</Text>}
       </Card>
+      <ManagerCard />
       {s.wagesOwed > 0 && (
         <Card style={styles.owe}>
           <Text style={styles.oweText}>💸 You owe {money(s.wagesOwed)} in wages. Your helpers work at half speed until you can pay. It pays itself as soon as you have the Money.</Text>
@@ -72,7 +74,53 @@ export function HelpersScreen() {
   );
 }
 
+function ManagerCard() {
+  const s = useGame();
+  const m = s.manager;
+  const pct = Math.round((storageUsed(s) / storageCap(s)) * 100);
+  return (
+    <Card style={styles.mgr}>
+      <View style={styles.row}>
+        <View style={styles.avatar}><Text style={{ fontSize: 30 }}>👔</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>Manager</Text>
+          <Text style={styles.sub}>One manager runs sales for your whole empire.</Text>
+        </View>
+        {m.hired && (
+          <Switch value={m.on} onValueChange={(v) => { update((st) => setManagerOn(st, v)); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Manager on or off" />
+        )}
+      </View>
+      <View style={styles.mgrList}>
+        <Text style={styles.mgrLine}>✅ Sells wood when your yard is {Math.round(MANAGER_SELL_AT * 100)}% full, at the price you set in the Market. He never changes your price.</Text>
+        <Text style={styles.mgrLine}>✅ Collects your Money when you come back, so you don't have to tap Collect.</Text>
+        <Text style={styles.mgrLine}>❌ Does not chop, buy land, or repair tools.</Text>
+      </View>
+      {!m.hired ? (
+        <Button style={{ marginTop: 8 }} label="Hire manager" sub={money(MANAGER_COST)} variant={s.money >= MANAGER_COST ? 'green' : 'ghost'}
+          disabled={s.money < MANAGER_COST} onPress={() => update((st) => hireManager(st)) && haptic.success()} />
+      ) : (
+        <View style={{ gap: 4, marginTop: 8 }}>
+          <Text style={[styles.owned, !m.on && { color: C.inkSoft }]}>
+            {!m.on ? 'Manager is OFF' : managerActive(s) ? `Selling now: yard is ${pct}% full` : `Waiting: yard is ${pct}% full`}
+          </Text>
+          <View style={styles.mgrStats}>
+            <View style={styles.mgrStat}><Text style={styles.mgrNum}>{whole(m.soldToday)}</Text><Text style={styles.sub}>wood sold today</Text></View>
+            <View style={styles.mgrStat}><Text style={styles.mgrNum}>{money(m.moneyToday)}</Text><Text style={styles.sub}>from his sales today</Text></View>
+            <View style={styles.mgrStat}><Text style={styles.mgrNum}>{money(m.collectedToday)}</Text><Text style={styles.sub}>collected for you today</Text></View>
+          </View>
+        </View>
+      )}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
+  mgr: { borderColor: C.gold, borderWidth: 2 },
+  mgrList: { marginTop: 8, gap: 3 },
+  mgrLine: { fontSize: 12.5, fontWeight: '700', color: C.ink },
+  mgrStats: { flexDirection: 'row', gap: 6 },
+  mgrStat: { flex: 1, backgroundColor: 'rgba(107,68,35,0.08)', borderRadius: 10, padding: 6, alignItems: 'center' },
+  mgrNum: { fontSize: 15, fontWeight: '900', color: C.ink },
   page: { flex: 1, backgroundColor: C.cream },
   content: { padding: 14, gap: 10, paddingBottom: 30 },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },

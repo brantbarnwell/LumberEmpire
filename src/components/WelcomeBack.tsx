@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { collectOffline } from '../game/logic';
+import { collectOffline, collectOfflineBonus } from '../game/logic';
 import { adFree } from '../game/meta';
 import { AD_OFFLINE_MULT, OFFLINE_MAX_HOURS } from '../game/data';
 import { duration, money, whole } from '../game/format';
@@ -23,6 +23,42 @@ export function WelcomeBack() {
     update((st) => (st.pendingOffline ? { ...collectOffline(st, st.pendingOffline, mult), pendingOffline: null } : null));
     haptic.success();
   };
+  const managed = r.collectedBy === 'manager';
+  const bonus = () => {
+    update((st) => (st.pendingOffline ? { ...collectOfflineBonus(st, st.pendingOffline), pendingOffline: null } : null));
+    haptic.success();
+  };
+
+  if (managed) {
+    return (
+      <View style={styles.back}>
+        <View style={styles.card}>
+          <Text style={styles.icon}>👔</Text>
+          <Text style={styles.title}>Welcome back!</Text>
+          <Text style={styles.body}>
+            You were away {duration(r.away * 1000)}. Your crew chopped {whole(r.produced)} wood and sold {whole(r.sold)}. Your manager already collected it for you:
+          </Text>
+          <Text style={styles.amount}>+{money(r.earned)}</Text>
+          {err && <Text style={styles.err}>{err}</Text>}
+          <Button
+            style={{ alignSelf: 'stretch', marginTop: 10 }}
+            variant="gold"
+            label={free ? `Claim 2x bonus (VIP / No Ads)` : `▶ Watch a video for +${money(r.earned)} more`}
+            loading={busy}
+            onPress={async () => {
+              setErr(null);
+              setBusy(true);
+              const res = await earnReward(adFree(getState()));
+              setBusy(false);
+              if (res.ok) bonus();
+              else setErr(res.message);
+            }}
+          />
+          <Button style={{ alignSelf: 'stretch', marginTop: 8 }} label="OK" disabled={busy} onPress={() => update((st) => ({ ...st, pendingOffline: null }))} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.back}>

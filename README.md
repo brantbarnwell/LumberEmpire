@@ -76,8 +76,9 @@ lumber-empire/
 - Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit and upgrades, ranks up to $200M.
 - Part 5: Market tab (wood, planks, furniture, demand, news, bulk orders, 7-day graph), Golden Chainsaw ($500,000 or 1,500 Gold).
 - Part 6: AI rival companies (offers, counters, buy-outs, activity feed), 60-second land auctions, Golden Chainsaw kept through prestige when bought with Gold.
-- Typecheck, 77 logic tests, iOS bundle and web click-through all pass. `npm run price-test` and `npm run auction-test` show selling and auctions.
-- Not built yet: manager helper, wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
+- Part 7: manager helper ($20,000): sells at 80% yard at your price, collects Welcome Back Money.
+- Typecheck, 86 logic tests, iOS bundle and web click-through all pass. `npm run price-test` and `npm run auction-test` show selling and auctions.
+- Not built yet: wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
 
 ## Testing on your iPhone
 
@@ -99,4 +100,5 @@ npm test             # check game rules
 npm run pacing       # see how long upgrades take
 npm run price-test   # see how price changes selling
 npm run auction-test # play 200 land auctions against the rivals
+npm run manager-test # does the yard fill with the manager on
 ```

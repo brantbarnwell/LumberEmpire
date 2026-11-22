@@ -322,3 +322,20 @@ Muse's own section 20 is the source of truth; this is what the code does.
 - Pacing with rivals: first hour unchanged; prestige 2.5-3.9 days.
 - Golden Chainsaw: bought with Gold (1,500) = kept forever, even after prestige. Bought with Money ($500,000) = lost on prestige. Shown in plain words in the Tools tab before buying.
 - Not built (as asked): manager helper, Sawmill.
+
+
+## 21. Part 7 - manager helper (from Brant, Nov 21 2026)
+
+Muse's own section is the source of truth; this is what the code does.
+
+- Hire in the Helpers tab for $20,000 Money. One manager for the whole empire. On/off switch. Shows wood he sold today, Money from his sales today, and Money he collected for you today. No wage (not in the spec). Resets on prestige like helpers.
+- Sells: when the yard (wood + planks) is 80% full, he brings in a second crowd of buyers at YOUR Market price (never changes it) and sells wood back down to 80%. Works even if you paused selling. Wood only, not planks.
+- He cannot beat the yard limit (Part 4 brake): a pile only sells so fast, so if you make more than your yard can sell, it still fills. Upgrade storage for that.
+- Collects: Welcome Back Money is added for you automatically. The screen says "Your manager already collected it", with an optional video for the 2x bonus on top (or instant for VIP / No Ads).
+- Does not chop, buy land, repair tools, or accept bulk orders.
+- Test (npm run manager-test, 10,000 yard, 4 hours):
+  - normal price: yard stays low, manager never needed
+  - 2x price: off = yard full 3.7 h and 103,529 wood wasted; on = yard held at 80%, nothing wasted
+  - selling paused: off = full 3.9 h, 278,000 wasted; on = held at 80%, nothing wasted
+  - 400 wood/sec into a 10,000 yard: full all 4 hours with or without him (storage brake); a 150,000 yard fixes it
+- Rival rules from Part 6 unchanged.

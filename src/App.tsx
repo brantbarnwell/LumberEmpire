@@ -3,7 +3,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getState, setState, update, useGame } from './game/store';
-import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, ensureOrders, migrate, tick } from './game/logic';
+import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, ensureOrders, managerCollect, migrate, tick } from './game/logic';
 import { canClaimLogin, ensureQuests, questProgress } from './game/meta';
 import { loadGame, saveGame } from './game/save';
 import { initStore } from './services/purchases';
@@ -31,13 +31,20 @@ const AUTOSAVE_MS = 10_000; // spec: autosave every 10 seconds
 function mergeOffline(a: OfflineResult | null, b: OfflineResult | null): OfflineResult | null {
   if (!a) return b;
   if (!b) return a;
-  return { away: a.away + b.away, earned: a.earned + b.earned, sold: a.sold + b.sold, produced: a.produced + b.produced };
+  return { away: a.away + b.away, earned: a.earned + b.earned, gross: (a.gross ?? a.earned) + (b.gross ?? b.earned), sold: a.sold + b.sold, produced: a.produced + b.produced, collectedBy: a.collectedBy && b.collectedBy ? 'manager' : undefined };
 }
 
-/** Runs the time away and holds the Money for the Welcome Back screen. */
+/** Runs the time away and holds the Money for the Welcome Back screen (or the manager collects it). */
 function catchUp(s: GameState, now: number): GameState {
   const off = computeOffline(s, now);
-  return { ...off.state, pendingOffline: mergeOffline(s.pendingOffline, off.result) };
+  let st = off.state;
+  let prev = s.pendingOffline;
+  let r = off.result;
+  if (prev && !prev.collectedBy) ({ state: st, result: prev } = managerCollect(st, prev));
+  if (r) ({ state: st, result: r } = managerCollect(st, r));
+  // an old note the manager already collected is replaced by the new one
+  if (prev && r && !!prev.collectedBy !== !!r.collectedBy) prev = prev.collectedBy ? null : prev;
+  return { ...st, pendingOffline: mergeOffline(prev, r) };
 }
 
 function daily(s: GameState, now: number) {

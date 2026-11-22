@@ -7,10 +7,11 @@ import {
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
-  PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
+  PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product,
+  MANAGER_COST, MANAGER_SELL_AT, MANAGER_EXTRA_BUYERS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
 import { planRivals, rivalTick } from './rivals';
-import { bestCommodityPrice, commodityRate, demandOf, hash, marketPriceOf, sellCurve, demandLabel as demandLabelM } from './market';
+import { bestCommodityPrice, commodityRate, demandOf, hash, marketPriceOf as mpo, sellCurve as sc, marketPriceOf, sellCurve, demandLabel as demandLabelM } from './market';
 
 export interface Boost {
   kind: 'wood' | 'money';
@@ -130,6 +131,8 @@ export interface GameState {
   plankSelling: boolean;
   plankCarry: number;
   cutting: boolean;
+  // Part 7
+  manager: Manager;
   // Part 6
   auction: Auction | null;
   feed: FeedItem[];
@@ -155,6 +158,17 @@ export interface Auction {
   lastSec: number;
   log: { who: string; amount: number; at: number }[];
   outbid: boolean; // a rival just took the lead from you
+}
+export interface Manager {
+  hired: boolean;
+  on: boolean;
+  carry: number;
+  day: string;
+  soldToday: number; // wood he sold today
+  moneyToday: number; // Money from his sales today
+  collectedToday: number; // Money he collected for you when you came back
+  soldTotal: number;
+  moneyTotal: number;
 }
 export interface FeedItem { at: number; text: string; kind: 'rival' | 'you' | 'win' | 'lose'; landId?: string }
 export interface DayStats { day: string; wood: number; planks: number; furniture: number; money: number; woodMoney: number }
@@ -209,6 +223,7 @@ export function freshRun(now: number) {
     chopAcc: 0,
     buyers: { wood: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT, planks: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT },
     auction: null as Auction | null,
+    manager: { hired: false, on: true, carry: 0, day: '', soldToday: 0, moneyToday: 0, collectedToday: 0, soldTotal: 0, moneyTotal: 0 } as Manager,
   };
 }
 
@@ -995,6 +1010,8 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     }
   }
 
+  next = managerTick(next, dtSec, now);
+
   const prate = plankSalesPerSec(next);
   if (prate > 0) {
     const units = prate * dtSec + next.plankCarry;
@@ -1010,7 +1027,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
   return rivalTick(tickWorkshop(next, now), now);
 }
 
-export interface OfflineResult { away: number; earned: number; gross?: number; sold: number; produced: number } // earned = after wages
+export interface OfflineResult { away: number; earned: number; gross?: number; sold: number; produced: number; collectedBy?: 'manager' } // earned = after wages
 
 /**
  * Runs the time the player was away (50% helper/land rate, 8 hour cap).
@@ -1235,4 +1252,61 @@ export function counterOrder(s: GameState, id: string): { state: GameState; agre
     ? { ...o, countered: true, price: Math.round(o.price * (1 + BULK_COUNTER_BONUS) * 100) / 100 }
     : { ...o, countered: true, status: 'gone' };
   return { state: { ...s, market: { ...s.market, orders: s.market.orders.map((x) => (x.id === id ? next : x)) } }, agreed };
+}
+
+// ---------- manager (Part 7) ----------
+
+export function hireManager(s: GameState): GameState | null {
+  if (s.manager.hired || s.money < MANAGER_COST) return null;
+  return { ...s, money: s.money - MANAGER_COST, manager: { ...s.manager, hired: true, on: true }, firstWin: true };
+}
+
+export function setManagerOn(s: GameState, on: boolean): GameState | null {
+  if (!s.manager.hired || s.manager.on === on) return null;
+  return { ...s, manager: { ...s.manager, on } };
+}
+
+export function managerActive(s: GameState) {
+  return s.manager.hired && s.manager.on && storageUsed(s) >= storageCap(s) * MANAGER_SELL_AT;
+}
+
+/**
+ * When the yard is 80% full the manager brings extra buyers, at YOUR price (he never changes it),
+ * and sells wood back down to 80%. He works even if you paused selling.
+ * He can't beat the yard limit: a pile only sells so fast, so a yard can still fill if you make more than it can sell.
+ */
+function managerTick(s: GameState, dtSec: number, now: number): GameState {
+  const dk = dayKeyOf(now);
+  let st = s.manager.day !== dk && s.manager.hired ? { ...s, manager: { ...s.manager, day: dk, soldToday: 0, moneyToday: 0, collectedToday: 0 } } : s;
+  if (!managerActive(st) || dtSec <= 0 || st.wood < 1) return st.manager.carry && !managerActive(st) ? { ...st, manager: { ...st.manager, carry: 0 } } : st;
+  const yes = (sc(st.sellPrice / mpo(st.dayKey, 'wood')).chance / 0.7) * demandOf(st.dayKey, 'wood');
+  const pile = Math.max(1, st.wood * BUYERS_PER_WOOD_IN_STOCK);
+  const crowd = st.buyers.wood;
+  const normal = st.selling ? yes * Math.min(crowd, pile) : 0;
+  const withManager = yes * Math.min(crowd * (st.selling ? 1 + MANAGER_EXTRA_BUYERS : 1), pile);
+  const extra = Math.max(0, withManager - normal);
+  if (extra <= 0) return st;
+  const excess = storageUsed(st) - storageCap(st) * MANAGER_SELL_AT;
+  const units = extra * dtSec + st.manager.carry;
+  const sold = Math.max(0, Math.min(Math.floor(units), Math.floor(st.wood), Math.ceil(excess)));
+  const carry = sold < Math.floor(units) ? 0 : units - Math.floor(units);
+  if (sold === 0) return { ...st, manager: { ...st.manager, carry } };
+  const earned = sold * st.sellPrice * moneyMult(st, now) * (1 + toolFx(st).woodSalePct);
+  st = { ...st, wood: st.wood - sold, soldToday: st.soldToday + sold };
+  st = addMoney(bump(st, 'woodSold', sold), earned);
+  st = recordSale(st, 'wood', sold, earned, now);
+  const m = st.manager;
+  return { ...st, manager: { ...m, carry, soldToday: m.soldToday + sold, moneyToday: m.moneyToday + earned, soldTotal: m.soldTotal + sold, moneyTotal: m.moneyTotal + earned } };
+}
+
+/** Manager collects the Welcome Back Money for you (1x). A video can still add the 2x bonus on top. */
+export function managerCollect(s: GameState, r: OfflineResult): { state: GameState; result: OfflineResult } {
+  if (!s.manager.hired || !s.manager.on || r.collectedBy) return { state: s, result: r };
+  const st = collectOffline(s, r, 1);
+  return { state: { ...st, manager: { ...st.manager, collectedToday: st.manager.collectedToday + r.earned } }, result: { ...r, collectedBy: 'manager' } };
+}
+
+/** Optional video bonus after the manager already collected: adds the second 1x. */
+export function collectOfflineBonus(s: GameState, r: OfflineResult): GameState {
+  return addMoney(s, r.earned);
 }

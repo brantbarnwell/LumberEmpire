@@ -36,7 +36,8 @@
     "test": "tsx scripts/check-logic.ts",
     "pacing": "tsx scripts/pacing-sim.ts",
     "price-test": "tsx scripts/price-test.ts",
-    "auction-test": "tsx scripts/auction-test.ts"
+    "auction-test": "tsx scripts/auction-test.ts",
+    "manager-test": "tsx scripts/manager-test.ts"
   },
   "private": true
 }

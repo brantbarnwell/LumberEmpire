@@ -417,3 +417,8 @@ export const RIVAL_FREE_LAND = ['clearing']; // rivals ignore the first small pl
 export const RIVAL_FIRST_OFFER_MIN = [60, 180]; // minutes after the listing appears. BALANCE
 export const RIVAL_BUY_AFTER_MIN = [120, 300]; // minutes after their last offer. BALANCE
 export const GOLDEN_CHAINSAW_ID = 'goldchainsaw';
+
+// ======================= PART 7: manager helper =======================
+export const MANAGER_COST = 20_000; // Money, one manager for the whole empire
+export const MANAGER_SELL_AT = 0.8; // starts selling when the yard is 80% full, sells back down to 80%
+export const MANAGER_EXTRA_BUYERS = 1; // brings 1 extra crowd of buyers (2x buyers) while selling. BALANCE

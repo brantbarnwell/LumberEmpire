@@ -179,6 +179,9 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
         <Stat label={stock >= 1 ? 'to sell your stock' : 'sells per min'} value={stock >= 1 ? (isFinite(tts) && tts < 7 * 86400 ? duration(tts * 1000) : 'Maybe never') : whole(perSec * 60)} />
         <Stat label="est. profit / hour" value={money(perSec * 3600 * price * mult)} color={C.money} />
       </View>
+      {isWood && s.manager.hired && (
+        <Text style={styles.small}>👔 Manager {s.manager.on ? `is on: sells extra at your price when the yard is 80% full (sold ${whole(s.manager.soldToday)} today)` : 'is off'}</Text>
+      )}
       {growing && <Text style={styles.warnText}>⚠️ At this price you make more than buyers take. Your pile will grow until the yard is full. Lower the price to sell it all.</Text>}
       <Text style={styles.small}>
         Sold today: {whole(today?.[p] ?? 0)}. Best profit around {money(best)} each.{!on ? ' Selling is paused.' : ''}
