@@ -2,19 +2,40 @@
 import {
   AD_BOOST_MAX_MINUTES, AD_BOOST_MINUTES, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, AXES, DAILY_QUESTS, DAILY_QUEST_GOLD,
   DAILY_QUEST_MONEY_MIN, DAILY_REWARDS, GOLD_REPAIR_ALL, GOLD_SHOP, PRESTIGE_AT, QuestDef, WEEKLY_QUESTS, WEEKLY_QUEST_GOLD,
+  WEEKLY_QUEST_BOOST_HOURS, WEEKLY_QUEST_MONEY_MIN, PRESTIGE_GOLD, COSMETICS, RARE_COSMETICS, RARE_EXTRA_GOLD, CosmeticKind,
+  HELPERS, LAND, LAND_UPGRADES, TOOLS, SAWMILL_LEVELS, WORKSHOPS, YARD_SELLER_COST, MANAGER_COST, RIVALS,
 } from './data';
 import {
   GameState, Quest, addBoost, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
-  weekKeyOf, woodPerMinEstimate,
+  weekKeyOf, woodPerMinEstimate, hireCost, levelCost, landUpgradeCost, sawmillNextCost, storageUpgradeCost, systemUnlocked, unitPrice,
+  workshopUnlocked,
 } from './logic';
 import { money as fmtMoney, whole } from './format';
 
 export const EMPIRE_PACK_ID = 'com.lumberempire.megapack';
 
-// ---------- daily login rewards (rolling: a missed day pauses, never resets) ----------
+// ---------- daily login rewards (update 3: miss one day = grace, miss more = drop back one day, never to zero) ----------
+
+function daysBetween(a: string, b: string) {
+  const [y1, m1, d1] = a.split('-').map(Number);
+  const [y2, m2, d2] = b.split('-').map(Number);
+  return Math.round((new Date(y2, m2 - 1, d2).getTime() - new Date(y1, m1 - 1, d1).getTime()) / 86400_000);
+}
+
+/** Which calendar day you are on right now, after the grace rule. */
+export function loginIndexNow(s: GameState, now: number) {
+  if (!s.login.lastClaimDay) return s.login.index;
+  const gap = daysBetween(s.login.lastClaimDay, dayKeyOf(now));
+  return gap >= 3 ? Math.max(0, s.login.index - 1) : s.login.index;
+}
 
 export function canClaimLogin(s: GameState, now: number) {
   return s.login.lastClaimDay !== dayKeyOf(now);
+}
+
+/** The rare cosmetic the next Day 7 gives (null = you own them all: extra Gold instead). */
+export function nextRareCosmetic(s: GameState) {
+  return RARE_COSMETICS.find((id) => !s.cosmetics.owned.includes(id)) ?? null;
 }
 
 export function loginRewardText(s: GameState, i: number, now: number) {
@@ -23,17 +44,85 @@ export function loginRewardText(s: GameState, i: number, now: number) {
   if (r.money) parts.push(fmtMoney(Math.max(5, incomePerMin(s, now) * r.money)));
   if (r.gold) parts.push(`${r.gold} Gold`);
   if (r.boostMin) parts.push(`2x Wood ${r.boostMin} min`);
+  if (r.cosmetic) {
+    const c = nextRareCosmetic(s);
+    parts.push(c ? `rare ${COSMETICS.find((x) => x.id === c)!.name}` : `+${RARE_EXTRA_GOLD} Gold`);
+  }
   return parts.join(' + ');
 }
 
 export function claimLogin(s: GameState, now: number): GameState | null {
   if (!canClaimLogin(s, now)) return null;
-  const r = DAILY_REWARDS[s.login.index];
-  let st: GameState = { ...s, login: { index: (s.login.index + 1) % DAILY_REWARDS.length, lastClaimDay: dayKeyOf(now) } };
+  const index = loginIndexNow(s, now);
+  const r = DAILY_REWARDS[index];
+  let st: GameState = { ...s, login: { index: (index + 1) % DAILY_REWARDS.length, lastClaimDay: dayKeyOf(now) } };
   if (r.money) st = addMoney(st, Math.max(5, incomePerMin(s, now) * r.money));
   if (r.gold) st = { ...st, gold: st.gold + r.gold };
   if (r.boostMin) st = { ...st, boosts: addBoost(st.boosts, 'wood', 2, r.boostMin / 60, now, 'daily') };
+  if (r.cosmetic) {
+    const c = nextRareCosmetic(st);
+    st = c ? { ...st, cosmetics: { ...st.cosmetics, owned: [...st.cosmetics.owned, c] } } : { ...st, gold: st.gold + RARE_EXTRA_GOLD };
+  }
   return st;
+}
+
+// ---------- cosmetics (update 3): Gold only, looks only, kept forever ----------
+
+export function buyCosmetic(s: GameState, id: string): GameState | null {
+  const c = COSMETICS.find((x) => x.id === id);
+  if (!c || c.rare || s.cosmetics.owned.includes(id) || s.gold < c.gold) return null;
+  return equipCosmetic({ ...s, gold: s.gold - c.gold, cosmetics: { ...s.cosmetics, owned: [...s.cosmetics.owned, id] } }, id);
+}
+
+/** Free, any time. Equipping the default (or the one already on) for axes takes the skin off. */
+export function equipCosmetic(s: GameState, id: string): GameState | null {
+  const c = COSMETICS.find((x) => x.id === id);
+  if (!c || !s.cosmetics.owned.includes(id)) return null;
+  const k: CosmeticKind = c.kind;
+  if (k === 'tree') return { ...s, cosmetics: { ...s.cosmetics, tree: id } };
+  if (k === 'bg') return { ...s, cosmetics: { ...s.cosmetics, bg: id } };
+  return { ...s, equippedSkin: null, cosmetics: { ...s.cosmetics, axe: s.cosmetics.axe === id ? null : id } };
+}
+
+export function unequipCosmetic(s: GameState, kind: CosmeticKind): GameState {
+  if (kind === 'tree') return { ...s, cosmetics: { ...s.cosmetics, tree: 'tree-pine' } };
+  if (kind === 'bg') return { ...s, cosmetics: { ...s.cosmetics, bg: 'bg-forest' } };
+  return { ...s, equippedSkin: null, cosmetics: { ...s.cosmetics, axe: null } };
+}
+
+// ---------- what your money can buy (Welcome Back suggestions) ----------
+
+export type BuyIdea = { label: string; cost: number; tab: 'upgrades' | 'helpers' | 'land' | 'workshop' | 'market' };
+
+/** The best things you can afford with `budget`, best value first (wood/sec per dollar, roughly). */
+export function buyIdeas(s: GameState, budget: number, now: number, max = 3): BuyIdea[] {
+  const price = Math.max(0.01, unitPrice(s, 'wood', now));
+  const opts: (BuyIdea & { value: number })[] = [];
+  const nextAxe = AXES[s.axeIndex + 1];
+  if (nextAxe) opts.push({ label: nextAxe.name, cost: nextAxe.cost, tab: 'upgrades', value: (nextAxe.power - AXES[s.axeIndex].power) * 1.5 });
+  for (const h of HELPERS) {
+    const owned = s.helpers[h.id]?.count ?? 0;
+    opts.push({ label: `${owned ? 'Another ' : ''}${h.name}`, cost: hireCost(s, h.id), tab: 'helpers', value: h.woodPerSec * (1 + 0.25 * (s.helpers[h.id]?.level ?? 0)) });
+    const lc = levelCost(s, h.id);
+    if (lc !== null && owned > 0) opts.push({ label: `Level up ${h.name}s`, cost: lc, tab: 'helpers', value: h.woodPerSec * owned * 0.25 });
+  }
+  for (const l of LAND) if (s.lands[l.id] && systemUnlocked(s, 'land')) {
+    for (const u of LAND_UPGRADES) if (!s.lands[l.id].upgrades.includes(u.id)) opts.push({ label: `${u.name} on ${l.name}`, cost: landUpgradeCost(l.id, u.id), tab: 'land', value: l.woodPerSec * u.bonus });
+  }
+  for (const t of TOOLS) if (!s.tools[t.id] && t.cost <= budget) {
+    const v = (t.chopFlat ?? 0) * 0.3 + (t.passiveFlat ?? 0) + (t.helperPct ?? 0) * 10 + (t.woodSalePct ?? 0) * 10;
+    if (v > 0) opts.push({ label: t.name, cost: t.cost, tab: 'upgrades', value: v });
+  }
+  if (!s.yardSeller && systemUnlocked(s, 'market')) opts.push({ label: 'Yard Seller (auto-sells)', cost: YARD_SELLER_COST, tab: 'helpers', value: 1e9 / YARD_SELLER_COST });
+  const sc = storageUpgradeCost(s);
+  if (sc !== null && !s.yardSeller) opts.push({ label: 'Bigger wood yard', cost: sc, tab: 'upgrades', value: 0.5 });
+  const mc = sawmillNextCost(s);
+  if (mc !== null && systemUnlocked(s, 'sawmill')) opts.push({ label: s.sawmill.level ? `Sawmill level ${s.sawmill.level + 1}` : 'Build the Sawmill', cost: mc, tab: 'workshop', value: (SAWMILL_LEVELS[s.sawmill.level]?.planksPerSec ?? 0) * 0.5 });
+  const nw = WORKSHOPS[s.workshop.level + 1];
+  if (nw && workshopUnlocked(s) && s.workshop.buildingTo === null) opts.push({ label: nw.name, cost: nw.cost, tab: 'workshop', value: 1 });
+  if (!s.manager.hired && systemUnlocked(s, 'manager')) opts.push({ label: 'Manager', cost: MANAGER_COST, tab: 'helpers', value: 0.5 });
+  void price;
+  return opts.filter((o) => o.cost <= budget && o.cost > 0).sort((a, b) => b.value / b.cost - a.value / a.cost).slice(0, max).map(({ label, cost, tab }) => ({ label, cost, tab }));
 }
 
 // ---------- quests ----------
@@ -93,6 +182,7 @@ export function claimQuest(s: GameState, which: number | 'weekly', now: number):
   let st: GameState;
   if (which === 'weekly') {
     st = { ...s, gold: s.gold + WEEKLY_QUEST_GOLD, weekly: { ...s.weekly, quest: { ...q, claimed: true } } };
+    st = addMoney({ ...st, boosts: addBoost(st.boosts, 'wood', 2, WEEKLY_QUEST_BOOST_HOURS, now, 'daily') }, Math.max(50, incomePerMin(s, now) * WEEKLY_QUEST_MONEY_MIN));
   } else {
     const quests = s.daily.quests.map((x, i) => (i === which ? { ...x, claimed: true } : x));
     st = addMoney({ ...s, gold: s.gold + DAILY_QUEST_GOLD, daily: { ...s.daily, quests } }, dailyQuestMoney(s, now));
@@ -179,6 +269,7 @@ export function doPrestige(s: GameState, now: number): GameState | null {
     sawmill: packMill ? { level: 1, on: s.sawmill.on } : { level: 0, on: true },
     boosts: s.boosts,
     prestige: { count: s.prestige.count + 1, mult },
+    gold: s.gold + PRESTIGE_GOLD, // update 3
   };
   return st;
 }
@@ -199,4 +290,22 @@ export function prestigePreview(s: GameState, now: number) {
   const perMin = incomePerMin(s, now) * ((s.prestige.mult + gain) / s.prestige.mult);
   const minutes = perMin > 0 ? Math.max(1, Math.round(s.moneyToday / perMin)) : null;
   return { pct, minutes };
+}
+
+// ---------- weekly leaderboard (update 3): you against the four AI rival companies, resets Monday ----------
+export type BoardRow = { name: string; earned: number; you: boolean };
+export function weeklyBoard(s: GameState, now: number): BoardRow[] {
+  const wk = weekKeyOf(now);
+  const start = new Date(wk.split('-').map(Number)[0], wk.split('-').map(Number)[1] - 1, wk.split('-').map(Number)[2]).getTime();
+  const frac = Math.min(1, Math.max(0.02, (now - start) / (7 * 86400_000)));
+  const mine = s.board?.weekKey === wk ? s.totalMoneyEarned - s.board.startTotal : 0;
+  // rivals keep pace with you: their week is sized from your last week or your pace this week
+  const ref = Math.max(20_000, s.board?.lastWeek ?? 0, mine / Math.max(0.2, frac));
+  const rows: BoardRow[] = RIVALS.map((r) => {
+    const target = ref * (0.55 + hash(`board:${wk}:${r.name}`) * 0.75) * r.budget;
+    const curve = frac * (0.9 + 0.1 * Math.sin(frac * 9 + hash(r.name) * 6)); // they earn in bursts, not a straight line
+    return { name: r.name, earned: Math.round(target * Math.min(1, curve)), you: false };
+  });
+  rows.push({ name: 'You', earned: Math.round(mine), you: true });
+  return rows.sort((a, b) => b.earned - a.earned);
 }

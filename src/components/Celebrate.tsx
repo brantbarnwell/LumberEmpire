@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { useGame, update } from '../game/store';
-import { AXES, AXE_SKINS, HELPERS, LAND, TOOLS } from '../game/data';
+import { AXES, AXE_SKINS, HELPERS, LAND, TOOLS, SYSTEMS, HELPER_MILESTONE_EVERY, HELPER_MILESTONE_GOLD, COSMETICS } from '../game/data';
+import { systemUnlocked } from '../game/logic';
 import { AxeArt, axeLookOf, AxeLook } from './art/Axe';
 import { LandArt } from './art/Buildings';
 import { Icon, IconName } from './art/Icons';
@@ -29,7 +30,7 @@ function useToast() {
 
 export function Celebrate() {
   const s = useGame();
-  const prev = useRef<{ axe: number; skin: string | null; tools: string[]; helpers: string[]; lands: string[] } | null>(null);
+  const prev = useRef<{ axe: number; skin: string | null; tools: string[]; helpers: string[]; lands: string[]; systems: string[]; miles: Record<string, number>; cos: string[] } | null>(null);
   const t = useToast();
   const a = useRef(new Animated.Value(0)).current;
   const [, force] = useState(0);
@@ -43,10 +44,25 @@ export function Celebrate() {
       tools: Object.keys(s.tools),
       helpers: HELPERS.filter((h) => (s.helpers[h.id]?.count ?? 0) > 0).map((h) => h.id),
       lands: Object.keys(s.lands),
+      systems: SYSTEMS.filter((x) => systemUnlocked(s, x.id)).map((x) => x.id as string),
+      miles: { ...(s.helperMilestones ?? {}) },
+      cos: [...s.cosmetics.owned],
     };
     const p = prev.current;
     prev.current = cur;
     if (!p) return;
+    for (const id of cur.systems) if (!p.systems.includes(id)) {
+      const d = SYSTEMS.find((x) => x.id === id)!;
+      showToast({ kind: 'NEW SYSTEM!', title: d.name, sub: d.why, icon: id === 'land' || id === 'auctions' ? 'land' : id === 'market' ? 'market' : id === 'manager' ? 'helpers' : 'buildings', unlock: true });
+    }
+    for (const [hid, m] of Object.entries(cur.miles)) if (m > (p.miles[hid] ?? 0)) {
+      const d = HELPERS.find((x) => x.id === hid)!;
+      showToast({ kind: `+${HELPER_MILESTONE_GOLD} GOLD`, title: `${m * HELPER_MILESTONE_EVERY} ${d.name}s!`, sub: 'Helper milestone', icon: 'gold', unlock: true });
+    }
+    for (const id of cur.cos) if (!p.cos.includes(id)) {
+      const d = COSMETICS.find((x) => x.id === id);
+      if (d?.rare) showToast({ kind: 'RARE COSMETIC!', title: d.name, sub: 'Equip it in Shop → Cosmetics', icon: 'gold', unlock: true });
+    }
     if (cur.axe > p.axe) showToast({ kind: 'NEW AXE!', title: AXES[cur.axe].name, sub: `${AXES[cur.axe].power} wood per chop`, axe: axeLookOf({ axeIndex: cur.axe, equippedSkin: null }), unlock: true });
     if (cur.skin && cur.skin !== p.skin) showToast({ kind: 'NEW LOOK!', title: `${AXE_SKINS[cur.skin]?.name ?? 'New'} axe skin`, axe: axeLookOf({ axeIndex: cur.axe, equippedSkin: cur.skin }), unlock: true });
     for (const id of cur.tools) if (!p.tools.includes(id)) {
@@ -61,7 +77,7 @@ export function Celebrate() {
       const d = LAND.find((x) => x.id === id)!;
       showToast({ kind: 'NEW LAND!', title: d.name, sub: `+${d.woodPerSec.toLocaleString('en-US')} wood/sec`, land: d.id, unlock: true });
     }
-  }, [s.axeIndex, s.equippedSkin, Object.keys(s.tools).length, Object.keys(s.helpers).length, Object.keys(s.lands).length]);
+  }, [s.axeIndex, s.equippedSkin, Object.keys(s.tools).length, JSON.stringify(s.helpers), Object.keys(s.lands).length, SYSTEMS.filter((x) => systemUnlocked(s, x.id)).length, s.cosmetics.owned.length]);
 
   // lost an auction you bid in
   useEffect(() => {

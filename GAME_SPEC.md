@@ -465,3 +465,60 @@ Brant played the finished game on his iPhone and asked for these changes. They r
 - First axe 5 minutes, first helper 15 minutes, first land 51 minutes, first workshop 116 minutes.
 - Prestige: 2.9 days with Golden Log taps, 3.5 days for an idle player.
 - By start day, Monday to Sunday: 2.9 / 3.1 / 2.9 / 2.3 / 1.5 / 1.3 / 1.9 days. Thursday to Sunday starts are quicker because the weekend Timber Rush doubles pine output.
+
+## 26. Update 3: Timber Rush fix, furniture art, Gold, cosmetics, Playbook 2 retention (Nov 22)
+
+**Fixes**
+- Timber Rush: 1.5x (was 2x), Saturday and Sunday (48 hours), on the forests of one wood type you own. The type changes every week.
+- Prestige days by start day, Monday to Sunday: 3.46 / 3.29 / 3.29 / 2.92 / 2.92 / 2.92 / 2.92. All are inside 2.5-3.9.
+  - The update 3 changes had already moved Monday to Wednesday to 3.30 / 3.10 / 3.08: the system unlock schedule, and Rush now only boosting forests. Friday and Saturday were at 2.46.
+  - To fix that, late-game output was trimmed about 10%: Veteran 7, Feller 15, Master 38, Elite Crew 94 wood/sec; Hillside 38, River 107, Redwood 268, Mountain 765, Old Growth 1,912, Northwoods 4,590, Rainforest 11,475.
+  - Early pacing is unchanged: axe 5m, helper 14m, land 49m, workshop 111m at 2 taps a second.
+- Furniture: all 24 crafted items are drawn in the house style (`art/Furniture.tsx`). No emoji in Buildings, Market or Recipes.
+
+**Gold (earned in game, never power)**
+- Golden Tree: 1 in 200 trees, 5 to 15 Gold, glows for 60 seconds.
+- Daily quests: 5 Gold each. Weekly quest: 25 Gold plus 2 hours of 2x wood and 1 hour of income.
+- Day 7: 50 Gold plus a rare cosmetic (Cherry Blossom tree, then Frost Axe, then Northern Lights; +25 Gold once you own all three).
+- Prestige: +20 Gold every time.
+- Helper milestones: every 25 of one helper type pays 10 Gold, once per milestone, kept through prestige.
+- The Golden Log gives no Gold (7x wood for 30 seconds).
+
+**Cosmetics (Shop → Cosmetics)**
+- Gold only, looks only, kept forever through prestige. A live preview shows before buying, and equipping or taking items off is free.
+- Tree skins: Pine free, Redwood 100, Golden Tree 250, Snowy Pine 200, Autumn Maple 200.
+- Axe skins: Rusty look free, Steel Blue 50, Golden Axe 150, Fire Axe 200, Diamond Shine 300. Your axe's stats never change.
+- Backgrounds: Forest free, Mountains 150, Sunset 250, Night Sky 250, Snowy Mountains 400.
+- Real-money Gold packs are not in this update.
+
+**Playbook 2 (retention)**
+- Welcome back:
+  - Shows time away, a lump sum that counts up, and the 3 best things that money can buy right now.
+  - Offline runs at 50% for up to 8 hours.
+  - Collect is always free; "Ad for 2x" sits beside it.
+  - Without a Yard Seller, Collect sells the wood your crew made at the market price.
+- Daily rewards: a 7-day calendar with Today and Tomorrow marked. Missing one day is a free grace day; missing more drops you back one day, never to Day 1.
+- Daily quests: Chop 500 times, Upgrade 3 machines, Collect 2 offline payouts (5 Gold each). One weekly quest.
+- Weekly event: Timber Rush every weekend.
+  - 1.5x on one wood type's forests.
+  - A limited Timber Rush order board in the Market (3 orders at 1.3-1.6x market).
+  - The mix changes every week (planks, wood or furniture first).
+- New systems on a schedule (minutes of play), each with a new decision:
+  - Land deals 45m
+  - Workshop 45m (and first land)
+  - Market and Yard Seller 2h
+  - Sawmill 3.5h
+  - Land auctions 5h
+  - Manager 7h
+- Notifications:
+  - Never asked on first launch. Asked after the first win or the first offline return with "Tell me when my sawmill is full?"
+  - Local only, max 1 a day, quiet hours 9pm-9am, at your usual play time, never while playing, cancelled when you come back. Each opens the right screen.
+  - Kinds: upgrade finished, offline almost full, daily reward ready, Timber Rush ends in 3 hours.
+- Weekly leaderboard (Goals): money earned this week against the 4 AI rival companies, who keep pace with you. Resets Monday.
+  - There was no leaderboard before, so this is new.
+- Game Center: not added. Expo has no built-in Game Center module, so it needs a custom native module and a development build (it would not run in Expo Go).
+
+**8-hour return test** (4 Apprentices Lv3, 2 Lumberjacks, Small Clearing, 25,000-wood yard, no Yard Seller)
+- Shows: "Away 8h 0m (8 hour max)", $2,403, "25,000 wood chopped", "Collect sells 25,000 wood for you".
+- Suggests: Yard Seller $1,500 · Steel Axe $1,200 · Another Apprentice Helper $586.
+- With the Yard Seller: $36,521, and suggests Steel Axe · Another Apprentice · Level up Apprentices.

@@ -10,6 +10,7 @@ import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
 
 // tuning aid: LATE=0.5 scales late helpers/land output (veteran and up, hillside and up) for this run only
+if (process.env.NORUSH) (require('../src/game/data') as any).RUSH_BONUS = 0;
 if (process.env.LATE) { const k = Number(process.env.LATE); HELPERS.slice(2).forEach((h) => (h.woodPerSec *= k)); LAND.slice(2).forEach((l) => (l.woodPerSec *= k)); }
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -70,7 +71,6 @@ const helper = (id: string): Step => ({ label: HELPERS.find((h) => h.id === id)!
 const plan: Step[] = [
   axe(1), helper('apprentice'), axe(2), helper('apprentice'), helper('lumberjack'), helper('apprentice'), axe(3),
   { label: 'Small Clearing (land)', key: 'land', buy: (s, now) => buyLandAtAsking(s, 'clearing', now), cost: () => LAND[0].asking },
-  { label: 'Yard Seller', key: 'seller', buy: (s) => hireYardSeller(s), cost: () => 1500 },
   { label: 'Backyard Shed (workshop)', key: 'workshop', buy: (s, now) => startBuild(s, now), cost: () => WORKSHOPS[0].cost },
 ];
 
@@ -107,7 +107,7 @@ console.log('=== Early game (fixed buying order, steady tapping) ===');
 console.log(`Targets: first axe ${PACING_TARGETS.firstAxeMinutes}m, helper ${PACING_TARGETS.firstHelperMinutes}m, land ${PACING_TARGETS.firstLandMinutes}m, workshop ${PACING_TARGETS.firstWorkshopMinutes}m (shed counts when built)`);
 for (const tps of [1.5, 2, 3]) {
   const r = early(tps);
-  console.log(`${tps} taps/sec: axe ${r.firsts.axe?.toFixed(0)}m | seller ${r.firsts.seller?.toFixed(0)}m | helper ${r.firsts.helper?.toFixed(0)}m | land ${r.firsts.land?.toFixed(0)}m | workshop ${r.firsts.workshop?.toFixed(0)}m`);
+  console.log(`${tps} taps/sec: axe ${r.firsts.axe?.toFixed(0)}m | helper ${r.firsts.helper?.toFixed(0)}m | land ${r.firsts.land?.toFixed(0)}m | workshop ${r.firsts.workshop?.toFixed(0)}m`);
   console.log('   ' + r.out.join(' > '));
 }
 
@@ -201,4 +201,4 @@ console.log('\n=== Prestige (4 sessions x 30 min a day, offline between) ===');
 const r = days(process.env.TRACE ? 2 : 6);
 r.log.forEach((l) => console.log(l));
 console.log('Money earned this run: ' + r.hits.join(' | '));
-console.log(`Prestige needs $${PRESTIGE_AT.toLocaleString()} earned. Reached after ${r.prestigeAt ? r.prestigeAt.toFixed(1) + ' days' : 'more than 6 days'}. Run 2 speed if taken then: ${(1 + r.gain).toFixed(1)}x`);
+console.log(`Prestige needs $${PRESTIGE_AT.toLocaleString()} earned. Reached after ${r.prestigeAt ? r.prestigeAt.toFixed(2) + ' days' : 'more than 6 days'}. Run 2 speed if taken then: ${(1 + r.gain).toFixed(1)}x`);

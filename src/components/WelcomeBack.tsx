@@ -1,121 +1,124 @@
-import { useState } from 'react';
+// Update 3 (Playbook 2): Welcome back. Time away, a lump sum that ticks up, and what it can buy right now.
+// Collect is always free. The video only adds a 2x bonus on top, it is never needed to collect.
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { collectOffline, collectOfflineBonus } from '../game/logic';
-import { adFree } from '../game/meta';
+import { addMoney, collectOffline, collectOfflineBonus, sellAll, unitPrice } from '../game/logic';
+import { adFree, buyIdeas } from '../game/meta';
 import { AD_OFFLINE_MULT, OFFLINE_MAX_HOURS } from '../game/data';
 import { duration, money, whole } from '../game/format';
 import { earnReward } from '../services/ads';
-import { haptic } from '../services/haptics';
+import { feel } from '../services/feel';
+import { Icon } from './art/Icons';
 import { Button } from './ui';
 import { C, shadow } from './theme';
 
-/** Welcome back: plain Collect, or watch a video (optional) for 2x. Ad-free players get 2x instantly. */
+/** A number that counts up from 0 when it first shows. */
+function useTicker(target: number, ms = 1300) {
+  const [v, setV] = useState(0);
+  const start = useRef(Date.now());
+  useEffect(() => {
+    start.current = Date.now();
+    const t = setInterval(() => {
+      const k = Math.min(1, (Date.now() - start.current) / ms);
+      setV(target * (1 - Math.pow(1 - k, 3)));
+      if (k >= 1) clearInterval(t);
+    }, 33);
+    return () => clearInterval(t);
+  }, [target]);
+  return v;
+}
+
 export function WelcomeBack() {
   const s = useGame();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const r = s.pendingOffline;
+  const now = Date.now();
+  const managed = r?.collectedBy === 'manager';
+  // wood your crew chopped while you were away and that is still in the yard: Collect sells it for you
+  const waiting = r ? Math.floor(Math.min(s.wood, Math.max(0, r.produced - r.sold))) : 0;
+  const woodValue = waiting * (r ? unitPrice(s, 'wood', now) : 0);
+  const total = r ? (managed ? r.earned : r.earned + woodValue) : 0;
+  const shown = useTicker(total);
   if (!r) return null;
   const free = adFree(s);
+  const ideas = buyIdeas(s, s.money + total, now, 3);
 
   const collect = (mult: number) => {
-    update((st) => (st.pendingOffline ? { ...collectOffline(st, st.pendingOffline, mult), pendingOffline: null } : null));
-    haptic.success();
+    update((st) => {
+      const p = st.pendingOffline;
+      if (!p) return null;
+      let x = managed ? collectOfflineBonus(st, p) : collectOffline(st, p, mult);
+      if (!managed && waiting > 0) {
+        const sold = sellAll(x, 'wood', Date.now(), waiting);
+        x = addMoney(sold.state, sold.earned * (mult - 1));
+      }
+      return { ...x, pendingOffline: null };
+    });
+    feel.reward();
   };
-  const managed = r.collectedBy === 'manager';
-  const bonus = () => {
-    update((st) => (st.pendingOffline ? { ...collectOfflineBonus(st, st.pendingOffline), pendingOffline: null } : null));
-    haptic.success();
+  const watch = async () => {
+    setErr(null);
+    setBusy(true);
+    const res = await earnReward(adFree(getState()));
+    setBusy(false);
+    if (res.ok) collect(AD_OFFLINE_MULT);
+    else setErr(res.message);
   };
-
-  if (managed) {
-    return (
-      <View style={styles.back}>
-        <View style={styles.card}>
-          <Text style={styles.icon}>👔</Text>
-          <Text style={styles.title}>Welcome back!</Text>
-          <Text style={styles.body}>
-            You were away {duration(r.away * 1000)}. Your crew chopped {whole(r.produced)} wood and sold {whole(r.sold)}. Your manager already collected it for you:
-          </Text>
-          <Text style={styles.amount}>+{money(r.earned)}</Text>
-          {err && <Text style={styles.err}>{err}</Text>}
-          <Button
-            style={{ alignSelf: 'stretch', marginTop: 10 }}
-            variant="gold"
-            label={free ? `Claim 2x bonus (VIP / No Ads)` : `▶ Watch a video for +${money(r.earned)} more`}
-            loading={busy}
-            onPress={async () => {
-              setErr(null);
-              setBusy(true);
-              const res = await earnReward(adFree(getState()));
-              setBusy(false);
-              if (res.ok) bonus();
-              else setErr(res.message);
-            }}
-          />
-          <Button style={{ alignSelf: 'stretch', marginTop: 8 }} label="OK" disabled={busy} onPress={() => update((st) => ({ ...st, pendingOffline: null }))} />
-        </View>
-      </View>
-    );
-  }
-
-  if (r.earned <= 0) {
-    // section 24: no Yard Seller, so nothing sold while away. The wood is waiting in the yard.
-    return (
-      <View style={styles.back}>
-        <View style={styles.card}>
-          <Text style={styles.icon}>🌙</Text>
-          <Text style={styles.title}>Welcome back!</Text>
-          <Text style={styles.body}>
-            You were away {duration(r.away * 1000)}. Your crew chopped {whole(r.produced)} wood. It is waiting in your yard: tap the big SELL button to turn it into Money.
-          </Text>
-          <Text style={styles.small}>Tip: a Yard Seller ($1,500 in Helpers) sells for you while you are away.</Text>
-          <Button style={{ alignSelf: 'stretch', marginTop: 10 }} label="Let's sell!" onPress={() => update((st) => ({ ...st, pendingOffline: null }))} />
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.back}>
       <View style={styles.card}>
-        <Text style={styles.icon}>🌙</Text>
         <Text style={styles.title}>Welcome back!</Text>
-        <Text style={styles.body}>
-          You were away {duration(r.away * 1000)}{r.away >= OFFLINE_MAX_HOURS * 3600 ? ' (8 hour max)' : ''}. Your crew chopped {whole(r.produced)} wood and sold {whole(r.sold)}.
-        </Text>
-        <Text style={styles.amount}>{money(r.earned)}</Text>
+        <Text style={styles.away}>Away {duration(r.away * 1000)}{r.away >= OFFLINE_MAX_HOURS * 3600 - 60 ? ' (8 hour max)' : ''}</Text>
+        <View style={styles.lump}>
+          <Icon name="money" size={34} />
+          <Text style={styles.amount}>{money(shown)}</Text>
+        </View>
+        <View style={styles.facts}>
+          <View style={styles.fact}><Icon name="wood" size={18} /><Text style={styles.factText}>{whole(r.produced)} wood chopped</Text></View>
+          {managed && <View style={styles.fact}><Icon name="helpers" size={18} /><Text style={styles.factText}>Manager already collected it</Text></View>}
+          {!managed && waiting > 0 && <View style={styles.fact}><Icon name="seller" size={18} /><Text style={styles.factText}>Collect sells {whole(waiting)} wood for you</Text></View>}
+        </View>
+        {ideas.length > 0 && (
+          <View style={styles.ideas}>
+            <Text style={styles.ideasTitle}>This can buy right now:</Text>
+            {ideas.map((i) => (
+              <View key={i.label} style={styles.idea}>
+                <Text style={styles.ideaName} numberOfLines={1}>{i.label}</Text>
+                <Text style={styles.ideaCost}>{money(i.cost)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
         {err && <Text style={styles.err}>{err}</Text>}
-        <Button
-          style={{ alignSelf: 'stretch', marginTop: 10 }}
-          variant="gold"
-          label={free ? `Collect ${AD_OFFLINE_MULT}x (VIP / No Ads)` : `▶ Watch a video: ${AD_OFFLINE_MULT}x`}
-          sub={money(r.earned * AD_OFFLINE_MULT)}
-          loading={busy}
-          onPress={async () => {
-            setErr(null);
-            setBusy(true);
-            const res = await earnReward(adFree(getState()));
-            setBusy(false);
-            if (res.ok) collect(AD_OFFLINE_MULT);
-            else setErr(res.message);
-          }}
-        />
-        <Button style={{ alignSelf: 'stretch', marginTop: 8 }} label={`Collect ${money(r.earned)}`} disabled={busy} onPress={() => collect(1)} />
-        <Text style={styles.small}>While you are away, helpers and land work at half speed for up to 8 hours.</Text>
+        <View style={styles.buttons}>
+          <Button style={{ flex: 1 }} label={managed ? 'OK' : 'Collect'} sub={managed ? undefined : money(total)} disabled={busy} onPress={() => (managed ? update((st) => ({ ...st, pendingOffline: null })) : collect(1))} />
+          <Button style={{ flex: 1 }} variant="gold" loading={busy} label={free ? `${AD_OFFLINE_MULT}x free (VIP)` : `▶ Ad for ${AD_OFFLINE_MULT}x`} sub={money(total * AD_OFFLINE_MULT)} onPress={free ? () => collect(AD_OFFLINE_MULT) : watch} />
+        </View>
+        <Text style={styles.small}>While you are away, your crew works at half speed for up to 8 hours. Collect is always free.</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  back: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10,20,12,0.6)', alignItems: 'center', justifyContent: 'center', padding: 26, zIndex: 60 },
-  card: { backgroundColor: C.card, borderRadius: 22, padding: 22, alignItems: 'center', width: '100%', maxWidth: 380, borderWidth: 3, borderColor: C.gold, ...shadow },
-  icon: { fontSize: 50 },
+  back: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10,20,12,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 60 },
+  card: { backgroundColor: C.card, borderRadius: 22, padding: 18, alignItems: 'center', width: '100%', maxWidth: 400, borderWidth: 3, borderColor: '#3a2210', ...shadow },
   title: { fontSize: 24, fontWeight: '900', color: C.ink },
-  body: { fontSize: 14, fontWeight: '700', color: C.inkSoft, textAlign: 'center', marginTop: 6 },
-  amount: { fontSize: 34, fontWeight: '900', color: C.money, marginTop: 6 },
+  away: { fontSize: 14, fontWeight: '800', color: C.inkSoft, marginTop: 2 },
+  lump: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  amount: { fontSize: 38, fontWeight: '900', color: C.money, fontVariant: ['tabular-nums'] },
+  facts: { gap: 4, marginTop: 6, alignSelf: 'stretch' },
+  fact: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
+  factText: { fontSize: 13, fontWeight: '800', color: C.ink },
+  ideas: { alignSelf: 'stretch', backgroundColor: 'rgba(107,68,35,0.08)', borderRadius: 12, padding: 10, marginTop: 10, gap: 4 },
+  ideasTitle: { fontSize: 12.5, fontWeight: '900', color: C.bark },
+  idea: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  ideaName: { fontSize: 14, fontWeight: '900', color: C.ink, flex: 1 },
+  ideaCost: { fontSize: 14, fontWeight: '900', color: C.money },
+  buttons: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 12 },
   err: { color: C.red, fontWeight: '800', fontSize: 12.5, textAlign: 'center', marginTop: 6 },
   small: { fontSize: 11, color: C.inkSoft, fontWeight: '600', textAlign: 'center', marginTop: 10 },
 });

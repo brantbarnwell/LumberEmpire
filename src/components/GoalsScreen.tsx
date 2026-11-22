@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { feel } from '../services/feel';
+import { Icon } from './art/Icons';
 import { showToast } from './Celebrate';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { rushInfo } from '../game/logic';
 import {
-  adBoostLeftMs, adFree, canAdBoost, canClaimLogin, canPrestige, claimLogin, claimQuest, dailyQuestMoney, doPrestige,
-  goldVideosLeft, loginRewardText, prestigeGain, prestigePreview, prestigeProgress, questLabel, questProgress, rewardAdBoost, rewardGoldVideo,
+  adBoostLeftMs, adFree, canAdBoost, canClaimLogin, canPrestige, claimLogin, loginIndexNow, claimQuest, dailyQuestMoney, doPrestige,
+  goldVideosLeft, loginRewardText, prestigeGain, prestigePreview, prestigeProgress, weeklyBoard, questLabel, questProgress, rewardAdBoost, rewardGoldVideo,
 } from '../game/meta';
 import {
   AD_BOOST_MINUTES, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, DAILY_QUEST_GOLD, DAILY_REWARDS, PRESTIGE_AT, PRESTIGE_NAME,
@@ -52,11 +53,11 @@ export function GoalsScreen() {
 
       {/* Timber Rush */}
       <LinearGradient colors={rush.active ? ['#c2571a', '#e8892c'] : ['#3d5a46', '#4f7a5c']} style={styles.rush}>
-        <Text style={styles.rushTitle}>🔥 Timber Rush{rush.active ? ' is ON' : ''}</Text>
+        <Text style={styles.rushTitle}>Timber Rush{rush.active ? ' is ON' : ''}</Text>
         <Text style={styles.rushText}>
           {rush.active
-            ? `2x ${WOOD_NAMES[rush.type]} output until Sunday night · ${duration(rush.endsAt - now)} left`
-            : `Every Friday to Sunday: 2x output on one wood type. Next one starts in ${duration(rush.startsAt - now)}.`}
+            ? `1.5x from your ${WOOD_NAMES[rush.type]} forests and a special order board in the Market · ${duration(rush.endsAt - now)} left`
+            : `Every weekend (48 hours): 1.5x from one wood type's forests plus a limited order board. Starts in ${duration(rush.startsAt - now)}.`}
         </Text>
       </LinearGradient>
 
@@ -65,15 +66,17 @@ export function GoalsScreen() {
       {/* Daily rewards */}
       <Card>
         <Text style={styles.h}>Daily rewards</Text>
-        <Text style={styles.sub}>Come back each day. Missing a day just pauses your streak, it never resets.</Text>
+        <Text style={styles.sub}>Miss one day: no problem. Miss more: you only drop back one day, never to Day 1.</Text>
         <View style={styles.days}>
           {DAILY_REWARDS.map((r, i) => {
-            const done = i < s.login.index || (!claimable && i === s.login.index - 1);
-            const today = claimable && i === s.login.index;
+            const idx = loginIndexNow(s, now);
+            const done = i < idx || (!claimable && i === idx - 1);
+            const today = claimable && i === idx;
+            const tomorrow = claimable ? i === (idx + 1) % 7 : i === idx % 7;
             return (
               <View key={i} style={[styles.day, r.big && styles.dayBig, done && styles.dayDone, today && styles.dayToday]}>
-                <Text style={styles.dayNum}>Day {i + 1}</Text>
-                <Text style={styles.dayIcon}>{r.big ? '🎁' : r.gold ? '🪙' : r.boostMin ? '⚡' : '💵'}</Text>
+                <Text style={styles.dayNum}>{today ? 'Today' : tomorrow ? 'Tomorrow' : `Day ${i + 1}`}</Text>
+                <View style={{ height: 24, justifyContent: 'center' }}><Icon name={r.big || r.gold ? 'gold' : r.boostMin ? 'wps' : 'money'} size={r.big ? 24 : 20} /></View>
                 <Text style={styles.dayText} numberOfLines={3}>{loginRewardText(s, i, now)}</Text>
                 {done && <Text style={styles.check}>✓</Text>}
               </View>
@@ -83,14 +86,14 @@ export function GoalsScreen() {
         <Button
           style={{ marginTop: 10 }}
           variant="gold"
-          label={claimable ? `Claim Day ${s.login.index + 1}` : 'Come back tomorrow'}
+          label={claimable ? `Claim Day ${loginIndexNow(s, now) + 1}` : 'Come back tomorrow'}
           disabled={!claimable}
           onPress={() => {
-            const text = loginRewardText(s, s.login.index, Date.now());
+            const day = loginIndexNow(s, Date.now());
+            const text = loginRewardText(s, day, Date.now());
             if (update((st) => claimLogin(st, Date.now()))) {
               feel.reward();
-              haptic.success();
-              showPopup({ icon: '🎁', title: `Day ${s.login.index + 1} reward!`, body: text });
+              showToast({ kind: `DAY ${day + 1} REWARD`, title: text, icon: 'gold' });
             }
           }}
         />
@@ -140,18 +143,31 @@ export function GoalsScreen() {
       {s.weekly.quest && (
         <Card>
           <Text style={styles.h}>Weekly quest</Text>
-          <Text style={styles.sub}>Reward: {WEEKLY_QUEST_GOLD} Gold. Resets Monday.</Text>
+          <Text style={styles.sub}>Reward: {WEEKLY_QUEST_GOLD} Gold + 2 hours of 2x wood + 1 hour of income. Resets Monday.</Text>
           <QuestRow label={questLabel(s.weekly.quest)} progress={questProgress(s, s.weekly.quest)} target={s.weekly.quest.target}
             claimed={s.weekly.quest.claimed} onClaim={() => update((st) => claimQuest(st, 'weekly', Date.now())) && feel.reward()}
             money={s.weekly.quest.id === 'wearn'} />
         </Card>
       )}
 
+      {/* Weekly leaderboard (update 3) */}
+      <Card>
+        <Text style={styles.h}>Weekly leaderboard</Text>
+        <Text style={styles.sub}>Money earned this week against the rival companies. Resets Monday.</Text>
+        {weeklyBoard(s, now).map((r, i) => (
+          <View key={r.name} style={[styles.boardRow, r.you && styles.boardYou]}>
+            <Text style={styles.boardRank}>{i + 1}</Text>
+            <Text style={[styles.boardName, r.you && { color: C.leaf }]} numberOfLines={1}>{i === 0 ? '👑 ' : ''}{r.name}</Text>
+            <Text style={styles.boardMoney}>{money(r.earned)}</Text>
+          </View>
+        ))}
+      </Card>
+
       {/* Prestige */}
       <LinearGradient colors={['#2b1d10', '#5a3a1c']} style={styles.prestige}>
-        <Text style={styles.pTitle}>👑 Become a {PRESTIGE_NAME}</Text>
+        <Text style={styles.pTitle}>Become a {PRESTIGE_NAME}</Text>
         <Text style={styles.pText}>
-          Earn {money(PRESTIGE_AT)} in one run to start over with faster wood for good.
+          Earn {money(PRESTIGE_AT)} in one run to start over with faster wood for good, plus 20 Gold.
           {s.prestige.count > 0 ? ` You are ${PRESTIGE_NAME} x${s.prestige.count}: all wood ${small(s.prestige.mult)}x faster.` : ''}
         </Text>
         <View style={{ marginVertical: 8 }}><ProgressBar value={prestigeProgress(s)} color={C.gold} height={10} /></View>
@@ -232,6 +248,11 @@ const styles = StyleSheet.create({
   quest: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   claimed: { color: C.leaf, fontWeight: '900' },
   prestige: { borderRadius: 16, padding: 14 },
+  boardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 10, marginTop: 4 },
+  boardYou: { backgroundColor: 'rgba(79,154,79,0.14)' },
+  boardRank: { width: 20, fontSize: 15, fontWeight: '900', color: C.inkSoft, textAlign: 'center' },
+  boardName: { flex: 1, fontSize: 15, fontWeight: '900', color: C.ink },
+  boardMoney: { fontSize: 15, fontWeight: '900', color: C.money },
   preview: { backgroundColor: 'rgba(245,197,66,0.15)', borderRadius: 12, padding: 10, marginTop: 8, borderWidth: 1.5, borderColor: 'rgba(245,197,66,0.6)' },
   previewBig: { color: '#ffe17a', fontSize: 18, fontWeight: '900' },
   previewText: { color: '#fff6dc', fontSize: 13.5, fontWeight: '800', marginTop: 2 },

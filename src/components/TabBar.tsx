@@ -16,7 +16,7 @@ const TABS: { id: Tab; icon: IconName; label: string }[] = [
   { id: 'shop', icon: 'shop', label: 'Shop' },
 ];
 
-export function TabBar({ tab, onTab, dots = {} }: { tab: Tab; onTab: (t: Tab) => void; dots?: Partial<Record<Tab, boolean>> }) {
+export function TabBar({ tab, onTab, dots = {}, locked = {} }: { tab: Tab; onTab: (t: Tab) => void; dots?: Partial<Record<Tab, boolean>>; locked?: Partial<Record<Tab, boolean>> }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -25,7 +25,8 @@ export function TabBar({ tab, onTab, dots = {} }: { tab: Tab; onTab: (t: Tab) =>
         return (
           <Pressable key={t.id} style={styles.tab} onPress={() => onTab(t.id)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
             <View style={[styles.iconWrap, on && styles.iconOn]}>
-              <Icon name={t.icon} size={on ? 28 : 24} />
+              <View style={{ opacity: locked[t.id] ? 0.35 : 1 }}><Icon name={t.icon} size={on ? 28 : 24} /></View>
+              {locked[t.id] && <View style={styles.lock}><Icon name="lock" size={14} /></View>}
               {dots[t.id] && <View style={styles.dot} />}
             </View>
             <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1} adjustsFontSizeToFit>{t.label}</Text>
@@ -39,6 +40,7 @@ export function TabBar({ tab, onTab, dots = {} }: { tab: Tab; onTab: (t: Tab) =>
 const styles = StyleSheet.create({
   bar: { flexDirection: 'row', backgroundColor: C.forest, paddingTop: 8, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
   tab: { flex: 1, alignItems: 'center', gap: 2 },
+  lock: { position: 'absolute', right: 2, bottom: 0 },
   dot: { position: 'absolute', top: 2, right: 4, width: 9, height: 9, borderRadius: 5, backgroundColor: '#ff4d3d', borderWidth: 1.5, borderColor: C.forest },
   iconWrap: { width: 44, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   iconOn: { backgroundColor: 'rgba(245,197,66,0.22)' },

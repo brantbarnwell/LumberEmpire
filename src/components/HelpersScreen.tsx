@@ -1,6 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
-import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed, hireYardSeller } from '../game/logic';
+import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed, hireYardSeller, systemUnlocked } from '../game/logic';
 import { Switch } from 'react-native';
 import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE, YARD_SELLER_COST } from '../game/data';
 import { money, small, whole } from '../game/format';
@@ -10,6 +10,7 @@ import { C } from './theme';
 import { Person, WHO, WorkYard } from './art/Crew';
 import { Icon } from './art/Icons';
 import { ToolArt } from './art/ToolArt';
+import { LockedRow } from './Locked';
 
 /** Section 24: the cash helper that sells wood and planks for you at the market price. */
 function YardSellerCard() {
@@ -49,8 +50,8 @@ export function HelpersScreen() {
         {wagePerHour(s) > 0 && <Text style={styles.sub}>Wages: {money(wagePerHour(s))} per hour, paid from your Money</Text>}
       </Card>
       <WorkYard s={s} />
-      <YardSellerCard />
-      <ManagerCard />
+      {systemUnlocked(s, 'market') || s.yardSeller ? <YardSellerCard /> : <LockedRow id="market" />}
+      {systemUnlocked(s, 'manager') || s.manager.hired ? <ManagerCard /> : <LockedRow id="manager" />}
       {s.wagesOwed > 0 && (
         <Card style={styles.owe}>
           <Text style={styles.oweText}>💸 You owe {money(s.wagesOwed)} in wages. Your helpers work at half speed until you can pay. It pays itself as soon as you have the Money.</Text>

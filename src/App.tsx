@@ -3,12 +3,12 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getState, setState, update, useGame } from './game/store';
-import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, ensureOrders, managerCollect, migrate, tick } from './game/logic';
+import { GameState, OfflineResult, computeOffline, dayKeyOf, ensureListings, ensureOrders, managerCollect, migrate, systemUnlocked, tick } from './game/logic';
 import { canClaimLogin, ensureQuests, questProgress } from './game/meta';
 import { loadGame, saveGame } from './game/save';
 import { initStore } from './services/purchases';
 import { initAds } from './services/ads';
-import { cancelAll, scheduleFor } from './services/notify';
+import { cancelAll, onNotificationTap, scheduleFor } from './services/notify';
 import { TopBar } from './components/TopBar';
 import { TabBar, Tab } from './components/TabBar';
 import { ChopScreen } from './components/ChopScreen';
@@ -24,6 +24,7 @@ import { NotifPrompt } from './components/NotifPrompt';
 import { AuctionBanner } from './components/AuctionBanner';
 import { Celebrate } from './components/Celebrate';
 import { FlyLayer } from './components/TopBar';
+import { LockedScreen } from './components/Locked';
 import { setFeelFlags } from './services/feel';
 import { C } from './components/theme';
 
@@ -56,6 +57,8 @@ function daily(s: GameState, now: number) {
 export default function App() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>('chop');
+  // a tapped notification opens the right screen
+  useEffect(() => onNotificationTap((t) => setTab(t as Tab)), []);
 
   useEffect(() => {
     let alive = true;
@@ -65,6 +68,7 @@ export default function App() {
       const now = Date.now();
       setState(daily(saved ? catchUp(migrate(saved), now) : getState(), now));
       setReady(true);
+      update((x) => ({ ...x, playHours: x.playHours.map((n, i) => (i === new Date().getHours() ? n + 1 : n)) }));
       initStore((vip) => update((s) => (s.vipActive === vip ? null : { ...s, vipActive: vip })));
       initAds();
       cancelAll();
@@ -93,7 +97,8 @@ export default function App() {
         update((x) => ({ ...x, notif: { ...x.notif, scheduledAt: at } }));
         saveGame(getState());
       } else if (st === 'active') {
-        cancelAll();
+        cancelAll(); // you are back: anything already collected must not notify
+        update((x) => ({ ...x, playHours: x.playHours.map((n, i) => (i === new Date().getHours() ? n + 1 : n)) }));
         update((s) => {
           let x = s;
           // if the scheduled notification already went off, remember the day (max 1 a day)
@@ -142,13 +147,13 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} />}
         {tab === 'upgrades' && <UpgradesScreen />}
         {tab === 'helpers' && <HelpersScreen />}
-        {tab === 'land' && <LandScreen />}
-        {tab === 'workshop' && <WorkshopScreen />}
-        {tab === 'market' && <MarketScreen />}
+        {tab === 'land' && (systemUnlocked(s, 'land') ? <LandScreen /> : <LockedScreen id="land" />)}
+        {tab === 'workshop' && (systemUnlocked(s, 'workshop') ? <WorkshopScreen /> : <LockedScreen id="workshop" />)}
+        {tab === 'market' && (systemUnlocked(s, 'market') ? <MarketScreen /> : <LockedScreen id="market" />)}
         {tab === 'shop' && <ShopScreen />}
       </View>
-      <TabBar tab={tab} onTab={setTab} dots={{ upgrades: goalsDot }} />
-      {tab === 'upgrades' && <NotifPrompt />}
+      <TabBar tab={tab} onTab={setTab} dots={{ upgrades: goalsDot }} locked={{ land: !systemUnlocked(s, 'land'), workshop: !systemUnlocked(s, 'workshop'), market: !systemUnlocked(s, 'market') }} />
+      <NotifPrompt />
       <WelcomeBack />
       <PopupView />
       <Celebrate />

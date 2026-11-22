@@ -99,8 +99,9 @@ function makeChunks(n: number, golden: boolean, idBase: number): Chunk[] {
 }
 
 export function Tree({
-  chops, golden, look, onChop, onDevLongPress, areaW, areaH,
+  chops, golden, look, skin, onChop, onDevLongPress, areaW, areaH,
 }: {
+  skin?: string;
   chops: number;
   golden: boolean;
   look: AxeLook;
@@ -270,7 +271,7 @@ export function Tree({
             ],
           } as any}
         >
-          <TreeArt golden={golden} cut={chops / CHOPS_PER_TREE} />
+          <TreeArt golden={golden} cut={chops / CHOPS_PER_TREE} skin={skin} />
         </Animated.View>
 
         <Animated.View

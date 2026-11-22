@@ -30,10 +30,10 @@ export const CRIT_MULT = 5; // spec: 5x wood
 // Trees on the Chop screen
 export const CHOPS_PER_TREE = 18; // BALANCE
 export const FELL_BONUS_CHOPS = 3; // felling a tree gives 3 chops worth of bonus wood. BALANCE
-export const GOLDEN_TREE_CHANCE = 0.002; // spec: 0.2% when a new tree grows
+export const GOLDEN_TREE_CHANCE = 0.005; // update 3: 1 in 200 new trees (was 1 in 500)
 export const GOLDEN_TREE_SECONDS = 60; // spec
-export const GOLDEN_GOLD_MIN = 3; // spec
-export const GOLDEN_GOLD_MAX = 10; // spec
+export const GOLDEN_GOLD_MIN = 5; // update 3 (was 3)
+export const GOLDEN_GOLD_MAX = 15; // update 3 (was 10)
 export const GOLDEN_MONEY_PER_POWER = 25; // bonus Money = 25 x axe power. BALANCE
 
 // Selling (update 2): everything sells at the market price, set by the game. No price slider.
@@ -151,10 +151,10 @@ export interface HelperDef { id: string; name: string; cost: number; woodPerSec:
 export const HELPERS: HelperDef[] = [
   { id: 'apprentice', name: 'Apprentice Helper', cost: 400, woodPerSec: 2, icon: '🧒' },
   { id: 'lumberjack', name: 'Lumberjack Helper', cost: 1_500, woodPerSec: 5, icon: '🧔' },
-  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 10, icon: '👷' },
-  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 20, icon: '🦺' },
-  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 50, icon: '🧙' },
-  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 150, icon: '🚜' },
+  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 7.5, icon: '👷' },
+  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 15, icon: '🦺' },
+  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 38, icon: '🧙' },
+  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 94, icon: '🚜' },
 ];
 export const HELPER_COPY_SCALE = 1.1; // update 2 (Playbook 1): each extra copy costs 10% more. BALANCE
 export const HELPER_MAX_LEVEL = 10; // spec
@@ -182,14 +182,14 @@ export interface LandDef {
 export const LAND: LandDef[] = [
   { id: 'clearing', name: 'Small Clearing', asking: 3_000, acres: 2, trees: 10, woodPerSec: 5, wood: 'pine', icon: '🌱' },
   { id: 'pine', name: 'Pine Grove', asking: 15_000, acres: 6, trees: 25, woodPerSec: 20, wood: 'pine', icon: '🌲' },
-  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 50, wood: 'oak', icon: '⛰️' },
-  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 140, wood: 'maple', icon: '🏞️' },
-  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 350, wood: 'redwood', icon: '🌳' },
-  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 1_000, wood: 'spruce', icon: '🏔️' },
+  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 38, wood: 'oak', icon: '⛰️' },
+  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 107, wood: 'maple', icon: '🏞️' },
+  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 268, wood: 'redwood', icon: '🌳' },
+  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 765, wood: 'spruce', icon: '🏔️' },
   // Section 24: bigger late-game forests (more land to buy)
-  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 2_500, wood: 'oak', icon: '🌄' },
-  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 6_000, wood: 'maple', icon: '🍁' },
-  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 15_000, wood: 'redwood', icon: '🌴' },
+  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 1_912, wood: 'oak', icon: '🌄' },
+  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 4_590, wood: 'maple', icon: '🍁' },
+  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 11_475, wood: 'redwood', icon: '🌴' },
 ];
 export const LAND_UPGRADES = [
   { id: 'plant', name: 'Plant Trees', costFrac: 0.25, bonus: 0.2 },
@@ -233,7 +233,7 @@ const ITEM_NAMES: [string, string][][] = [
   [['artsculpture', 'Art Sculpture'], ['luxbed', 'Luxury Bed Set'], ['designer', 'Designer Furniture']],
   [['masterpiece', 'Masterpiece Sculpture'], ['royalset', 'Royal Furniture Set'], ['customart', 'Custom Art Piece']],
 ];
-const ITEM_ICONS = ['🪑', '🪵', '🗄️', '🛏️', '🖼️', '🗿', '👑', '🏆'];
+// Update 3: furniture is drawn (art/Furniture.tsx), no emoji.
 // Each tier: more wood and time, more profit per wood. BALANCE
 export const ITEMS: ItemDef[] = ITEM_NAMES.flatMap((tier, t) =>
   tier.map(([id, name], k) => {
@@ -242,7 +242,7 @@ export const ITEMS: ItemDef[] = ITEM_NAMES.flatMap((tier, t) =>
       id, name, tier: t, wood,
       minutes: Math.round((2 + k * 1.5) * Math.pow(1.6, t)),
       value: Math.round(wood * MARKET_BASE_PRICE * 2.5 * Math.pow(1.25, t)),
-      icon: ITEM_ICONS[t],
+      icon: '',
     };
   }),
 );
@@ -266,43 +266,88 @@ export const GOLD_SHOP = [
 export const GOLD_REPAIR_ALL = 10; // spec: repairs the axe and every tool
 
 // 7-day login rewards. Money is "minutes of your income". BALANCE
-export const DAILY_REWARDS: { money?: number; gold?: number; boostMin?: number; big?: boolean }[] = [
+// Update 3: escalating 7-day calendar. Day 7 is the big anchor: 50 Gold plus a rare cosmetic.
+// money = minutes of income, boostMin = minutes of 2x wood.
+export const DAILY_REWARDS: { money?: number; gold?: number; boostMin?: number; big?: boolean; cosmetic?: boolean }[] = [
   { money: 10 },
-  { gold: 3 },
-  { money: 20 },
-  { boostMin: 30 },
-  { money: 40 },
   { gold: 5 },
-  { gold: 25, money: 90, boostMin: 60, big: true },
+  { money: 30 },
+  { boostMin: 30, gold: 5 },
+  { money: 60 },
+  { gold: 10, boostMin: 60 },
+  { gold: 50, money: 120, cosmetic: true, big: true },
 ];
 
-export type Metric = 'chops' | 'felled' | 'woodSold' | 'moneyEarned' | 'helpersHired' | 'itemsCrafted' | 'landOffers';
+export type Metric = 'chops' | 'felled' | 'woodSold' | 'moneyEarned' | 'helpersHired' | 'itemsCrafted' | 'landOffers' | 'upgrades' | 'offlineCollects';
 export interface QuestDef { id: string; metric: Metric; label: (n: string) => string; base: number; scale?: 'income'; needs?: 'workshop' | 'helpers' }
+// Update 3 (Playbook 2): 3 small quests a day, each doable in one session, 5 Gold each.
 export const DAILY_QUESTS: QuestDef[] = [
-  { id: 'chop', metric: 'chops', label: (n) => `Chop ${n} times`, base: 300 },
-  { id: 'fell', metric: 'felled', label: (n) => `Cut down ${n} trees`, base: 15 },
-  { id: 'sell', metric: 'woodSold', label: (n) => `Sell ${n} wood`, base: 30, scale: 'income' },
-  { id: 'earn', metric: 'moneyEarned', label: (n) => `Earn ${n}`, base: 30, scale: 'income' },
-  { id: 'hire', metric: 'helpersHired', label: (n) => `Hire ${n} helper`, base: 1, needs: 'helpers' },
-  { id: 'craft', metric: 'itemsCrafted', label: (n) => `Craft ${n} items`, base: 3, needs: 'workshop' },
-  { id: 'offer', metric: 'landOffers', label: (n) => `Make ${n} offer on land`, base: 1 },
+  { id: 'chop', metric: 'chops', label: (n) => `Chop ${n} logs`, base: 500 },
+  { id: 'upgrade', metric: 'upgrades', label: (n) => `Upgrade ${n} machines`, base: 3 },
+  { id: 'offline', metric: 'offlineCollects', label: (n) => `Collect ${n} offline payouts`, base: 2 },
 ];
 export const WEEKLY_QUESTS: QuestDef[] = [
   { id: 'wchop', metric: 'chops', label: (n) => `Chop ${n} times this week`, base: 3_000 },
   { id: 'wearn', metric: 'moneyEarned', label: (n) => `Earn ${n} this week`, base: 400, scale: 'income' },
   { id: 'wfell', metric: 'felled', label: (n) => `Cut down ${n} trees this week`, base: 150 },
 ];
-export const DAILY_QUEST_GOLD = 3; // BALANCE
+export const DAILY_QUEST_GOLD = 5; // update 3
 export const DAILY_QUEST_MONEY_MIN = 15; // minutes of income. BALANCE
-export const WEEKLY_QUEST_GOLD = 25; // BALANCE
+export const WEEKLY_QUEST_GOLD = 25; // update 3: plus a bigger reward (2 hours of 2x wood and 1 hour of income)
+export const WEEKLY_QUEST_BOOST_HOURS = 2;
+export const WEEKLY_QUEST_MONEY_MIN = 60;
 
-// Timber Rush: every Friday to Sunday, 2x output on one wood type
-export const RUSH_DAYS = [5, 6, 0]; // Fri, Sat, Sun
-export const RUSH_BONUS = 1; // +100% (2x), added to other boosts
+// Timber Rush (update 3): the 48-hour weekend event, 1.5x output on one wood type plus a limited order board
+export const RUSH_DAYS = [6, 0]; // Sat, Sun
+export const RUSH_BONUS = 0.5; // +50% (1.5x), added to other boosts
+export const RUSH_ORDERS = 3; // extra event orders each event day
+export const RUSH_ORDER_PRICE: [number, number] = [1.3, 1.6]; // x market price
 
 // Prestige (spec: after about $1M; Part 3: reachable in 2-4 days, run 2 about 2-4x faster)
 export const PRESTIGE_AT = 200_000_000; // Money earned this run. About 2.8 days of normal play in npm run pacing. BALANCE
 export const PRESTIGE_NAME = 'Timber Baron';
+export const PRESTIGE_GOLD = 20; // update 3: Gold for every prestige, on top of the multiplier
+
+// Update 3: helper milestones. Every 25 of one helper type pays 10 Gold, once per milestone.
+export const HELPER_MILESTONE_EVERY = 25;
+export const HELPER_MILESTONE_GOLD = 10;
+
+// Update 3: cosmetics. Gold only, looks only (never stats), kept forever through prestige.
+export type CosmeticKind = 'tree' | 'axe' | 'bg';
+export interface CosmeticDef { id: string; kind: CosmeticKind; name: string; gold: number; rare?: boolean }
+export const COSMETICS: CosmeticDef[] = [
+  { id: 'tree-pine', kind: 'tree', name: 'Pine', gold: 0 },
+  { id: 'tree-redwood', kind: 'tree', name: 'Redwood', gold: 100 },
+  { id: 'tree-golden', kind: 'tree', name: 'Golden Tree', gold: 250 },
+  { id: 'tree-snowy', kind: 'tree', name: 'Snowy Pine', gold: 200 },
+  { id: 'tree-autumn', kind: 'tree', name: 'Autumn Maple', gold: 200 },
+  { id: 'tree-cherry', kind: 'tree', name: 'Cherry Blossom', gold: 0, rare: true },
+  { id: 'axe-rusty', kind: 'axe', name: 'Rusty look', gold: 0 },
+  { id: 'axe-steelblue', kind: 'axe', name: 'Steel Blue', gold: 50 },
+  { id: 'axe-golden', kind: 'axe', name: 'Golden Axe', gold: 150 },
+  { id: 'axe-fire', kind: 'axe', name: 'Fire Axe', gold: 200 },
+  { id: 'axe-diamond', kind: 'axe', name: 'Diamond Shine', gold: 300 },
+  { id: 'axe-frost', kind: 'axe', name: 'Frost Axe', gold: 0, rare: true },
+  { id: 'bg-forest', kind: 'bg', name: 'Forest', gold: 0 },
+  { id: 'bg-mountains', kind: 'bg', name: 'Mountains', gold: 150 },
+  { id: 'bg-sunset', kind: 'bg', name: 'Sunset', gold: 250 },
+  { id: 'bg-night', kind: 'bg', name: 'Night Sky', gold: 250 },
+  { id: 'bg-snowy', kind: 'bg', name: 'Snowy Mountains', gold: 400 },
+  { id: 'bg-aurora', kind: 'bg', name: 'Northern Lights', gold: 0, rare: true },
+];
+export const RARE_COSMETICS = ['tree-cherry', 'axe-frost', 'bg-aurora']; // Day 7 rewards, in this order
+export const RARE_EXTRA_GOLD = 25; // Day 7 when you already own every rare cosmetic
+
+// Update 3: a new system every 1 to 3 hours of early play (minutes of active play). Each one adds a new decision.
+export type SystemId = 'land' | 'workshop' | 'market' | 'sawmill' | 'auctions' | 'manager';
+export const SYSTEMS: { id: SystemId; name: string; minutes: number; why: string }[] = [
+  { id: 'land', name: 'Land deals', minutes: 45, why: 'Haggle with sellers: offer low and risk a no, or pay up.' },
+  { id: 'workshop', name: 'Workshop', minutes: 45, why: 'Turn wood into furniture, or sell it raw?' },
+  { id: 'market', name: 'Market and Yard Seller', minutes: 120, why: 'Planks or wood, bulk orders, and automatic selling.' },
+  { id: 'sawmill', name: 'Sawmill', minutes: 210, why: 'Cut planks at scale: wood now or planks later?' },
+  { id: 'auctions', name: 'Land auctions', minutes: 300, why: 'Bid against rivals. Lose and you pay 5%.' },
+  { id: 'manager', name: 'Manager', minutes: 420, why: 'Pay a wage to sell for you when the yard fills.' },
+];
 
 // Push notifications
 export const NOTIF_QUIET_START = 21; // 9pm

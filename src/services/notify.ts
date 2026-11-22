@@ -1,5 +1,5 @@
 // One friendly local notification at most per day, never between 9pm and 9am.
-// We only ask for permission after the player's first win (first upgrade), never on first launch.
+// We only ask after the first win or the first offline return, with our own pre-prompt first. Never on first launch.
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { GameState } from '../game/logic';
@@ -34,13 +34,27 @@ export async function scheduleFor(s: GameState, now: number): Promise<number | n
     const p = planNotification(s, now);
     if (!p) return null;
     await Notifications.scheduleNotificationAsync({
-      content: { title: p.title, body: p.body },
+      content: { title: p.title, body: p.body, data: { tab: p.tab } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(p.at) },
     });
     return p.at;
   } catch {
     return null;
   }
+}
+
+/** Opens the screen a notification points to (when the player taps it). */
+export function onNotificationTap(go: (tab: string) => void): () => void {
+  if (!on) return () => {};
+  Notifications.getLastNotificationResponseAsync().then((r) => {
+    const tab = r?.notification.request.content.data?.tab;
+    if (typeof tab === 'string') go(tab);
+  }).catch(() => {});
+  const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+    const tab = r.notification.request.content.data?.tab;
+    if (typeof tab === 'string') go(tab);
+  });
+  return () => sub.remove();
 }
 
 export async function cancelAll() {

@@ -89,8 +89,20 @@ Built:
   - Home screen: 4 counters at the top, the tree in the middle, one SELL button at the bottom.
   - Fun: Golden Log Frenzy (7x for 30 seconds), cost growth 1.10, prestige preview.
   - Look and feel: one flat art style, an icon set, the sawmill line with machines, sounds, haptics, and a Settings page with Reduce motion.
+- Update 3 (section 26):
+  - Fixes: Timber Rush is 1.5x for 48 hours on the weekend; furniture is drawn, no emoji.
+  - Gold: earnable in game.
+  - Cosmetics: a Gold-only Cosmetics shop (tree skins, axe skins, backgrounds; looks only, kept forever).
+  - Playbook 2 retention:
+    - Welcome back with a lump sum and buy ideas.
+    - 7-day calendar with a grace day.
+    - 3 daily quests and 1 weekly quest.
+    - The Timber Rush order board.
+    - New systems unlocking on a schedule.
+    - Local notifications.
+    - A weekly leaderboard against the AI rivals.
 - Typecheck and the logic tests pass (`npm test`). Pacing: `npm run pacing`.
-- Not built: wood quality, Empire Map, Leaderboard, achievements, research.
+- Not built: wood quality, Empire Map, Game Center (needs a custom native module, not in Expo Go), achievements, research.
 
 ## Testing on your iPhone
 

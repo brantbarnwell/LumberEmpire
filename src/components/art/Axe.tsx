@@ -4,10 +4,16 @@ import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGra
 import type { GameState } from '../../game/logic';
 import { AXES } from '../../game/data';
 
-export type AxeLook = 'rusty' | 'stone' | 'iron' | 'steel' | 'titanium' | 'diamond' | 'mythic' | 'dragon';
+export type AxeLook = 'rusty' | 'stone' | 'iron' | 'steel' | 'titanium' | 'diamond' | 'mythic' | 'dragon' | 'frost';
 
 /** What your axe looks like right now (a skin wins over the axe you own). */
-export function axeLookOf(s: Pick<GameState, 'axeIndex' | 'equippedSkin'>): AxeLook {
+// Update 3: axe skins from the Cosmetics shop (looks only, your axe's stats stay the same)
+export const COSMETIC_AXE_LOOK: Record<string, AxeLook> = {
+  'axe-rusty': 'rusty', 'axe-steelblue': 'titanium', 'axe-golden': 'mythic', 'axe-fire': 'dragon', 'axe-diamond': 'diamond', 'axe-frost': 'frost',
+};
+
+export function axeLookOf(s: Pick<GameState, 'axeIndex' | 'equippedSkin'> & { cosmetics?: GameState['cosmetics'] }): AxeLook {
+  if (s.cosmetics?.axe && COSMETIC_AXE_LOOK[s.cosmetics.axe]) return COSMETIC_AXE_LOOK[s.cosmetics.axe];
   if (s.equippedSkin === 'diamond-axe-skin') return 'diamond';
   if (s.equippedSkin === 'steel-axe-skin') return 'steel';
   return AXES[s.axeIndex].id as AxeLook;
@@ -23,12 +29,13 @@ const LOOKS: Record<AxeLook, Look> = {
   diamond: { handle: ['#2d2d3a', '#18181f'], grip: '#19a3b5', head: ['#e8fdff', '#7fe3f0', '#2fb6c9'], edge: '#ffffff', glow: '#9ff4ff' },
   mythic: { handle: ['#5b2d8e', '#3a1a5e'], grip: '#2b1145', bands: '#f5c542', head: ['#fff1b0', '#f5c542', '#c8941b'], edge: '#fffbe6', glow: '#ffe27a' },
   dragon: { handle: ['#3a1010', '#1d0707'], grip: '#7a1010', bands: '#f08a24', head: ['#ff8a5b', '#d1361e', '#6e0f0f'], edge: '#ffd29a', glow: '#ff7a3c' },
+  frost: { handle: ['#cfe8f5', '#8fb8d0'], grip: '#2f6fb0', bands: '#ffffff', head: ['#ffffff', '#bfe9fb', '#6fb6db'], edge: '#ffffff', glow: '#bfefff' },
 };
 
 export function AxeArt({ look, size = 80 }: { look: AxeLook; size?: number }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const L = LOOKS[look];
-  const double = look === 'titanium' || look === 'mythic' || look === 'dragon';
+  const double = look === 'titanium' || look === 'mythic' || look === 'dragon' || look === 'frost';
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <Defs>
@@ -86,6 +93,7 @@ export function AxeArt({ look, size = 80 }: { look: AxeLook; size?: number }) {
               <Circle cx="50.5" cy="30" r="1.6" fill="#ddd" stroke="#333" strokeWidth="0.6" />
             </G>
           )}
+          {look === 'frost' && <Path d="M62 14 l4 6 l-4 6 M70 12 l3 8 M76 26 l-4 8" stroke="#6fb6db" strokeWidth="1.6" fill="none" />}
           {look === 'diamond' && (
             <G>
               <Path d="M58 12 L70 22 L60 32 M70 22 L84 18 M70 22 L80 38" stroke="#ffffff" strokeOpacity="0.8" strokeWidth="1.2" fill="none" />

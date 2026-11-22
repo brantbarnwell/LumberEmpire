@@ -7,7 +7,7 @@ import {
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
-  YARD_SELLER_COST, LOST_BID_PENALTY, GOLDEN_LOG_EVERY_MIN, GOLDEN_LOG_LASTS_SEC, FRENZY_SEC, FRENZY_MULT,
+  YARD_SELLER_COST, LOST_BID_PENALTY, HELPER_MILESTONE_EVERY, HELPER_MILESTONE_GOLD, SYSTEMS, SystemId, RUSH_ORDERS, RUSH_ORDER_PRICE, GOLDEN_LOG_EVERY_MIN, GOLDEN_LOG_LASTS_SEC, FRENZY_SEC, FRENZY_MULT,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, Product,
   MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE, SAWMILL_LEVELS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
@@ -50,7 +50,7 @@ export interface Quest { id: string; target: number; baseline: number; claimed: 
 export type Stats = Record<Metric, number>;
 
 export interface GameState {
-  version: 2;
+  version: number;
   money: number;
   gold: number;
   wood: number; // fractional inside, shown rounded down
@@ -75,6 +75,11 @@ export interface GameState {
   nextLogAt: number; // update 2: when the next Golden Log appears (it stays for 60 seconds)
   frenzyUntil: number; // update 2: 7x wood/sec until this time
   settings: { sound: boolean; haptics: boolean; reduceMotion: boolean };
+  // update 3 (kept through prestige):
+  cosmetics: { owned: string[]; tree: string; axe: string | null; bg: string };
+  helperMilestones: Record<string, number>; // highest milestone paid per helper type (1 = 25 owned)
+  playSec: number; // seconds of active play, used to unlock new systems early on
+  playHours: number[]; // how often you play at each hour of the day (for notification timing)
   dayKey: string;
   soldToday: number;
   moneyToday: number;
@@ -117,6 +122,7 @@ export interface GameState {
   stats: Stats;
   daily: { dayKey: string; quests: Quest[] };
   weekly: { weekKey: string; quest: Quest | null };
+  board: { weekKey: string; startTotal: number; lastWeek: number }; // update 3: weekly leaderboard (kept through prestige)
   login: { index: number; lastClaimDay: string | null };
   ads: { dayKey: string; goldVideos: number };
   prestige: { count: number; mult: number };
@@ -200,7 +206,7 @@ export function weekKeyOf(now: number) {
 }
 
 export const emptyStats = (): Stats => ({
-  chops: 0, felled: 0, woodSold: 0, moneyEarned: 0, helpersHired: 0, itemsCrafted: 0, landOffers: 0,
+  chops: 0, felled: 0, woodSold: 0, moneyEarned: 0, helpersHired: 0, itemsCrafted: 0, landOffers: 0, upgrades: 0, offlineCollects: 0,
 });
 
 /** The parts of the game that reset when you prestige. */
@@ -244,7 +250,7 @@ export function freshRun(now: number) {
 
 export function newGame(now = Date.now()): GameState {
   return {
-    version: 2,
+    version: 3,
     gold: 0,
     totalWoodChopped: 0,
     totalMoneyEarned: 0,
@@ -253,6 +259,10 @@ export function newGame(now = Date.now()): GameState {
     goldenTreesFound: 0,
     selling: true,
     settings: { sound: true, haptics: true, reduceMotion: false },
+    cosmetics: { owned: ['tree-pine', 'axe-rusty', 'bg-forest'], tree: 'tree-pine', axe: null, bg: 'bg-forest' },
+    helperMilestones: {},
+    playSec: 0,
+    playHours: Array(24).fill(0),
     dayKey: dayKeyOf(now),
     soldToday: 0,
     moneyToday: 0,
@@ -266,6 +276,7 @@ export function newGame(now = Date.now()): GameState {
     stats: emptyStats(),
     daily: { dayKey: '', quests: [] },
     weekly: { weekKey: '', quest: null },
+    board: { weekKey: '', startTotal: 0, lastWeek: 0 },
     login: { index: 0, lastClaimDay: null },
     ads: { dayKey: dayKeyOf(now), goldVideos: 0 },
     prestige: { count: 0, mult: 1 },
@@ -321,7 +332,7 @@ export function moneyMult(s: GameState, now: number) {
   return 1 + boostBonus(s, 'money', now) + (s.vipActive ? VIP_MONEY_MULT - 1 : 0);
 }
 
-/** Timber Rush: Friday to Sunday, 2x output on one wood type you own. */
+/** Timber Rush: Saturday and Sunday (48 hours), 1.5x from the forests of one wood type you own. */
 export function rushInfo(s: GameState, now: number) {
   const d = new Date(now);
   const wk = weekKeyOf(now);
@@ -329,8 +340,8 @@ export function rushInfo(s: GameState, now: number) {
   const type = owned[Math.floor(hash('rush:' + wk) * owned.length)] ?? HOME_WOOD;
   const active = RUSH_DAYS.includes(d.getDay());
   const sunday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((7 - d.getDay()) % 7), 23, 59, 59);
-  const friday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((5 - d.getDay() + 7) % 7), 0, 0, 0);
-  return { active, type, endsAt: sunday.getTime(), startsAt: friday.getTime() };
+  const saturday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((6 - d.getDay() + 7) % 7), 0, 0, 0);
+  return { active, type, endsAt: sunday.getTime(), startsAt: saturday.getTime() };
 }
 
 export function ownedWoodTypes(s: GameState): WoodType[] {
@@ -340,9 +351,10 @@ export function ownedWoodTypes(s: GameState): WoodType[] {
 }
 
 /** Multiplier for wood of one type: boosts and Timber Rush add, prestige multiplies. */
-export function woodMultFor(s: GameState, now: number, type: WoodType) {
+/** `forest` = output from land of this wood type. Timber Rush (update 3) boosts forests only, not your axe or helpers. */
+export function woodMultFor(s: GameState, now: number, type: WoodType, forest = false) {
   const r = rushInfo(s, now);
-  const rush = r.active && r.type === type ? RUSH_BONUS : 0;
+  const rush = forest && r.active && r.type === type ? RUSH_BONUS : 0;
   return (1 + boostBonus(s, 'wood', now) + rush) * s.prestige.mult;
 }
 
@@ -392,13 +404,13 @@ export function toolFx(s: GameState) {
   return fx;
 }
 
-export function buyTool(s: GameState, id: string): GameState | null {
+function buyToolRaw(s: GameState, id: string): GameState | null {
   const d = TOOLS.find((x) => x.id === id);
   if (!d || s.tools[id] || s.money < d.cost) return null;
   return { ...s, money: s.money - d.cost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0 } }, firstWin: true };
 }
 
-export function buyToolWithGold(s: GameState, id: string): GameState | null {
+function buyToolWithGoldRaw(s: GameState, id: string): GameState | null {
   const d = TOOLS.find((x) => x.id === id);
   if (!d || !d.goldCost || s.tools[id] || s.gold < d.goldCost) return null;
   return { ...s, gold: s.gold - d.goldCost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0, keep: true } }, firstWin: true };
@@ -476,7 +488,7 @@ export function storageUpgradeCost(s: GameState) {
   return STORAGE_LEVELS[s.storageLevel + 1]?.cost ?? null;
 }
 
-export function buyStorage(s: GameState): GameState | null {
+function buyStorageRaw(s: GameState): GameState | null {
   const cost = storageUpgradeCost(s);
   if (cost === null || s.money < cost) return null;
   return { ...s, money: s.money - cost, storageLevel: s.storageLevel + 1 };
@@ -546,11 +558,14 @@ export function hireHelper(s: GameState, id: string): GameState | null {
   const cost = hireCost(s, id);
   if (s.money < cost) return null;
   const h = s.helpers[id] ?? { count: 0, level: 0 };
-  const st = { ...s, money: s.money - cost, helpers: { ...s.helpers, [id]: { ...h, count: h.count + 1 } }, firstWin: true };
+  let st: GameState = { ...s, money: s.money - cost, helpers: { ...s.helpers, [id]: { ...h, count: h.count + 1 } }, firstWin: true };
+  // update 3: every 25 of one type pays 10 Gold, once per milestone (kept through prestige)
+  const m = Math.floor((h.count + 1) / HELPER_MILESTONE_EVERY);
+  if (m > (st.helperMilestones?.[id] ?? 0)) st = { ...st, gold: st.gold + HELPER_MILESTONE_GOLD, helperMilestones: { ...st.helperMilestones, [id]: m } };
   return bump(st, 'helpersHired');
 }
 
-export function levelHelper(s: GameState, id: string): GameState | null {
+function levelHelperRaw(s: GameState, id: string): GameState | null {
   const cost = levelCost(s, id);
   const h = s.helpers[id];
   if (cost === null || !h || h.count === 0 || s.money < cost) return null;
@@ -580,8 +595,19 @@ export function passiveWoodPerSec(s: GameState, now: number) {
   for (const h of HELPERS) helpers += helperOutputBase(h.id, s.helpers[h.id]);
   total += helpers * (1 + fx.helperPct) * helperWageSpeed(s) * home;
   total += fx.passiveFlat * home;
-  for (const l of LAND) if (s.lands[l.id]) total += landOutputBase(l.id, s) * woodMultFor(s, now, l.wood);
+  for (const l of LAND) if (s.lands[l.id]) total += landOutputBase(l.id, s) * woodMultFor(s, now, l.wood, true);
   return total * (frenzyOn(s, now) ? FRENZY_MULT : 1);
+}
+
+// ---------- new systems on a schedule (update 3) ----------
+
+/** A system unlocks after enough minutes of active play (always unlocked after your first prestige). */
+export function systemUnlocked(s: GameState, id: SystemId) {
+  const def = SYSTEMS.find((x) => x.id === id)!;
+  return s.prestige.count > 0 || (s.playSec ?? 0) >= def.minutes * 60;
+}
+export function nextSystem(s: GameState) {
+  return SYSTEMS.find((x) => !systemUnlocked(s, x.id)) ?? null;
 }
 
 // ---------- Golden Log (update 2) ----------
@@ -635,6 +661,7 @@ export function ensureListings(s: GameState, now: number): GameState {
       personality, min, mood: 70, rejections: 0, status: 'open', counter: null, greedyCountered: false, history: [],
       ...planRivals(l.id, l.asking, dk, s.prestige.count, now),
     };
+    if (!systemUnlocked(s, 'auctions')) listings[l.id].saleType = 'negotiate'; // update 3: auctions unlock later
   });
   return { ...s, listings, listingsDay: dk };
 }
@@ -665,6 +692,7 @@ export function makeOffer(s: GameState, id: string, amount: number, now: number)
   const L = s.listings[id];
   const def = LAND.find((x) => x.id === id);
   if (!L || !def || L.status === 'gone') return { state: s, outcome: { kind: 'error', message: 'This land is not for sale right now.' } };
+  if (!systemUnlocked(s, 'land')) return { state: s, outcome: { kind: 'error', message: 'Land deals unlock soon.' } };
   amount = Math.round(amount);
   if (!(amount > 0)) return { state: s, outcome: { kind: 'error', message: 'Type an offer first.' } };
   if (amount > s.money) return { state: s, outcome: { kind: 'error', message: "You don't have that much Money." } };
@@ -751,7 +779,7 @@ export function landUpgradeCost(id: string, upId: string) {
   return Math.round(def.asking * u.costFrac);
 }
 
-export function buyLandUpgrade(s: GameState, id: string, upId: string): GameState | null {
+function buyLandUpgradeRaw(s: GameState, id: string, upId: string): GameState | null {
   const l = s.lands[id];
   if (!l || l.upgrades.includes(upId)) return null;
   const cost = landUpgradeCost(id, upId);
@@ -762,14 +790,14 @@ export function buyLandUpgrade(s: GameState, id: string, upId: string): GameStat
 // ---------- workshop ----------
 
 export function workshopUnlocked(s: GameState) {
-  return Object.keys(s.lands).length > 0;
+  return Object.keys(s.lands).length > 0 && systemUnlocked(s, 'workshop');
 }
 
 export function goldToSkip(msLeft: number) {
   return Math.max(1, Math.ceil((msLeft / 60000) * GOLD_PER_MINUTE_SKIP));
 }
 
-export function startBuild(s: GameState, now: number): GameState | null {
+function startBuildRaw(s: GameState, now: number): GameState | null {
   const w = s.workshop;
   const next = w.level + 1;
   const def = WORKSHOPS[next];
@@ -931,7 +959,7 @@ export function autoSellingPlanks(s: GameState) {
 }
 
 export function hireYardSeller(s: GameState): GameState | null {
-  if (s.yardSeller || s.money < YARD_SELLER_COST) return null;
+  if (s.yardSeller || s.money < YARD_SELLER_COST || !systemUnlocked(s, 'market')) return null;
   return { ...s, money: s.money - YARD_SELLER_COST, yardSeller: true, selling: true, plankSelling: true, firstWin: true };
 }
 
@@ -1027,7 +1055,11 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
   if (autoSelling(next) && next.wood >= 1) next = sellAll(next, 'wood', now).state;
   next = managerTick(next, dtSec, now);
   if (autoSellingPlanks(next) && next.planks >= 1) next = sellAll(next, 'planks', now).state;
-  if (!offline) next = logTick(next, now);
+  if (!offline) next = logTick({ ...next, playSec: (next.playSec ?? 0) + dtSec }, now);
+  // weekly leaderboard: a new week starts on Monday
+  const wkb = weekKeyOf(now);
+  const b = next.board ?? { weekKey: '', startTotal: next.totalMoneyEarned, lastWeek: 0 };
+  if (b.weekKey !== wkb) next = { ...next, board: { weekKey: wkb, startTotal: next.totalMoneyEarned, lastWeek: b.weekKey ? next.totalMoneyEarned - b.startTotal : 0 } };
   return rivalTick(tickWorkshop(next, now), now);
 }
 
@@ -1067,12 +1099,12 @@ export function computeOffline(s: GameState, now: number): { state: GameState; r
 export function collectOffline(s: GameState, r: OfflineResult, mult: number): GameState {
   const gross = r.gross ?? r.earned;
   const st = addMoney(s, gross + r.earned * (mult - 1));
-  return { ...st, money: s.money + r.earned * mult };
+  return bump({ ...st, money: s.money + r.earned * mult }, 'offlineCollects');
 }
 
 // ---------- upgrades ----------
 
-export function buyAxe(s: GameState, index: number): GameState | null {
+function buyAxeRaw(s: GameState, index: number): GameState | null {
   const axe = AXES[index];
   if (!axe || index <= s.axeIndex || s.money < axe.cost) return null;
   return { ...s, money: s.money - axe.cost, axeIndex: index, axeDurability: 100, chopsSinceWear: 0, firstWin: true };
@@ -1155,6 +1187,7 @@ export function applyGrant(s: GameState, g: Grant, now: number): GameState {
   const later = (g.buildings ?? []).filter((b) => b !== 'sawmill');
   if (later.length) st.owned.pendingBuildings = [...new Set([...st.owned.pendingBuildings, ...later])];
   if (g.noAds) st.owned.noAds = true;
+  st = packCosmetics(st);
   if (g.landIfMissing) {
     if (st.lands[g.landIfMissing.id]) st.gold += g.landIfMissing.elseGold;
     else st = addLand(st, [g.landIfMissing.id]);
@@ -1175,6 +1208,16 @@ export function grantProduct(s: GameState, productId: string, txId: string, now:
 }
 
 /** Fixes up saves from older versions. */
+/** Skins from packs show up in the Cosmetics shop as owned (update 3). */
+function packCosmetics(s: GameState): GameState {
+  const add: string[] = [];
+  if (s.owned.skins.includes('diamond-axe-skin')) add.push('axe-diamond');
+  if (s.owned.skins.includes('steel-axe-skin')) add.push('axe-steelblue');
+  if (s.owned.exclusiveAxes.includes('dragon')) add.push('axe-fire');
+  const owned = [...new Set([...(s.cosmetics?.owned ?? []), ...add])];
+  return owned.length === s.cosmetics.owned.length ? s : { ...s, cosmetics: { ...s.cosmetics, owned } };
+}
+
 export function migrate(s: GameState): GameState {
   let st = s;
   if (st.owned.pendingHelpers > 0) st = addApprentices({ ...st, owned: { ...st.owned, pendingHelpers: 0 } }, st.owned.pendingHelpers);
@@ -1183,13 +1226,18 @@ export function migrate(s: GameState): GameState {
   if (st.runMoneyEarned === 0 && st.prestige.count === 0 && st.totalMoneyEarned > 0) st = { ...st, runMoneyEarned: st.totalMoneyEarned };
   if (Object.values(st.listings).some((l) => !l.saleType || !l.rivalPlan)) st = { ...st, listings: {}, listingsDay: '' }; // pre-rivals saves
   if (typeof st.yardSeller !== 'boolean') st = { ...st, yardSeller: false };
+  st = { ...st, stats: { ...emptyStats(), ...st.stats } };
+  if (!st.cosmetics) st = { ...st, cosmetics: { owned: ['tree-pine', 'axe-rusty', 'bg-forest'], tree: 'tree-pine', axe: null, bg: 'bg-forest' } };
+  st = packCosmetics(st);
+  if (!st.playHours) st = { ...st, playHours: Array(24).fill(0) };
+  if ((st.version ?? 2) < 3 && st.totalChops > 0) st = { ...st, playSec: Math.max(st.playSec ?? 0, 8 * 3600) }; // players from before update 3 keep everything unlocked
   if (st.workshop.forSale.length) {
     // update 2: no more listing prices; items waiting for a buyer go back to your inventory
     const inventory = { ...st.workshop.inventory };
     for (const x of st.workshop.forSale) inventory[x.itemId] = (inventory[x.itemId] ?? 0) + 1;
     st = { ...st, workshop: { ...st.workshop, inventory, forSale: [] } };
   }
-  return { ...st, version: 2 };
+  return { ...st, version: 3 };
 }
 
 export function canClaimVip(s: GameState, now: number) {
@@ -1233,6 +1281,23 @@ export function ensureOrders(s: GameState, now: number): GameState {
     const price = Math.round(marketPriceOf(dk, product) * (0.85 + r('price') * 0.5) * 100) / 100;
     orders.push({ id: `${dk}-${i}`, buyer: BULK_BUYERS[(Math.floor(r('b') * BULK_BUYERS.length) + i) % BULK_BUYERS.length], product, amount, price, status: 'open', countered: false });
   }
+  // update 3: Timber Rush weekend adds a limited event order board. The mix changes every week.
+  const rush = rushInfo(s, now);
+  if (rush.active && systemUnlocked(s, 'market')) {
+    const wk = weekKeyOf(now);
+    const mix = Math.floor(hash('mix:' + wk) * 3); // 0: planks week, 1: big wood week, 2: mixed
+    for (let i = 0; i < RUSH_ORDERS; i++) {
+      const r = (k: string) => hash(`rush:${dk}:${i}:${k}`);
+      const product: 'wood' | 'planks' = mix === 0 ? (i < 2 ? 'planks' : 'wood') : mix === 1 ? 'wood' : (i === 1 ? 'planks' : 'wood');
+      const size = mix === 1 ? 0.35 : 0.15;
+      const raw = (product === 'wood' ? size : size * 0.3) * cap * (0.7 + r('a') * 0.6);
+      const mag = Math.pow(10, Math.max(1, Math.floor(Math.log10(raw)) - 1));
+      const amount = Math.max(100, Math.round(raw / mag) * mag);
+      const [lo, hi] = RUSH_ORDER_PRICE;
+      const price = Math.round(marketPriceOf(dk, product) * (lo + r('p') * (hi - lo)) * 1000) / 1000;
+      orders.push({ id: `rush-${dk}-${i}`, buyer: `Timber Rush: ${BULK_BUYERS[(Math.floor(r('b') * BULK_BUYERS.length) + i) % BULK_BUYERS.length]}`, product, amount, price, status: 'open', countered: false });
+    }
+  }
   return { ...s, market: { ...s.market, orders, ordersDay: dk } };
 }
 
@@ -1271,7 +1336,7 @@ export function counterOrder(s: GameState, id: string): { state: GameState; agre
 // ---------- manager (Part 7) ----------
 
 export function hireManager(s: GameState): GameState | null {
-  if (s.manager.hired || s.money < MANAGER_COST) return null;
+  if (s.manager.hired || s.money < MANAGER_COST || !systemUnlocked(s, 'manager')) return null;
   return { ...s, money: s.money - MANAGER_COST, manager: { ...s.manager, hired: true, on: true }, firstWin: true };
 }
 
@@ -1353,13 +1418,26 @@ export function sawmillNextCost(s: GameState) {
 }
 
 /** Build (level 1) or upgrade the Sawmill with Money. */
-export function upgradeSawmill(s: GameState): GameState | null {
+function upgradeSawmillRaw(s: GameState): GameState | null {
   const cost = sawmillNextCost(s);
-  if (cost === null || s.money < cost) return null;
+  if (cost === null || s.money < cost || !systemUnlocked(s, 'sawmill')) return null;
   return { ...s, money: s.money - cost, sawmill: { level: s.sawmill.level + 1, on: true }, firstWin: true };
 }
 
 export function setSawmillOn(s: GameState, on: boolean): GameState | null {
   if (s.sawmill.level === 0 || s.sawmill.on === on) return null;
   return { ...s, sawmill: { ...s.sawmill, on } };
+}
+
+export const buyAxe = (...a: Parameters<typeof buyAxeRaw>) => upgraded(buyAxeRaw(...a));
+export const buyTool = (...a: Parameters<typeof buyToolRaw>) => upgraded(buyToolRaw(...a));
+export const buyToolWithGold = (...a: Parameters<typeof buyToolWithGoldRaw>) => upgraded(buyToolWithGoldRaw(...a));
+export const upgradeSawmill = (...a: Parameters<typeof upgradeSawmillRaw>) => upgraded(upgradeSawmillRaw(...a));
+export const buyStorage = (...a: Parameters<typeof buyStorageRaw>) => upgraded(buyStorageRaw(...a));
+export const levelHelper = (...a: Parameters<typeof levelHelperRaw>) => upgraded(levelHelperRaw(...a));
+export const buyLandUpgrade = (...a: Parameters<typeof buyLandUpgradeRaw>) => upgraded(buyLandUpgradeRaw(...a));
+export const startBuild = (...a: Parameters<typeof startBuildRaw>) => upgraded(startBuildRaw(...a));
+/** Update 3: every purchase that improves your gear counts toward "Upgrade 3 machines". */
+function upgraded(s: GameState | null): GameState | null {
+  return s ? bump(s, 'upgrades') : null;
 }

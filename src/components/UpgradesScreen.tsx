@@ -230,21 +230,7 @@ function ToolsList() {
         ) : <Text style={[styles.sub, { marginTop: 6 }]}>Biggest yard reached!</Text>}
       </Card>
 
-      {s.owned.exclusiveAxes.length + s.owned.skins.length > 0 && (
-        <>
-          <Text style={styles.section}>Your special items</Text>
-          <Card>
-            {s.owned.exclusiveAxes.includes('dragon') && <Text style={styles.item}>🐉 Dragon Axe (Gold exclusive)</Text>}
-            {s.owned.skins.filter((k) => AXE_SKINS[k]).map((k) => (
-              <View key={k} style={[styles.row, { paddingVertical: 4 }]}>
-                <Text style={[styles.item, { flex: 1 }]}>✨ {AXE_SKINS[k].name} Axe skin (looks only)</Text>
-                <Button small variant={s.equippedSkin === k ? 'ghost' : 'gold'} label={s.equippedSkin === k ? 'Take off' : 'Use'}
-                  onPress={() => update((st) => equipSkin(st, st.equippedSkin === k ? null : k))} />
-              </View>
-            ))}
-          </Card>
-        </>
-      )}
+      <Text style={styles.sub}>Axe, tree and background skins are in Shop → Cosmetics (Gold only, looks only).</Text>
     </ScrollView>
   );
 }

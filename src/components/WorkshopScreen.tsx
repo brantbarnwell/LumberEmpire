@@ -3,9 +3,11 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import {
   craftTimeMs, finishBuildWithGold, finishCraftWithGold, goldToSkip, itemPrice, plankCutRate, sellItems,
-  startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost,
+  startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost, systemUnlocked,
 } from '../game/logic';
 import { SawmillArt, WorkshopArt } from './art/Buildings';
+import { FurnitureArt } from './art/Furniture';
+import { LockedRow } from './Locked';
 import { Icon } from './art/Icons';
 import { feel } from '../services/feel';
 import { Switch } from 'react-native';
@@ -36,7 +38,7 @@ export function WorkshopScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Buildings</Text>
-      <SawmillCard />
+      {systemUnlocked(s, 'sawmill') || s.sawmill.level > 0 ? <SawmillCard /> : <LockedRow id="sawmill" />}
       <Text style={styles.section}>Workshop</Text>
 
       {/* building */}
@@ -87,7 +89,7 @@ export function WorkshopScreen() {
             return (
               <Card key={i} style={styles.queue}>
                 <View style={styles.row}>
-                  <Text style={styles.icon}>{it.icon}</Text>
+                  <View style={styles.iconBox}><FurnitureArt id={it.id} size={34} /></View>
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={styles.name}>{it.name}</Text>
                     <ProgressBar value={1 - left / (c.doneAt - c.startedAt)} color={C.gold} height={8} />
@@ -103,10 +105,10 @@ export function WorkshopScreen() {
           {ITEMS.filter((it) => it.tier <= w.level).map((it) => (
             <Card key={it.id} style={styles.recipe}>
               <View style={styles.row}>
-                <Text style={styles.icon}>{it.icon}</Text>
+                <View style={styles.iconBox}><FurnitureArt id={it.id} size={34} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{it.name}</Text>
-                  <Text style={styles.sub}>🪵 {whole(it.wood)} wood · ⏱ {duration(craftTimeMs(s, it.id))} · worth about {money(it.value)}</Text>
+                  <Text style={styles.sub}>{whole(it.wood)} wood · {duration(craftTimeMs(s, it.id))} · worth about {money(it.value)}</Text>
                 </View>
                 <Button
                   small
@@ -129,7 +131,7 @@ export function WorkshopScreen() {
           {ITEMS.filter((it) => (w.inventory[it.id] ?? 0) > 0).map((it) => (
             <Card key={it.id} style={styles.recipe}>
               <View style={styles.row}>
-                <Text style={styles.icon}>{it.icon}</Text>
+                <View style={styles.iconBox}><FurnitureArt id={it.id} size={34} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{it.name} x{w.inventory[it.id]}</Text>
                   <Text style={styles.sub}>{money(itemPrice(s, it.id, now))} each today</Text>
@@ -151,9 +153,10 @@ export function WorkshopScreen() {
             {w.history.slice(0, 10).map((h, i) => {
               const it = ITEMS.find((x) => x.id === h.itemId)!;
               return (
-                <Text key={i} style={styles.hist}>
-                  {it.icon} {it.name} sold for {money(h.price)}
-                </Text>
+                <View key={i} style={styles.histRow}>
+                  <FurnitureArt id={it.id} size={20} />
+                  <Text style={styles.hist}>{it.name} sold for {money(h.price)}</Text>
+                </View>
               );
             })}
           </Card>
@@ -221,6 +224,8 @@ const styles = StyleSheet.create({
   art: { width: 100, alignItems: 'center' },
   lockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
   icon: { fontSize: 26, width: 36, textAlign: 'center' },
+  iconBox: { width: 40, alignItems: 'center' },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 15, fontWeight: '900', color: C.ink },
   sub: { fontSize: 12, fontWeight: '700', color: C.inkSoft },
   small: { fontSize: 11, fontWeight: '700', color: C.inkSoft },

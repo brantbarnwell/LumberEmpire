@@ -19,12 +19,22 @@ function tier(cx: number, top: number, base: number, half: number) {
   return d;
 }
 
-export function TreeArt({ golden, cut }: { golden?: boolean; cut: number /* 0..1 */ }) {
+type Pal = { dark: string; mid: string; light: string; tips: string; trunk: [string, string, string]; balls?: string; snow?: boolean };
+const BARK: [string, string, string] = ['#5a3519', '#8a5a2e', '#4a2e17'];
+// Update 3: tree skins (looks only)
+export const TREE_SKINS: Record<string, Pal> = {
+  'tree-pine': { dark: '#1d5430', mid: '#2f7040', light: '#4f9a4f', tips: '#79c06a', trunk: BARK, balls: '#d1243c' },
+  'tree-redwood': { dark: '#173f26', mid: '#235c36', light: '#357a45', tips: '#5ea865', trunk: ['#7a2e18', '#b5523a', '#5e2212'] },
+  'tree-golden': { dark: '#b7801a', mid: '#e2a92a', light: '#ffd75e', tips: '#fff1a8', trunk: ['#7a4f12', '#b8862e', '#6e4510'] },
+  'tree-snowy': { dark: '#1d5430', mid: '#2f7040', light: '#4f9a4f', tips: '#ffffff', trunk: BARK, snow: true },
+  'tree-autumn': { dark: '#9a3d12', mid: '#d1621f', light: '#f0a03a', tips: '#ffd07a', trunk: BARK },
+  'tree-cherry': { dark: '#b5507a', mid: '#e47ea6', light: '#f6b6cf', tips: '#ffe1ee', trunk: ['#4a2e2a', '#7a4a40', '#3a221e'] },
+};
+
+export function TreeArt({ golden, cut, skin = 'tree-pine' }: { golden?: boolean; cut: number /* 0..1 */; skin?: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const dark = golden ? '#b7801a' : '#1d5430';
-  const mid = golden ? '#e2a92a' : '#2f7040';
-  const light = golden ? '#ffd75e' : '#4f9a4f';
-  const tips = golden ? '#fff1a8' : '#79c06a';
+  const P = golden ? TREE_SKINS['tree-golden'] : TREE_SKINS[skin] ?? TREE_SKINS['tree-pine'];
+  const { dark, mid, light, tips } = P;
   const tiers = [
     { top: 118, base: 236, half: 118 },
     { top: 66, base: 178, half: 96 },
@@ -36,9 +46,9 @@ export function TreeArt({ golden, cut }: { golden?: boolean; cut: number /* 0..1
     <Svg width={TREE_W} height={TREE_H} viewBox={`0 0 ${TREE_W} ${TREE_H}`}>
       <Defs>
         <LinearGradient id={`t${id}`} x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor={golden ? '#7a4f12' : '#5a3519'} />
-          <Stop offset="0.45" stopColor={golden ? '#b8862e' : '#8a5a2e'} />
-          <Stop offset="1" stopColor={golden ? '#6e4510' : '#4a2e17'} />
+          <Stop offset="0" stopColor={P.trunk[0]} />
+          <Stop offset="0.45" stopColor={P.trunk[1]} />
+          <Stop offset="1" stopColor={P.trunk[2]} />
         </LinearGradient>
         <LinearGradient id={`f${id}`} x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0" stopColor={light} />
@@ -61,6 +71,9 @@ export function TreeArt({ golden, cut }: { golden?: boolean; cut: number /* 0..1
           <Path d={`M130 ${t.top + 4} C${130 + t.half * 0.3} ${t.top + (t.base - t.top) * 0.4} ${130 + t.half * 0.75} ${t.base - 16} ${130 + t.half - 4} ${t.base - 6} L130 ${t.base} Z`} fill={dark} opacity="0.22" />
           {/* needle highlights */}
           <Path d={`M${130 - t.half * 0.45} ${t.base - 14} q8 -10 16 -14 M${130 - t.half * 0.1} ${t.base - 22} q6 -8 12 -10 M${130 + t.half * 0.35} ${t.base - 12} q6 -8 12 -10`} stroke={tips} strokeWidth="2.5" strokeLinecap="round" fill="none" />
+          {P.snow && !golden && (
+            <Path d={`M130 ${t.top + 2} C${130 + t.half * 0.2} ${t.top + 16} ${130 + t.half * 0.35} ${t.top + 26} ${130 + t.half * 0.42} ${t.top + 34} q-${t.half * 0.2} 8 -${t.half * 0.4} 0 q-${t.half * 0.22} 10 -${t.half * 0.44} 0 C${130 - t.half * 0.35} ${t.top + 26} ${130 - t.half * 0.2} ${t.top + 16} 130 ${t.top + 2} Z`} fill="#ffffff" stroke={dark} strokeWidth="1.5" />
+          )}
         </G>
       ))}
       {golden && (
@@ -70,7 +83,7 @@ export function TreeArt({ golden, cut }: { golden?: boolean; cut: number /* 0..1
           ))}
         </G>
       )}
-      {!golden && (
+      {!golden && P.balls && (
         <G>
           <Circle cx="96" cy="150" r="4" fill="#d1243c" />
           <Circle cx="168" cy="196" r="4" fill="#d1243c" />

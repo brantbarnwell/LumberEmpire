@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CosmeticsScreen } from './Cosmetics';
+import { Icon } from './art/Icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { canClaimVip, claimVip, grantProduct } from '../game/logic';
@@ -14,7 +16,25 @@ import { C } from './theme';
 
 type Msg = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 
+/** Update 3: Shop has two tabs, the store and the Gold-only Cosmetics shop. */
 export function ShopScreen() {
+  const [seg, setSeg] = useState<'store' | 'cosmetics'>('store');
+  return (
+    <View style={{ flex: 1, backgroundColor: C.cream }}>
+      <View style={styles.segs}>
+        {(['store', 'cosmetics'] as const).map((k) => (
+          <Pressable key={k} onPress={() => setSeg(k)} style={[styles.seg, seg === k && styles.segOn]} accessibilityRole="tab" accessibilityState={{ selected: seg === k }}>
+            <Icon name={k === 'store' ? 'shop' : 'gold'} size={20} />
+            <Text style={[styles.segText, seg === k && { color: C.ink }]}>{k === 'store' ? 'Store' : 'Cosmetics'}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {seg === 'store' ? <StoreScreen /> : <CosmeticsScreen />}
+    </View>
+  );
+}
+
+function StoreScreen() {
   const s = useGame();
   const store = useStore();
   const [busy, setBusy] = useState<string | null>(null); // product id, or 'restore'
@@ -239,6 +259,10 @@ export function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
+  segs: { flexDirection: 'row', gap: 6, padding: 10, paddingBottom: 0 },
+  seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: C.cardEdge, backgroundColor: '#f1e4c6' },
+  segOn: { backgroundColor: C.card, borderColor: '#3a2210' },
+  segText: { fontSize: 13, fontWeight: '900', color: C.inkSoft },
   content: { padding: 14, gap: 10, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },

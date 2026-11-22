@@ -1,7 +1,7 @@
 // Update 2: no price slider. Everything sells at the market price with one tap.
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { acceptOrder, counterOrder, itemPrice, rejectOrder, sellItems, unitPrice } from '../game/logic';
+import { acceptOrder, counterOrder, itemPrice, rejectOrder, rushInfo, sellItems, unitPrice } from '../game/logic';
 import { itemPriceOf, marketEvent, marketPriceOf, priceTrend, weatherOf } from '../game/market';
 import { ITEMS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
 import { duration, money, whole } from '../game/format';
@@ -10,6 +10,7 @@ import { feel } from '../services/feel';
 import { showPopup } from './popup';
 import { SellButton, unitText } from './SellButton';
 import { Icon, IconName } from './art/Icons';
+import { FurnitureArt } from './art/Furniture';
 import { Button, Card } from './ui';
 import { C } from './theme';
 
@@ -82,7 +83,7 @@ export function MarketScreen() {
           const each = itemPrice(s, it.id, now);
           return (
             <View key={it.id} style={styles.item}>
-              <Text style={styles.itemIcon}>{it.icon}</Text>
+              <View style={styles.itemIcon}><FurnitureArt id={it.id} size={34} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{it.name} ×{n}</Text>
                 <Text style={styles.sub}>{money(each)} each</Text>
@@ -96,6 +97,7 @@ export function MarketScreen() {
         })}
       </Card>
 
+      <Orders rush />
       <Orders />
       <History />
     </ScrollView>
@@ -113,20 +115,21 @@ function PriceRow({ icon, name, text, t }: { icon: IconName; name: string; text:
   );
 }
 
-function Orders() {
+function Orders({ rush }: { rush?: boolean }) {
   const s = useGame();
-  const open = s.market.orders;
+  const open = s.market.orders.filter((o) => o.id.startsWith('rush-') === !!rush);
   if (!open.length) return null;
+  const r = rushInfo(s, Date.now());
   return (
-    <Card>
-      <Text style={styles.h}>Bulk orders</Text>
-      <Text style={styles.sub}>Buyers want a big batch at a fixed price, today only. Accept, say no, or ask for 10% more (they may walk).</Text>
+    <Card style={rush ? { borderColor: '#d9661f', borderWidth: 2.5 } : undefined}>
+      <Text style={styles.h}>{rush ? `Timber Rush order board · ${duration(r.endsAt - Date.now())} left` : 'Bulk orders'}</Text>
+      <Text style={styles.sub}>{rush ? 'Weekend only: better prices, a different mix every week.' : 'Buyers want a big batch at a fixed price, today only. Accept, say no, or ask for 10% more (they may walk).'}</Text>
       {open.map((o) => {
         const have = o.product === 'wood' ? s.wood : s.planks;
         const fair = o.price / marketPriceOf(s.dayKey, o.product);
         return (
           <View key={o.id} style={styles.order}>
-            <Text style={styles.name}>{o.buyer}</Text>
+            <Text style={styles.name}>{o.buyer.replace('Timber Rush: ', '')}</Text>
             <Text style={styles.sub}>
               Wants {whole(o.amount)} {o.product} at {money(o.price)} each = {money(o.amount * o.price)}
               {' '}({fair >= 1.1 ? 'great price' : fair >= 0.97 ? 'fair price' : 'below market'})
@@ -194,7 +197,7 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   price: { fontSize: 16, fontWeight: '900', color: C.ink },
   auto: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  itemIcon: { fontSize: 26, width: 34, textAlign: 'center' },
+  itemIcon: { width: 38, alignItems: 'center' },
   content: { padding: 14, gap: 10, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },
   h: { fontSize: 16, fontWeight: '900', color: C.ink },

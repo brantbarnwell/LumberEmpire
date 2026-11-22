@@ -1,11 +1,13 @@
 // npm test: checks the game rules.
 import {
-  newGame, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, computeOffline, collectOffline, hireHelper, hireCost,
+  newGame as newGame0, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, computeOffline, collectOffline, hireHelper, hireCost,
   levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, woodMultFor, moneyMult,
   passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
   buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed,
   hireManager, setManagerOn, managerCollect, collectOfflineBonus, managerActive, upgradeSawmill, setSawmillOn, plankCutRate,
 } from '../src/game/logic';
+// tests run with every system unlocked unless a test says otherwise (update 3 unlock schedule)
+const newGame = (t?: number): GameState => ({ ...newGame0(t), playSec: 1e9 });
 import { demandOf, marketPriceOf, priceTrend, weatherOf } from '../src/game/market';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import {
@@ -83,19 +85,21 @@ ok(!!off2.result && off2.state.money === 0 && collectOffline(off2.state, off2.re
 let d = newGame(MON);
 d = claimLogin(d, MON)!;
 ok(!canClaimLogin(d, MON) && d.login.index === 1, 'daily reward once a day');
+const dGrace = claimLogin(d, MON + 2 * 86400_000)!;
+ok(dGrace.login.index === 2, 'missing one day: grace, streak goes on');
 d = claimLogin(d, MON + 3 * 86400_000)!;
-ok(d.login.index === 2, 'missing days does not reset the streak');
+ok(d.login.index === 1, 'missing two days: drop back one day, never to zero');
 let q = ensureQuests(newGame(MON), MON);
 ok(q.daily.quests.length === 3 && !!q.weekly.quest, '3 daily quests and 1 weekly quest');
 const chopIdx = q.daily.quests.findIndex((z) => z.id === 'chop');
 if (chopIdx >= 0) {
   for (let i = 0; i < q.daily.quests[chopIdx].target; i++) q = chop(q, MON, () => 0.5).state;
-  ok(questProgress(q, q.daily.quests[chopIdx]) === q.daily.quests[chopIdx].target && claimQuest(q, chopIdx, MON)!.gold === 3, 'chop quest completes and pays Gold');
+  ok(questProgress(q, q.daily.quests[chopIdx]) === q.daily.quests[chopIdx].target && claimQuest(q, chopIdx, MON)!.gold === 5, 'chop quest completes and pays 5 Gold');
 }
 let p = { ...rich(newGame(MON)), runMoneyEarned: PRESTIGE_AT * 4, gold: 77, owned: { ...newGame(MON).owned, products: ['com.lumberempire.propack'] } };
 ok(canPrestige(p), 'prestige unlocks at the target');
 const pp = doPrestige(p, MON)!;
-ok(pp.prestige.mult === 3 && pp.money === 0 && pp.gold === 77 && pp.axeIndex === 0 && !pp.helpers.apprentice, 'prestige: 3x speed, keeps Gold, resets run');
+ok(pp.prestige.mult === 3 && pp.money === 0 && pp.gold === 97 && pp.axeIndex === 0 && !pp.helpers.apprentice, 'prestige: 3x speed, keeps Gold, +20 Gold, resets run');
 ok(Math.abs(woodMultFor(pp, MON, 'pine') - 3) < 1e-9, 'prestige multiplies wood output');
 
 // notifications
@@ -103,7 +107,12 @@ const nine = new Date(2026, 10, 23, 22, 30).getTime();
 ok(new Date(outOfQuietHours(nine)).getHours() === 9, 'notification at 10:30pm moves to 9am');
 const plan = planNotification({ ...h, notif: { ...h.notif, lastFireDay: '2026-11-24' } }, new Date(2026, 10, 24, 1).getTime())!;
 ok(new Date(plan.at).getDate() !== 24 && new Date(plan.at).getHours() >= 9 && new Date(plan.at).getHours() < 21, 'max 1 notification a day, outside quiet hours');
-ok(/logs/.test(plan.body), `personal message: "${plan.body}"`);
+ok(plan.kind === 'offline' && plan.tab === 'chop', `offline cap notification opens Home: "${plan.title}"`);
+const busy = { ...newGame(MON), workshop: { ...newGame(MON).workshop, level: 0, buildingTo: 1, buildDoneAt: MON + 2 * 3600_000 } };
+const p2 = planNotification(busy, MON)!;
+ok(p2.kind === 'upgrade' && p2.tab === 'workshop', `upgrade-finished notification opens Buildings ("${p2.title}")`);
+const playedAt14 = planNotification({ ...newGame(MON), playHours: Array.from({ length: 24 }, (_, i) => (i === 14 ? 9 : 0)), login: { index: 1, lastClaimDay: '2026-11-23' } }, MON)!;
+ok(playedAt14.kind === 'daily' && new Date(playedAt14.at).getHours() === 14, 'daily reward notification comes at your usual play time');
 
 // ---- Part 4 ----
 let pro = grantProduct(newGame(MON), 'com.lumberempire.propack', 'p1', MON)!;
@@ -276,3 +285,36 @@ const pv = prestigePreview({ ...newGame(MON), runMoneyEarned: PRESTIGE_AT * 1.44
 ok(pv.pct === 120 && pv.minutes !== null && pv.minutes > 0, `prestige preview: +${pv.pct}% forever, back in ~${pv.minutes} min`);
 const off24 = L24.makeOffer(ensureListings({ ...newGame(MON), money: 100_000 }, MON), 'clearing', 100, MON);
 ok(off24.state.money === 100_000, 'a turned-down offer costs nothing (no penalty on Make an Offer)');
+
+// ---- Update 3 ----
+import * as M3 from '../src/game/meta';
+import * as D3 from '../src/game/data';
+ok(D3.GOLDEN_TREE_CHANCE === 1 / 200 && D3.GOLDEN_GOLD_MIN === 5 && D3.GOLDEN_GOLD_MAX === 15, 'Golden Tree: 1 in 200 trees, 5 to 15 Gold');
+let ms3 = { ...newGame(MON), money: 1e12 } as GameState;
+for (let i = 0; i < 25; i++) ms3 = hireHelper(ms3, 'apprentice')!;
+const g25 = ms3.gold;
+for (let i = 0; i < 24; i++) ms3 = hireHelper(ms3, 'apprentice')!;
+ok(g25 === 10 && ms3.gold === 10 && hireHelper(ms3, 'apprentice')!.gold === 20, 'every 25 of one helper type pays 10 Gold, once each');
+const cz = { ...newGame(MON), gold: 300 };
+const boughtC = M3.buyCosmetic(cz, 'tree-redwood')!;
+ok(boughtC.gold === 200 && boughtC.cosmetics.tree === 'tree-redwood' && M3.buyCosmetic(cz, 'tree-cherry') === null, 'cosmetics cost Gold, rare ones only from Day 7');
+ok(passiveWoodPerSec({ ...boughtC, helpers: { apprentice: { count: 1, level: 0 } } }, MON) === passiveWoodPerSec({ ...cz, helpers: { apprentice: { count: 1, level: 0 } } }, MON), 'cosmetics never change wood/sec');
+const pz = doPrestige({ ...boughtC, runMoneyEarned: PRESTIGE_AT }, MON)!;
+ok(pz.cosmetics.owned.includes('tree-redwood') && pz.cosmetics.tree === 'tree-redwood', 'cosmetics are kept through prestige');
+let dz: GameState = { ...newGame(MON), login: { index: 6, lastClaimDay: null } };
+dz = claimLogin(dz, MON)!;
+ok(dz.gold === 50 && dz.cosmetics.owned.includes('tree-cherry'), 'Day 7: 50 Gold plus a rare cosmetic');
+const qz = ensureQuests(newGame(MON), MON);
+ok([...qz.daily.quests.map((x) => x.id)].sort().join() === 'chop,offline,upgrade' && qz.daily.quests.find((x) => x.id === 'chop')!.target === 500, 'daily quests: chop 500, upgrade 3 machines, collect 2 offline payouts');
+const lock = newGame0(MON);
+ok(!L24.systemUnlocked(lock, 'land') && L24.systemUnlocked({ ...lock, playSec: 45 * 60 }, 'land') && !L24.systemUnlocked({ ...lock, playSec: 45 * 60 }, 'market'), 'new systems unlock with play time');
+ok(L24.hireYardSeller({ ...lock, money: 5000 }) === null, 'Yard Seller waits for the Market unlock');
+const sat = new Date(2026, 10, 28, 12).getTime();
+const fri = new Date(2026, 10, 27, 12).getTime();
+ok(L24.rushInfo(newGame(sat), sat).active && !L24.rushInfo(newGame(fri), fri).active && D3.RUSH_BONUS === 0.5, 'Timber Rush: Saturday and Sunday (48 hours), 1.5x');
+const ev = ensureOrders(newGame(sat), sat);
+ok(ev.market.orders.filter((o) => o.id.startsWith('rush-')).length === 3, 'Timber Rush adds a limited event order board');
+const ideas = M3.buyIdeas({ ...newGame(MON), money: 0 }, 2000, MON);
+ok(ideas.length > 0 && ideas.every((x) => x.cost <= 2000), `welcome-back ideas fit the budget (${ideas.map((x) => x.label).join(', ')})`);
+const wb = M3.weeklyBoard({ ...newGame(MON), board: { weekKey: L24.weekKeyOf(MON), startTotal: 0, lastWeek: 0 }, totalMoneyEarned: 50_000 }, MON + 3 * 86400_000);
+ok(wb.length === 5 && wb.some((r) => r.you && r.earned === 50_000) && wb.every((r, i) => i === 0 || wb[i - 1].earned >= r.earned), 'weekly leaderboard: you and 4 AI rivals, sorted');
