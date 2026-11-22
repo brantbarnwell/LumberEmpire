@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import {
-  acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, makeOffer, rejectCounter, woodMultFor,
+  acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, lostBidCost, makeOffer, rejectCounter, woodMultFor,
 } from '../game/logic';
 import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, RIVALS } from '../game/data';
 import { canStartAuction, startAuction, toggleWatch } from '../game/rivals';
@@ -53,6 +53,10 @@ export function LandScreen() {
                 <Text style={styles.name}>{l.name}</Text>
                 <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]}</Text>
                 <Text style={styles.owned}>+{small(landOutputBase(l.id, s) * woodMultFor(s, now, l.wood))} wood/sec</Text>
+                <View style={[styles.row, { marginTop: 4, gap: 3 }]}>
+                  {LAND_UPGRADES.map((u) => <Text key={u.id} style={{ fontSize: 14, opacity: mine.upgrades.includes(u.id) ? 1 : 0.25 }}>🌲</Text>)}
+                  <Text style={styles.small}> Land level {mine.upgrades.length + 1}/{LAND_UPGRADES.length + 1}</Text>
+                </View>
               </View>
             </View>
             <View style={[styles.row, { marginTop: 8, flexWrap: 'wrap' }]}>
@@ -144,6 +148,7 @@ export function LandScreen() {
               {live ? <AuctionPanel /> : (
                 <>
                   <Text style={[styles.sub, { marginTop: 6 }]}>60-second auction against rival companies. Bids start at half the asking price. If a rival outbids you near the end, you get 10 more seconds.</Text>
+                  <View style={styles.risk}><Text style={styles.riskText}>⚠️ If you bid and a rival wins, you lose 20% of your Money ({money(lostBidCost(s))}).</Text></View>
                   <Button style={{ marginTop: 8 }} variant="gold" label={s.auction ? 'Another auction is running' : 'Join auction now'} disabled={!canStartAuction(s, l.id)}
                     onPress={() => update((st) => startAuction(st, l.id, Date.now())) && haptic.success()} />
                 </>
@@ -186,8 +191,10 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
     update(() => r.state);
     if (r.outcome.kind === 'accepted') {
       haptic.success();
-      showPopup({ icon: def.icon, title: `You bought ${def.name}!`, body: `+${small(def.woodPerSec)} wood/sec. ${Object.keys(getState().lands).length === 1 ? 'Your workshop is now unlocked!' : ''}` });
       onClose();
+    } else if (r.outcome.kind === 'rejected') {
+      haptic.error();
+      showPopup({ icon: '💸', title: 'They said NO', body: r.outcome.message });
     } else if (r.outcome.kind === 'error') {
       haptic.error();
       showPopup({ icon: '💬', title: r.outcome.message });
@@ -228,7 +235,6 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
             onPress={() => {
               if (update((st) => acceptCounter(st, landId))) {
                 haptic.success();
-                showPopup({ icon: def.icon, title: `You bought ${def.name}!`, body: `+${small(def.woodPerSec)} wood/sec.` });
                 onClose();
               }
             }}
@@ -237,6 +243,9 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
         </View>
       ) : null}
 
+      <View style={styles.risk}>
+        <Text style={styles.riskText}>⚠️ If the seller says NO, you lose 20% of your Money ({money(lostBidCost(s))}). Don't lowball!</Text>
+      </View>
       <Text style={[styles.small, { marginTop: 8 }]}>{L.status === 'counter' ? 'Or counter with your own offer:' : 'Your offer'}</Text>
       <View style={styles.row}>
         <View style={styles.input}>
@@ -257,6 +266,8 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
 }
 
 const styles = StyleSheet.create({
+  risk: { marginTop: 8, backgroundColor: '#fdecea', borderRadius: 10, borderWidth: 1.5, borderColor: '#f3b3ab', padding: 8 },
+  riskText: { fontSize: 12, fontWeight: '900', color: '#b3261e' },
   page: { flex: 1, backgroundColor: C.cream },
   content: { padding: 14, gap: 10, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },

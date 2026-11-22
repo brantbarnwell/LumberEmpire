@@ -79,7 +79,7 @@ ok(Math.abs(woodMultFor(b, MON, 'pine') - 3) < 1e-9, 'boosts add: 2x + 2x = 3x, 
 ok(Math.abs(moneyMult({ ...newGame(MON), vipActive: true, boosts: addBoost([], 'money', 2, 1, MON) }, MON) - 3) < 1e-9, 'VIP 2x + money 2x = 3x');
 let off = computeOffline({ ...h, wood: 0, selling: false, storageLevel: 9, lastSaved: MON - 20 * 3600_000 }, MON);
 ok(!!off.result && Math.abs(off.result.produced - 2.5 * 0.5 * 8 * 3600) < 1, `offline: 50% rate, 8h cap (${Math.round(off.result!.produced)} wood)`);
-let off2 = computeOffline({ ...newGame(MON), wood: 500, lastSaved: MON - 3600_000 }, MON);
+let off2 = computeOffline({ ...newGame(MON), yardSeller: true, wood: 500, lastSaved: MON - 3600_000 }, MON);
 ok(!!off2.result && off2.state.money === 0 && collectOffline(off2.state, off2.result!, 2).money === off2.result!.earned * 2, 'welcome back holds Money until Collect; video doubles it');
 let d = newGame(MON);
 d = claimLogin(d, MON)!;
@@ -144,7 +144,7 @@ const DK = '2026-11-23';
 ok(shownChance(DK, 'wood', 2) < shownChance(DK, 'wood', 1) && shownChance(DK, 'wood', 1) < shownChance(DK, 'wood', 0.5), 'higher price = lower sell chance');
 ok(timeToSell(DK, 'wood', 0.3, 5000, 0.02, 2.2) > timeToSell(DK, 'wood', 0.1, 5000, 0.02, 2.2) * 2, 'higher price = slower to sell a pile');
 function run4h(f: number) {
-  let x: GameState = { ...newGame(MON), helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6 };
+  let x: GameState = { ...newGame(MON), yardSeller: true, helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6 };
   x = { ...x, sellPrice: marketPriceOf(x.dayKey, 'wood') * f };
   for (let t = 0; t < 4 * 3600; t += 5) x = tick(x, 5, MON + t * 1000);
   return x.money - 1e6;
@@ -155,7 +155,7 @@ let days14 = Array.from({ length: 14 }, (_, i) => demandOf(`2026-12-${i + 1}`, '
 ok(Math.max(...days14) - Math.min(...days14) > 0.2, 'demand really changes day to day');
 let pl = tick({ ...newGame(MON), wood: 100, cutting: true, selling: false, plankSelling: false }, 10, MON);
 ok(Math.abs(pl.planks - 20) < 1e-9 && Math.abs(pl.wood - 60) < 1e-9 && storageUsed(pl) === 100, 'cutting: 2 wood -> 1 plank, 2 a second, planks take 2 yard spaces');
-let spl = { ...newGame(MON), planks: 5000, plankSelling: true, tools: { splitter: { durability: 100, chopWear: 0, minuteWear: 0 } } };
+let spl = { ...newGame(MON), yardSeller: true, planks: 5000, plankSelling: true, tools: { splitter: { durability: 100, chopWear: 0, minuteWear: 0 } } };
 ok(tick(spl, 60, MON).money > tick({ ...spl, tools: {} }, 60, MON).money * 1.9, 'Log Splitter doubles plank Money');
 let ord = ensureOrders({ ...newGame(MON), wood: 0 }, MON);
 const o = ord.market.orders[0];
@@ -258,3 +258,21 @@ let mm = upgradeSawmill({ ...newGame(MON), money: 1e7, runMoneyEarned: PRESTIGE_
 ok(doPrestige(mm, MON)!.sawmill.level === 0, 'Sawmill built with Money: lost on prestige');
 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }
+
+// ---- Section 24: manual selling, Yard Seller, land changes ----
+import * as L24 from '../src/game/logic';
+const mk = (f: number) => ({ ...newGame(MON), wood: 1000, sellPrice: marketPriceOf(newGame(MON).dayKey, 'wood') * f });
+ok(tick({ ...newGame(MON), wood: 1000 }, 60, MON).wood === 1000, 'wood no longer sells by itself');
+const cheap = L24.sellNow(mk(0.6), 'wood', MON, () => 0.5).result.sold;
+const fair24 = L24.sellNow(mk(1), 'wood', MON, () => 0.5).result.sold;
+const dear = L24.sellNow(mk(2.5), 'wood', MON, () => 0.5).result.sold;
+ok(cheap > fair24 && fair24 > dear, `SELL: cheap sells most, high sells least (${cheap} / ${fair24} / ${dear})`);
+ok(L24.sellNow(mk(5), 'wood', MON, () => 0).result.sold < 60, 'SELL at a crazy price sells almost nothing');
+let tap = mk(1);
+const tap1 = L24.sellNow({ ...tap, wood: 50000, storageLevel: 9 }, 'wood', MON, () => 0.5);
+const tap2 = L24.sellNow(tap1.state, 'wood', MON, () => 0.5);
+ok(tap2.result.sold < tap1.result.sold && tap1.state.money > 0, 'tapping SELL again sells less until new buyers come');
+ok(L24.hireYardSeller({ ...newGame(MON), money: 1499 }) === null, 'Yard Seller costs $1,500 cash');
+const ys = L24.hireYardSeller({ ...newGame(MON), money: 1500, wood: 1000 })!;
+ok(ys.money === 0 && tick(ys, 60, MON).wood < 1000, 'Yard Seller sells wood by itself');
+ok(LAND.length === 9, '9 pieces of land to buy');

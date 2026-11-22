@@ -60,6 +60,23 @@ export function WelcomeBack() {
     );
   }
 
+  if (r.earned <= 0) {
+    // section 24: no Yard Seller, so nothing sold while away. The wood is waiting in the yard.
+    return (
+      <View style={styles.back}>
+        <View style={styles.card}>
+          <Text style={styles.icon}>🌙</Text>
+          <Text style={styles.title}>Welcome back!</Text>
+          <Text style={styles.body}>
+            You were away {duration(r.away * 1000)}. Your crew chopped {whole(r.produced)} wood. It is waiting in your yard: tap the big SELL button to turn it into Money.
+          </Text>
+          <Text style={styles.small}>Tip: a Yard Seller ($1,500 in Helpers) sells for you while you are away.</Text>
+          <Button style={{ alignSelf: 'stretch', marginTop: 10 }} label="Let's sell!" onPress={() => update((st) => ({ ...st, pendingOffline: null }))} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.back}>
       <View style={styles.card}>

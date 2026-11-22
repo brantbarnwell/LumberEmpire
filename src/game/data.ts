@@ -193,12 +193,22 @@ export const LAND: LandDef[] = [
   { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 250, wood: 'maple', icon: '🏞️' },
   { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 800, wood: 'redwood', icon: '🌳' },
   { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 3_000, wood: 'spruce', icon: '🏔️' },
+  // Section 24: bigger late-game forests (more land to buy)
+  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 9_000, wood: 'oak', icon: '🌄' },
+  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 27_000, wood: 'maple', icon: '🍁' },
+  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 80_000, wood: 'redwood', icon: '🌴' },
 ];
 export const LAND_UPGRADES = [
   { id: 'plant', name: 'Plant Trees', costFrac: 0.25, bonus: 0.2 },
   { id: 'fert', name: 'Fertilizer', costFrac: 0.4, bonus: 0.3 },
   { id: 'irrig', name: 'Irrigation', costFrac: 0.6, bonus: 0.5 },
-]; // BALANCE
+  { id: 'road', name: 'Logging Road', costFrac: 1.0, bonus: 0.75 },
+  { id: 'nursery', name: 'Tree Nursery', costFrac: 1.6, bonus: 1.0 },
+]; // BALANCE. Section 24 added the last two.
+// Section 24: manual selling
+export const YARD_SELLER_COST = 1_500; // cash helper that sells wood and planks for you at your price
+export const BUYER_POOL_MINUTES = 10; // buyers wait up to 10 minutes of crowd for your SELL button
+export const LOST_BID_PENALTY = 0.2; // lose 20% of your Money when a seller says no or a rival wins an auction you bid in
 export const SELLER_WALKAWAY_HOURS = 24; // spec
 export const MAX_REJECTIONS = 3; // spec
 

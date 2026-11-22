@@ -23,6 +23,7 @@ import { PopupView } from './components/PopupView';
 import { WelcomeBack } from './components/WelcomeBack';
 import { NotifPrompt } from './components/NotifPrompt';
 import { AuctionBanner } from './components/AuctionBanner';
+import { Celebrate } from './components/Celebrate';
 import { C } from './components/theme';
 
 const TICK_MS = 250;
@@ -149,6 +150,7 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
       {tab === 'chop' && <NotifPrompt />}
       <WelcomeBack />
       <PopupView />
+      <Celebrate />
     </>
   );
 }

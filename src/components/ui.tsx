@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ReactNode, useRef } from 'react';
+import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { durabilityColor } from '../game/logic';
 import { C, shadow } from './theme';
@@ -32,15 +32,20 @@ export function Button({
   small?: boolean; style?: ViewStyle; sub?: string;
 }) {
   const dark = variant === 'gold' || variant === 'ghost';
+  const sc = useRef(new Animated.Value(1)).current;
+  const nd = Platform.OS !== 'web';
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => Animated.spring(sc, { toValue: 0.94, friction: 7, tension: 320, useNativeDriver: nd }).start()}
+      onPressOut={() => Animated.spring(sc, { toValue: 1, friction: 3.5, tension: 220, useNativeDriver: nd }).start()}
       disabled={disabled || loading}
-      style={({ pressed }) => [{ opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] }, style]}
+      style={[{ opacity: disabled ? 0.45 : 1 }, style]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <LinearGradient colors={GRAD[variant]} style={[styles.btn, small && styles.btnSmall]}>
+      <Animated.View style={{ transform: [{ scale: sc }] }}>
+      <LinearGradient colors={GRAD[variant]} style={[styles.btn, small && styles.btnSmall, !dark && styles.btnShine]}>
         {loading ? (
           <ActivityIndicator color={dark ? C.ink : '#fff'} />
         ) : (
@@ -50,6 +55,7 @@ export function Button({
           </>
         )}
       </LinearGradient>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -75,8 +81,9 @@ const styles = StyleSheet.create({
   coinG: { color: '#8a5d00', fontWeight: '900' },
   card: { backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.cardEdge, padding: 12, ...shadow },
   btn: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', minHeight: 42 },
+  btnShine: { borderBottomWidth: 3, borderBottomColor: 'rgba(0,0,0,0.22)' },
   btnSmall: { paddingVertical: 6, paddingHorizontal: 10, minHeight: 34 },
-  btnText: { fontWeight: '900', fontSize: 15 },
+  btnText: { fontWeight: '900', fontSize: 15, textShadowColor: 'rgba(0,0,0,0.18)', textShadowRadius: 1, textShadowOffset: { width: 0, height: 1 } },
   btnSub: { fontSize: 11, fontWeight: '700', marginTop: 1 },
   dur: { height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.15)', overflow: 'hidden' },
   durFill: { height: '100%', borderRadius: 4 },

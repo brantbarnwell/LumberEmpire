@@ -1,7 +1,7 @@
 // Part 6: AI rival companies and land auctions (section 8). Rivals are bots, never real people.
 // Everything here is decided by seeded rolls, so the same day plays out the same way and can be tested.
 import {
-  AUCTION_CHANCE, AUCTION_OUTBID_SECONDS, AUCTION_SECONDS, AUCTION_START, AUCTION_STEP, LAND, RIVALS, RIVAL_BUY_AFTER_MIN,
+  AUCTION_CHANCE, LOST_BID_PENALTY, AUCTION_OUTBID_SECONDS, AUCTION_SECONDS, AUCTION_START, AUCTION_STEP, LAND, RIVALS, RIVAL_BUY_AFTER_MIN,
   RIVAL_FIRST_OFFER_MIN, RIVAL_FREE_LAND, RivalStyle,
 } from './data';
 import { hash } from './market';
@@ -207,6 +207,14 @@ function finishAuction(s: GameState, at: number): GameState {
     return addFeed(st, { at, kind: 'rival', landId: a.landId, text: `Nobody bid on ${landName(a.landId)}. Back tomorrow.` });
   }
   st = { ...st, listings: { ...st.listings, [a.landId]: { ...L, status: 'sold', soldTo: winner, soldFor: price, rivalPlan: [] } } };
+  // section 24: bidding and losing costs 20% of your Money
+  if (a.log.some((x) => x.who === 'you')) {
+    const lost = Math.round(st.money * LOST_BID_PENALTY);
+    if (lost > 0) {
+      st = { ...st, money: st.money - lost, lastAuctionLoss: { landId: a.landId, lost, winner, at } };
+      st = addFeed(st, { at, kind: 'lose', landId: a.landId, text: `You lost the auction and ${fmt(lost)} (20% of your Money).` });
+    }
+  }
   return addFeed(st, {
     at, kind: 'lose', landId: a.landId,
     text: a.leader === 'you' ? `You could not pay ${fmt(a.bid)}. ${winner} took ${landName(a.landId)}.` : `${winner} won ${landName(a.landId)} for ${fmt(price)}.`,

@@ -362,3 +362,46 @@ Muse's own section is the source of truth; this is what the code does.
 - Shown in plain words on the Sawmill card in the Buildings tab.
 - Manager bargain-hunter fix kept: high pricing loses to the best-price tip.
 - The game is complete per the spec. No new features.
+
+## 24. Brant's changes after phone testing (Nov 22)
+
+Brant played the finished game on his iPhone and asked for these changes. They replace the older rules where they disagree.
+
+**Manual selling**
+- Wood and planks no longer sell by themselves.
+- A big **SELL** button (on the Chop screen and in the Market) sells part of your pile at the price you set.
+  - Low price: most of the pile sells. Market price: about 70%. 2x market: about 30%. Very high: almost nothing.
+  - Each tap uses up the buyers who said yes. Tapping again right away sells less until new buyers walk in (up to 10 minutes of buyers wait for you).
+  - The best-price tip still works the same way.
+- **Yard Seller**: $1,500 cash helper (never Gold), no wage. He turns on automatic selling at your prices, also while you are away.
+  - Without him, Welcome Back shows the wood your crew made, waiting in the yard.
+  - The Manager ($20,000) still works as before.
+
+**Land**
+- Three bigger forests:
+  - Old Growth Ridge: $10M, 9,000 wood/sec
+  - Great Northwoods: $30M, 27,000 wood/sec
+  - Coastal Rainforest: $90M, 80,000 wood/sec
+- Two more upgrades on land you own:
+  - Logging Road: 100% of asking, +75%
+  - Tree Nursery: 160% of asking, +100%
+- **Failed bids cost 20% of your Money**: when a seller says NO to your offer, or when you bid in an auction and a rival wins. The warning with the exact amount shows before you bid. Counteroffers cost nothing.
+- New bidding screen: time bar, rival faces with a crown on the leader, quick bids (min, +5%, +10%), a pop when the bid changes.
+
+**Look and feel**
+- Drawn art (react-native-svg) for the tree, a different axe for every axe tier and skin, chunks of wood that fly off with gravity, a falling tree with a stump, and a sky with drifting clouds and mountains.
+- Every helper type works on screen with its own animation:
+  - Apprentice: hatchet
+  - Lumberjack: big axe swing
+  - Veteran: saw
+  - Tree Feller: chainsaw
+  - Master: golden spin
+  - Elite Crew: skidder hauling logs
+- Big machines work on screen too: Truck, Crane, Chipper, Harvester.
+- "NEW AXE / NEW TOOL / NEW CREW MEMBER / NEW LAND" celebration screen.
+- Cash burst on SELL, bouncy buttons, Money pops in the top bar.
+
+**Pacing check (npm run pacing)**
+- 2 taps a second, with the player tapping SELL about every 15 seconds: first axe 4m, helper 14m, land 52m, workshop 118m.
+- The Yard Seller is usually bought right after the first land.
+- Prestige takes about 4.3 days.

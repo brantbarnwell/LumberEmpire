@@ -1,12 +1,34 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
-import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed } from '../game/logic';
+import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed, hireYardSeller } from '../game/logic';
 import { Switch } from 'react-native';
-import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE } from '../game/data';
+import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE, YARD_SELLER_COST } from '../game/data';
 import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card } from './ui';
 import { C } from './theme';
+
+/** Section 24: the cash helper that sells wood and planks for you at your price. */
+function YardSellerCard() {
+  const s = useGame();
+  return (
+    <Card style={[styles.card, { borderColor: C.gold, borderWidth: 2 }] as any}>
+      <View style={styles.row}>
+        <View style={styles.avatar}><Text style={{ fontSize: 30 }}>🧑‍💼</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>Yard Seller</Text>
+          <Text style={styles.sub}>Sells your wood and planks for you at YOUR price, all day and while you are away. No wage.</Text>
+          {s.yardSeller && <Text style={styles.owned}>{s.selling ? 'Selling now' : 'Paused'} · change your price on the Chop or Market screen</Text>}
+        </View>
+        {s.yardSeller && <Switch value={s.selling} onValueChange={(v) => { update((st) => ({ ...st, selling: v, plankSelling: v })); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Yard Seller on or off" />}
+      </View>
+      {!s.yardSeller && (
+        <Button style={{ marginTop: 10 }} label="Hire Yard Seller" sub={money(YARD_SELLER_COST)} variant={s.money >= YARD_SELLER_COST ? 'gold' : 'ghost'}
+          disabled={s.money < YARD_SELLER_COST} onPress={() => update((st) => hireYardSeller(st)) && haptic.success()} />
+      )}
+    </Card>
+  );
+}
 
 export function HelpersScreen() {
   const s = useGame();
@@ -23,6 +45,7 @@ export function HelpersScreen() {
         {mult !== 1 && <Text style={[styles.sub, { color: C.leaf }]}>Boosts active: x{small(mult)}</Text>}
         {wagePerHour(s) > 0 && <Text style={styles.sub}>Wages: {money(wagePerHour(s))} per hour, paid from your Money</Text>}
       </Card>
+      <YardSellerCard />
       <ManagerCard />
       {s.wagesOwed > 0 && (
         <Card style={styles.owe}>

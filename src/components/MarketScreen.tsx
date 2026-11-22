@@ -15,6 +15,7 @@ import { duration, money, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { showPopup } from './popup';
 import { SellPanel } from './WorkshopScreen';
+import { SellButton } from './SellButton';
 import { Button, Card, ProgressBar } from './ui';
 import { C } from './theme';
 
@@ -125,11 +126,11 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
   const fx = toolFx(s);
   const mult = moneyMult(s, now) * (1 + (isWood ? fx.woodSalePct : fx.plankSalePct));
   const forecastStock = Math.max(stock, 5000);
-  const st: GameState = isWood ? { ...s, selling: true } : { ...s, plankSelling: true };
+  const st: GameState = isWood ? { ...s, selling: true, yardSeller: true } : { ...s, plankSelling: true, yardSeller: true };
   const perSec = isWood ? salesPerSec(st, price, forecastStock) : plankSalesPerSec(st, price, forecastStock);
   const tts = timeToSell(s.dayKey, p, price, stock, BUYERS_PER_WOOD_IN_STOCK, isWood ? s.buyers.wood : s.buyers.planks);
   const made = isWood ? s.buyers.wood / 1.1 : s.buyers.planks / 1.1;
-  const growing = on && stock > 50 && made > 2.01 && perSec < made * 0.98;
+  const growing = on && s.yardSeller && stock > 50 && made > 2.01 && perSec < made * 0.98;
   const best = bestCommodityPrice(s.dayKey, p);
   const today = s.market.days.find((d) => d.day === s.dayKey);
   const pct = Math.round(chance * 100);
@@ -138,8 +139,10 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
     <Card style={{ gap: 6 }}>
       <View style={styles.headRow}>
         <Text style={styles.h}>{ICONS[p]} {NAMES[p]} · {whole(stock)} in stock</Text>
-        <Switch value={on} trackColor={{ true: C.leafLight, false: '#bbb' }}
-          onValueChange={(v) => { update((x) => (isWood ? { ...x, selling: v } : { ...x, plankSelling: v })); }} />
+        {s.yardSeller ? (
+          <Switch value={on} trackColor={{ true: C.leafLight, false: '#bbb' }}
+            onValueChange={(v) => { update((x) => (isWood ? { ...x, selling: v } : { ...x, plankSelling: v })); }} />
+        ) : <Text style={styles.tiny}>tap SELL</Text>}
       </View>
       {!isWood && (
         <View style={styles.cutRow}>
@@ -176,15 +179,16 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
       </View>
       <View style={styles.stats}>
         <Stat label="sell chance" value={`${pct}%`} color={pct > 60 ? C.money : pct > 25 ? C.goldDark : C.red} />
-        <Stat label={stock >= 1 ? 'to sell your stock' : 'sells per min'} value={stock >= 1 ? (isFinite(tts) && tts < 7 * 86400 ? duration(tts * 1000) : 'Maybe never') : whole(perSec * 60)} />
+        <Stat label={stock >= 1 ? (s.yardSeller ? 'to sell your stock' : 'auto-sell time') : 'sells per min'} value={stock >= 1 ? (isFinite(tts) && tts < 7 * 86400 ? duration(tts * 1000) : 'Maybe never') : whole(perSec * 60)} />
         <Stat label="est. profit / hour" value={money(perSec * 3600 * price * mult)} color={C.money} />
       </View>
       {isWood && s.manager.hired && (
         <Text style={styles.small}>👔 Manager {s.manager.on ? `is on: sells extra wood and planks at your prices when the yard is 80% full (sold ${whole(s.manager.soldToday)} wood today)` : 'is off'}</Text>
       )}
+      <SellButton p={p} />
       {growing && <Text style={styles.warnText}>⚠️ At this price you make more than buyers take. Your pile will grow until the yard is full. Lower the price to sell it all.</Text>}
       <Text style={styles.small}>
-        Sold today: {whole(today?.[p] ?? 0)}. Best profit around {money(best)} each.{!on ? ' Selling is paused.' : ''}
+        Sold today: {whole(today?.[p] ?? 0)}. Best profit around {money(best)} each.{!s.yardSeller ? ' Hire a Yard Seller in Helpers to sell automatically.' : !on ? ' Auto-selling is paused.' : ''}
 
       </Text>
     </Card>

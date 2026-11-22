@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../game/store';
@@ -18,13 +18,24 @@ export function TopBar({ onShop }: { onShop: () => void }) {
     return () => clearInterval(t);
   }, []);
   const rank = rankInfo(s.totalMoneyEarned);
+  // the Money pill pops when you earn a chunk (selling), so the cash feels real
+  const pop = useRef(new Animated.Value(1)).current;
+  const last = useRef(s.money);
+  useEffect(() => {
+    const gained = s.money - last.current;
+    last.current = s.money;
+    if (gained > Math.max(1, s.money * 0.02)) {
+      pop.setValue(1.18);
+      Animated.spring(pop, { toValue: 1, friction: 4, tension: 180, useNativeDriver: Platform.OS !== 'web' }).start();
+    }
+  }, [s.money]);
 
   return (
     <LinearGradient colors={[C.forest, C.forest2]} style={[styles.bar, { paddingTop: insets.top + 6 }]}>
       <View style={styles.row}>
-        <View style={[styles.pill, { flex: 1.25 }]}>
-          <Text style={styles.money} numberOfLines={1} adjustsFontSizeToFit>{money(s.money)}</Text>
-        </View>
+        <Animated.View style={[styles.pill, { flex: 1.25, transform: [{ scale: pop }] }]}>
+          <Text style={styles.money} numberOfLines={1} adjustsFontSizeToFit>💵 {money(s.money)}</Text>
+        </Animated.View>
         <View style={[styles.pill, { flex: 1 }]}>
           <GoldCoin size={18} />
           <Text style={styles.gold} numberOfLines={1} adjustsFontSizeToFit>{whole(s.gold)}</Text>

@@ -3,7 +3,7 @@
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
   makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
-  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice,
+  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellNow, hireYardSeller,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
@@ -13,7 +13,11 @@ let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).getTime(); // START=days after Monday Nov 23
 
-function upkeep(s: GameState) {
+let lastSell = 0;
+function upkeep(s: GameState, now = 0) {
+  // section 24: until the Yard Seller is hired, the player taps SELL about every 15 seconds
+  if (!s.yardSeller && now - lastSell >= 15_000) { s = sellNow(s, 'wood', now, rand).state; lastSell = now; }
+  if (!s.yardSeller && process.env.NO_SELLER === undefined && s.money >= 1500 && Object.keys(s.helpers).length > 0 && !(globalThis as any).__planMode) s = hireYardSeller(s) ?? s;
   const bp = process.env.FIXED_PRICE ? s.sellPrice : bestPrice(s.dayKey); // a sensible player follows the best-price tip
   if (Math.abs(s.sellPrice - bp) > 0.001) s = { ...s, sellPrice: bp };
   if (s.axeDurability < 50 && s.money >= repairCost(s, 100)) s = repair(s, 100) ?? s;
@@ -62,10 +66,13 @@ const helper = (id: string): Step => ({ label: HELPERS.find((h) => h.id === id)!
 const plan: Step[] = [
   axe(1), helper('apprentice'), axe(2), helper('apprentice'), helper('lumberjack'), helper('apprentice'), axe(3),
   { label: 'Small Clearing (land)', key: 'land', buy: (s, now) => buyLandAtAsking(s, 'clearing', now), cost: () => LAND[0].asking },
+  { label: 'Yard Seller', key: 'seller', buy: (s) => hireYardSeller(s), cost: () => 1500 },
   { label: 'Backyard Shed (workshop)', key: 'workshop', buy: (s, now) => startBuild(s, now), cost: () => WORKSHOPS[0].cost },
 ];
 
 function early(tps: number, t0 = T0) {
+  (globalThis as any).__planMode = true;
+  lastSell = 0;
   let s = newGame(t0);
   let carry = 0;
   let i = 0;
@@ -75,7 +82,7 @@ function early(tps: number, t0 = T0) {
     const now = t0 + t * 1000;
     carry += tps * 0.25;
     while (carry >= 1) { carry--; s = chop(s, now, rand).state; }
-    s = upkeep(tick(s, 0.25, now));
+    s = upkeep(tick(s, 0.25, now), now);
     const st = plan[i];
     if (s.money >= st.cost(s)) {
       const n = st.buy(s, now);
@@ -96,7 +103,7 @@ console.log('=== Early game (fixed buying order, steady tapping) ===');
 console.log(`Targets: first axe ${PACING_TARGETS.firstAxeMinutes}m, helper ${PACING_TARGETS.firstHelperMinutes}m, land ${PACING_TARGETS.firstLandMinutes}m, workshop ${PACING_TARGETS.firstWorkshopMinutes}m (shed counts when built)`);
 for (const tps of [1.5, 2, 3]) {
   const r = early(tps);
-  console.log(`${tps} taps/sec: axe ${r.firsts.axe?.toFixed(0)}m | helper ${r.firsts.helper?.toFixed(0)}m | land ${r.firsts.land?.toFixed(0)}m | workshop ${r.firsts.workshop?.toFixed(0)}m`);
+  console.log(`${tps} taps/sec: axe ${r.firsts.axe?.toFixed(0)}m | seller ${r.firsts.seller?.toFixed(0)}m | helper ${r.firsts.helper?.toFixed(0)}m | land ${r.firsts.land?.toFixed(0)}m | workshop ${r.firsts.workshop?.toFixed(0)}m`);
   console.log('   ' + r.out.join(' > '));
 }
 
@@ -108,6 +115,8 @@ for (const tps of [1.5, 2, 3]) {
   console.log('2 taps/sec, 7 different start days, typical (range): ' + keys.map((k) => `${k} ${med(k)}`).join(' | '));
 }
 
+(globalThis as any).__planMode = false;
+lastSell = 0;
 // ---------- 2. a few days of normal play, smart buying ----------
 // 4 sessions a day of 30 minutes at 1 tap/sec, offline in between (50% rate, 8h cap).
 function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameState | null } | null {
@@ -165,7 +174,7 @@ function days(nDays: number) {
       for (let t = 0; t < 1800; t += 1) {
         now += 1000;
         s = chop(s, now, rand).state;
-        s = upkeep(tick(s, 1, now));
+        s = upkeep(tick(s, 1, now), now);
         for (let k = 0; k < 5; k++) {
           const b = bestBuy(s, now);
           if (!b || s.money < b.cost) break;

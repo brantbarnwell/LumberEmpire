@@ -7,6 +7,7 @@ import {
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
+  YARD_SELLER_COST, BUYER_POOL_MINUTES, LOST_BID_PENALTY,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product,
   MANAGER_COST, MANAGER_SELL_AT, MANAGER_EXTRA_BUYERS, MANAGER_WAGE, SAWMILL_LEVELS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
@@ -69,7 +70,9 @@ export interface GameState {
   goldenTreesFound: number;
 
   sellPrice: number;
-  selling: boolean;
+  selling: boolean; // auto-selling switch, only works once you hired the Yard Seller
+  yardSeller: boolean; // section 24: $1,500 helper that sells for you
+  buyerPool: { wood: number; planks: number }; // buyers waiting for your SELL button (in units at market price)
   dayKey: string;
   soldToday: number;
   moneyToday: number;
@@ -137,6 +140,7 @@ export interface GameState {
   sawmill: { level: number; on: boolean }; // level 0 = not built
   // Part 6
   auction: Auction | null;
+  lastAuctionLoss?: { landId: string; lost: number; winner: string; at: number } | null; // shown once by the auction panel
   feed: FeedItem[];
   watched: string[];
   chopRate: number; // wood/sec from your own chopping, smoothed
@@ -230,6 +234,8 @@ export function freshRun(now: number) {
     auction: null as Auction | null,
     manager: { hired: false, on: true, carry: 0, plankCarry: 0, owed: 0, day: '', soldToday: 0, planksToday: 0, moneyToday: 0, collectedToday: 0, soldTotal: 0, moneyTotal: 0 } as Manager,
     sawmill: { level: 0, on: true },
+    yardSeller: false,
+    buyerPool: { wood: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT * 120, planks: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT * 120 },
   };
 }
 
@@ -427,8 +433,8 @@ export function fixEverything(s: GameState): GameState {
 
 function toolInUse(s: GameState, id: string) {
   const d = TOOLS.find((x) => x.id === id)!;
-  if (d.woodSalePct) return s.selling && s.wood >= 1;
-  if (d.plankSalePct) return s.plankSelling && s.planks >= 1;
+  if (d.woodSalePct) return autoSelling(s) && s.wood >= 1;
+  if (d.plankSalePct) return autoSellingPlanks(s) && s.planks >= 1;
   if (d.helperPct || d.needsHelpers) return helperCount(s) > 0;
   return true;
 }
@@ -601,7 +607,12 @@ export function ensureListings(s: GameState, now: number): GameState {
   return { ...s, listings, listingsDay: dk };
 }
 
-export type OfferOutcome = { kind: 'accepted' | 'countered' | 'rejected' | 'walked' | 'error'; message: string };
+export type OfferOutcome = { kind: 'accepted' | 'countered' | 'rejected' | 'walked' | 'error'; message: string; lost?: number };
+
+/** What a failed land bid would cost you right now (section 24). */
+export function lostBidCost(s: GameState) {
+  return Math.round(s.money * LOST_BID_PENALTY);
+}
 
 export function buyLand(s: GameState, id: string, price: number): GameState {
   const def = LAND.find((x) => x.id === id)!;
@@ -675,11 +686,18 @@ export function makeOffer(s: GameState, id: string, amount: number, now: number)
     say('Are you kidding me? My price just went up.');
     outcome = { kind: 'rejected', message: `${l.seller} is insulted and raised the price.` };
   }
+  // section 24: a "no" costs you 20% of your Money, so lowball offers hurt
+  const lost = outcome.kind === 'rejected' ? Math.round(st.money * LOST_BID_PENALTY) : 0;
+  if (lost > 0) {
+    st = { ...st, money: st.money - lost };
+    l.history.push({ who: 'you', text: `You lost $${lost.toLocaleString('en-US')} (20% of your Money) on the failed offer.` });
+    outcome = { ...outcome, lost, message: `${outcome.message} You lost $${lost.toLocaleString('en-US')}.` };
+  }
   if (l.rejections >= MAX_REJECTIONS || l.mood <= 0) {
     l.status = 'gone';
     say('Forget it. I am not selling to you.');
     st = { ...st, landGoneUntil: { ...st.landGoneUntil, [id]: now + SELLER_WALKAWAY_HOURS * 3600_000 } };
-    outcome = { kind: 'walked', message: `${l.seller} walked away. ${def.name} is gone for 24 hours.` };
+    outcome = { kind: 'walked', message: `${l.seller} walked away. ${def.name} is gone for 24 hours.${lost > 0 ? ` You lost $${lost.toLocaleString('en-US')}.` : ''}`, lost };
   }
   return { state: { ...st, listings: { ...st.listings, [id]: l } }, outcome };
 }
@@ -946,13 +964,66 @@ export function marketPriceFor(dayKey: string) {
   return marketPriceOf(dayKey, 'wood');
 }
 
+/** Wood sells by itself only with the Yard Seller hired and switched on (section 24). */
+export function autoSelling(s: GameState) {
+  return !!s.yardSeller && s.selling;
+}
+export function autoSellingPlanks(s: GameState) {
+  return !!s.yardSeller && s.plankSelling;
+}
+
+export function hireYardSeller(s: GameState): GameState | null {
+  if (s.yardSeller || s.money < YARD_SELLER_COST) return null;
+  return { ...s, money: s.money - YARD_SELLER_COST, yardSeller: true, selling: true, plankSelling: true, firstWin: true };
+}
+
+/** Share of your pile one tap of SELL can move at this price (low price = most of it, very high = almost none). */
+export function sellShare(dayKey: string, p: 'wood' | 'planks', price: number) {
+  const ratio = price / marketPriceOf(dayKey, p);
+  return Math.max(0, Math.min(1, (sellCurve(ratio).chance * demandOf(dayKey, p)) / 0.95));
+}
+
+function yesRate(dayKey: string, p: 'wood' | 'planks', price: number) {
+  return (sellCurve(price / marketPriceOf(dayKey, p)).chance / 0.7) * demandOf(dayKey, p);
+}
+
+/** Most units the waiting buyers will take right now at this price. */
+export function buyersWillTake(s: GameState, p: 'wood' | 'planks', price = p === 'wood' ? s.sellPrice : s.plankPrice) {
+  return Math.floor((s.buyerPool?.[p] ?? 0) * yesRate(s.dayKey, p, price));
+}
+
+export type SellResult = { sold: number; earned: number; why: 'ok' | 'empty' | 'price' | 'buyers' };
+
+/**
+ * The big SELL button. Sells part of the pile at YOUR price: the cheaper the price, the bigger the part.
+ * Buyers who say yes leave, so tapping again right away sells less until new buyers walk in.
+ */
+export function sellNow(s: GameState, p: 'wood' | 'planks', now: number, rand = Math.random): { state: GameState; result: SellResult } {
+  const stock = Math.floor(p === 'wood' ? s.wood : s.planks);
+  if (stock < 1) return { state: s, result: { sold: 0, earned: 0, why: 'empty' } };
+  const price = p === 'wood' ? s.sellPrice : s.plankPrice;
+  const want = Math.floor(stock * Math.min(1, sellShare(s.dayKey, p, price) * (0.85 + rand() * 0.3)));
+  const take = buyersWillTake(s, p, price);
+  const sold = Math.max(0, Math.min(want, take, stock));
+  if (sold < 1) return { state: s, result: { sold: 0, earned: 0, why: want < 1 ? 'price' : 'buyers' } };
+  const fx = toolFx(s);
+  const earned = sold * price * moneyMult(s, now) * (1 + (p === 'wood' ? fx.woodSalePct : fx.plankSalePct));
+  const used = sold / Math.max(0.01, yesRate(s.dayKey, p, price));
+  let st: GameState = { ...s, buyerPool: { ...s.buyerPool, [p]: Math.max(0, s.buyerPool[p] - used) } };
+  st = p === 'wood'
+    ? bump({ ...st, wood: st.wood - sold, soldToday: st.soldToday + sold }, 'woodSold', sold)
+    : { ...st, planks: st.planks - sold };
+  st = recordSale(addMoney(st, earned), p, sold, earned, now);
+  return { state: st, result: { sold, earned, why: sold < want ? 'buyers' : 'ok' } };
+}
+
 export function salesPerSec(s: GameState, price = s.sellPrice, wood = s.wood) {
-  if (!s.selling) return 0;
+  if (!autoSelling(s)) return 0;
   return commodityRate(s.dayKey, 'wood', price, wood, BUYERS_PER_WOOD_IN_STOCK, s.buyers.wood);
 }
 
 export function plankSalesPerSec(s: GameState, price = s.plankPrice, planks = s.planks) {
-  if (!s.plankSelling) return 0;
+  if (!autoSellingPlanks(s)) return 0;
   return commodityRate(s.dayKey, 'planks', price, planks, BUYERS_PER_WOOD_IN_STOCK, s.buyers.planks);
 }
 
@@ -994,6 +1065,12 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
       },
     };
   }
+  if (dtSec > 0) {
+    const pool = next.buyerPool ?? { wood: 0, planks: 0 };
+    const capW = next.buyers.wood * BUYER_POOL_MINUTES * 60;
+    const capP = next.buyers.planks * BUYER_POOL_MINUTES * 60;
+    next = { ...next, buyerPool: { wood: Math.min(capW, pool.wood + next.buyers.wood * dtSec), planks: Math.min(capP, pool.planks + next.buyers.planks * dtSec) } };
+  }
   if (passive > 0) next = addWood(next, passive * dtSec).state;
   if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
 
@@ -1012,6 +1089,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     if (sold > 0 || carry !== next.sellCarry) {
       const earned = sold * next.sellPrice * moneyMult(next, now) * (1 + toolFx(next).woodSalePct);
       next = { ...next, wood: next.wood - sold, sellCarry: carry, soldToday: next.soldToday + sold };
+      next = { ...next, buyerPool: { ...next.buyerPool, wood: Math.max(0, next.buyerPool.wood - sold / Math.max(0.01, yesRate(next.dayKey, 'wood', next.sellPrice))) } };
       next = addMoney(bump(next, 'woodSold', sold), earned);
       if (sold > 0) next = recordSale(next, 'wood', sold, earned, now);
     }
@@ -1028,6 +1106,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     if (sold > 0 || carry !== next.plankCarry) {
       const earned = sold * next.plankPrice * moneyMult(next, now) * (1 + toolFx(next).plankSalePct);
       next = addMoney({ ...next, planks: next.planks - sold, plankCarry: carry }, earned);
+      next = { ...next, buyerPool: { ...next.buyerPool, planks: Math.max(0, next.buyerPool.planks - sold / Math.max(0.01, yesRate(next.dayKey, 'planks', next.plankPrice))) } };
       if (sold > 0) next = recordSale(next, 'planks', sold, earned, now);
     }
   }
@@ -1185,6 +1264,8 @@ export function migrate(s: GameState): GameState {
   if (st.owned.pendingBuildings.includes('sawmill')) st = { ...st, sawmill: { ...st.sawmill, level: Math.max(1, st.sawmill.level) }, owned: { ...st.owned, pendingBuildings: st.owned.pendingBuildings.filter((b) => b !== 'sawmill') } };
   if (st.runMoneyEarned === 0 && st.prestige.count === 0 && st.totalMoneyEarned > 0) st = { ...st, runMoneyEarned: st.totalMoneyEarned };
   if (Object.values(st.listings).some((l) => !l.saleType || !l.rivalPlan)) st = { ...st, listings: {}, listingsDay: '' }; // pre-rivals saves
+  if (typeof st.yardSeller !== 'boolean') st = { ...st, yardSeller: false };
+  if (!st.buyerPool) st = { ...st, buyerPool: { wood: st.buyers.wood * 120, planks: st.buyers.planks * 120 } };
   return { ...st, version: 2 };
 }
 
