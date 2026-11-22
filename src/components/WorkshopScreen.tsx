@@ -7,6 +7,7 @@ import {
   listForSale, sellOdds, startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost,
 } from '../game/logic';
 import { Switch } from 'react-native';
+import { EMPIRE_PACK_ID } from '../game/meta';
 import { ITEMS, WORKSHOPS, SAWMILL_LEVELS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
 import { duration, money, whole } from '../game/format';
 import { haptic } from '../services/haptics';
@@ -207,6 +208,11 @@ function SawmillCard() {
         {cur && <Switch value={s.sawmill.on} onValueChange={(v) => { update((st) => setSawmillOn(st, v)); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Sawmill on or off" />}
       </View>
       {cur && <Text style={[styles.small, { marginTop: 6 }]}>{s.sawmill.on ? (s.wood >= PLANK_WOOD ? 'Running. Sell planks in the Market.' : 'Waiting for wood.') : 'Switched off.'}</Text>}
+      <Text style={styles.keep}>
+        {s.owned.products.includes(EMPIRE_PACK_ID)
+          ? 'From the Empire Pack: level 1 is kept forever, even after prestige. Upgrades bought with Money go back to level 1 when you prestige.'
+          : 'Built with Money: lost when you prestige, like other buildings.'}
+      </Text>
       {next && cost !== null ? (
         <Button
           style={{ marginTop: 8 }}
@@ -281,6 +287,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: C.cream },
   content: { padding: 14, gap: 10, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },
+  keep: { fontSize: 11.5, fontWeight: '800', color: C.goldDark, marginTop: 6 },
   section: { fontSize: 18, fontWeight: '900', color: C.forest, marginTop: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bigIcon: { fontSize: 40, width: 54, textAlign: 'center' },

@@ -9,6 +9,8 @@ import {
 } from './logic';
 import { money as fmtMoney, whole } from './format';
 
+export const EMPIRE_PACK_ID = 'com.lumberempire.megapack';
+
 // ---------- daily login rewards (rolling: a missed day pauses, never resets) ----------
 
 export function canClaimLogin(s: GameState, now: number) {
@@ -168,10 +170,13 @@ export function doPrestige(s: GameState, now: number): GameState | null {
   // Tools bought with Gold (Golden Chainsaw) are kept forever; Money-bought tools reset.
   const kept: GameState['tools'] = {};
   for (const [id, t] of Object.entries(s.tools)) if (t.keep) kept[id] = { durability: 100, chopWear: 0, minuteWear: 0, keep: true };
+  // Sawmill (section 23): from the Empire Pack = level 1 kept forever (Money upgrades reset to 1); built with Money = reset.
+  const packMill = s.owned.products.includes(EMPIRE_PACK_ID);
   const st: GameState = {
     ...s,
     ...freshRun(now),
     tools: kept,
+    sawmill: packMill ? { level: 1, on: s.sawmill.on } : { level: 0, on: true },
     boosts: s.boosts,
     prestige: { count: s.prestige.count + 1, mult },
   };

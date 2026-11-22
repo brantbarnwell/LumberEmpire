@@ -251,4 +251,10 @@ ok(plankCutRate(setSawmillOn(sm2, false)!) === 0, 'Sawmill can be switched off')
 let emp = grantProduct(newGame(MON), 'com.lumberempire.megapack', 'e1', MON)!;
 ok(emp.sawmill.level === 1 && !emp.owned.pendingBuildings.includes('sawmill'), 'Empire Pack gives the Sawmill');
 
+let pm = { ...grantProduct(newGame(MON), 'com.lumberempire.megapack', 'e2', MON)!, money: 1e7, runMoneyEarned: PRESTIGE_AT };
+pm = upgradeSawmill(upgradeSawmill(pm)!)!;
+ok(pm.sawmill.level === 3 && doPrestige(pm, MON)!.sawmill.level === 1, 'Empire Pack Sawmill: upgrades reset to level 1 on prestige, level 1 kept');
+let mm = upgradeSawmill({ ...newGame(MON), money: 1e7, runMoneyEarned: PRESTIGE_AT })!;
+ok(doPrestige(mm, MON)!.sawmill.level === 0, 'Sawmill built with Money: lost on prestige');
+
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

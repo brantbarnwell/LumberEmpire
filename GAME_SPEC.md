@@ -351,5 +351,14 @@ Muse's own section is the source of truth; this is what the code does.
 - Manager wage $1,000 per hour while he is switched on (nothing while off), paid automatically. If you can't pay, the amount owed adds up and he pauses selling and collecting until it is paid (pays itself as soon as you have the Money). Owed amount shown in the Helpers tab.
 - He sells planks too, same 80% yard rule, at your plank price. Still no furniture, no bulk orders.
 - Trade-off: with half the extra buyers he can't keep up with a full crew alone any more (selling paused: he sold 168,536 wood but the yard still filled).
-- Sawmill (Buildings tab, renamed from Workshop): turns 2 wood into 1 plank. Level 1 $25,000 = 10 planks/sec, level 2 $100,000 = 25, level 3 $400,000 = 60, level 4 $1.5M = 150, level 5 $6M = 400 (Cut planks by hand = 2). Upgrades are instant. On/off switch. The Empire Pack gives level 1. Resets on prestige like other buildings (the pack's Sawmill is not given again).
+- Sawmill (Buildings tab, renamed from Workshop): turns 2 wood into 1 plank. Level 1 $25,000 = 10 planks/sec, level 2 $100,000 = 25, level 3 $400,000 = 60, level 4 $1.5M = 150, level 5 $6M = 400 (Cut planks by hand = 2). Upgrades are instant. On/off switch. The Empire Pack gives level 1. Prestige rule: see section 23.
 - The game is now complete per the spec. No new features after this.
+
+
+## 23. Part 8 fix - Sawmill and prestige (from Brant, Nov 21 2026)
+
+- Sawmill from the Empire Pack: level 1 is kept forever, even after prestige. Upgrades bought with Money go back to level 1.
+- Sawmill built with Money only: lost on prestige, like other buildings.
+- Shown in plain words on the Sawmill card in the Buildings tab.
+- Manager bargain-hunter fix kept: high pricing loses to the best-price tip.
+- The game is complete per the spec. No new features.
