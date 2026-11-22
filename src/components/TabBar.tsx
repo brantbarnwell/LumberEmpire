@@ -6,7 +6,7 @@ export type Tab = 'chop' | 'upgrades' | 'helpers' | 'land' | 'workshop' | 'goals
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'chop', icon: '🪓', label: 'Chop' },
-  { id: 'upgrades', icon: '⚒️', label: 'Axes' },
+  { id: 'upgrades', icon: '⚒️', label: 'Tools' },
   { id: 'helpers', icon: '👷', label: 'Helpers' },
   { id: 'land', icon: '🗺️', label: 'Land' },
   { id: 'workshop', icon: '🛖', label: 'Workshop' },

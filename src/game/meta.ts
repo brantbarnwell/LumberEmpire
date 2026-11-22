@@ -4,7 +4,7 @@ import {
   DAILY_QUEST_MONEY_MIN, DAILY_REWARDS, GOLD_REPAIR_ALL, GOLD_SHOP, PRESTIGE_AT, QuestDef, WEEKLY_QUESTS, WEEKLY_QUEST_GOLD,
 } from './data';
 import {
-  GameState, Quest, addBoost, addMoney, dayKeyOf, freshRun, hash, incomePerMin, marketPriceFor, reapplyOwnedPacks,
+  GameState, Quest, addBoost, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
   weekKeyOf, woodPerMinEstimate,
 } from './logic';
 import { money as fmtMoney, whole } from './format';
@@ -144,9 +144,10 @@ export function buyGoldItem(s: GameState, id: string, now: number): GameState | 
   return { ...s, gold: s.gold - it.gold, boosts: addBoost(s.boosts, it.kind, 2, it.hours, now, 'gold') };
 }
 
+/** Spec: 10 Gold repairs the axe and every tool to 100%, no Money. */
 export function goldRepair(s: GameState): GameState | null {
-  if (s.axeDurability >= 100 || s.gold < GOLD_REPAIR_ALL) return null;
-  return { ...s, gold: s.gold - GOLD_REPAIR_ALL, axeDurability: 100, chopsSinceWear: 0 };
+  if (repairAllCost(s) === 0 || s.gold < GOLD_REPAIR_ALL) return null;
+  return fixEverything({ ...s, gold: s.gold - GOLD_REPAIR_ALL });
 }
 
 // ---------- prestige ----------
@@ -160,7 +161,7 @@ export function canPrestige(s: GameState) {
   return s.runMoneyEarned >= PRESTIGE_AT;
 }
 
-/** Resets the run. Keeps Gold, purchases, VIP, streaks, quests and stats. Wood output gets faster for good. */
+/** Resets the run (incl. tools, storage, wages). Keeps Gold, purchases, VIP, streaks, quests, stats. Wood output gets faster for good. */
 export function doPrestige(s: GameState, now: number): GameState | null {
   if (!canPrestige(s)) return null;
   const mult = s.prestige.mult + prestigeGain(s);
@@ -170,7 +171,6 @@ export function doPrestige(s: GameState, now: number): GameState | null {
     boosts: s.boosts,
     prestige: { count: s.prestige.count + 1, mult },
   };
-  st = reapplyOwnedPacks(st);
   return st;
 }
 

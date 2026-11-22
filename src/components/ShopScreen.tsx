@@ -164,10 +164,10 @@ export function ShopScreen() {
       ))}
       <Card style={styles.packCard}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.packTitle}>Instant axe repair</Text>
-          <Text style={styles.perk}>Back to 100% with no Money cost. You can always repair with Money too.</Text>
+          <Text style={styles.packTitle}>Instant repair: axe + all tools</Text>
+          <Text style={styles.perk}>Everything back to 100% with no Money cost. You can always repair with Money too.</Text>
         </View>
-        <Button small variant="gold" label={`${GOLD_REPAIR_ALL} Gold`} disabled={s.gold < GOLD_REPAIR_ALL || s.axeDurability >= 100}
+        <Button small variant="gold" label={`${GOLD_REPAIR_ALL} Gold`} disabled={s.gold < GOLD_REPAIR_ALL || goldRepair(s) === null}
           onPress={() => { if (update((st) => goldRepair(st))) { haptic.success(); setMsg({ kind: 'ok', text: 'Axe repaired!' }); } }} />
       </Card>
 
@@ -184,8 +184,8 @@ export function ShopScreen() {
               {p.perks.map((k) => (
                 <Text key={k} style={styles.perk}>• {k}</Text>
               ))}
-              {(p.grant.helpers || p.grant.buildings || p.grant.land) && (
-                <Text style={styles.small}>Helpers, buildings and land are saved to your account and added when those parts of the game open.</Text>
+              {p.grant.buildings && (
+                <Text style={styles.small}>The Sawmill is saved to your account and added when Buildings open.</Text>
               )}
             </View>
             {owned ? (

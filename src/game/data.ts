@@ -48,14 +48,17 @@ export const BUYERS_PER_WOOD_IN_STOCK = 0.02; // more wood in the yard draws mor
 export const OFFLINE_MAX_HOURS = 8; // spec Part 3: keep 8 hour cap
 export const OFFLINE_RATE = 0.5; // spec Part 3: helpers and land work at 50% while you are away
 
-// Empire ranks (spec section 10). Thresholds are total Money earned, +20% in Balance v2. BALANCE
+// Empire ranks (spec section 10). Total Money earned, all time. Top rank matches prestige at $200M (Part 4).
 export const RANKS = [
   { name: 'Solo Lumberjack', at: 0 },
   { name: 'Sawmill Owner', at: 1_200 },
   { name: 'Logging Company', at: 30_000 },
   { name: 'Timber Business', at: 300_000 },
   { name: 'Lumber Empire', at: 1_200_000 },
-  { name: 'Global Timber Tycoon', at: 12_000_000 },
+  { name: 'Timber Magnate', at: 12_000_000 },
+  { name: 'National Lumber Co.', at: 40_000_000 },
+  { name: 'International Timber Group', at: 100_000_000 },
+  { name: 'Global Timber Tycoon', at: 200_000_000 },
 ];
 
 export const VIP_DAILY_GOLD = 100; // spec
@@ -72,7 +75,8 @@ export interface Grant {
   moneyBoost?: { mult: number; hours: number };
   helpers?: number; // stored now, handed out when the Helpers tab is built
   buildings?: string[]; // stored now, handed out when Buildings are built
-  land?: string[]; // stored now, handed out when the Land tab is built
+  land?: string[]; // old pack design, no longer used
+  landIfMissing?: { id: string; elseGold: number }; // Land Baron Pack
   noAds?: boolean;
 }
 
@@ -105,8 +109,8 @@ export const PRODUCTS: ShopProduct[] = [
   },
   {
     id: 'com.lumberempire.propack', kind: 'pack', title: 'Pro Logger Pack', usd: '$19.99',
-    perks: ['2,500 Gold', 'Diamond Axe', '3 helpers', '2x Money for 7 days'],
-    grant: { gold: 2500, axeId: 'diamond', helpers: 3, moneyBoost: { mult: 2, hours: 24 * 7 } },
+    perks: ['2,500 Gold', 'Diamond Axe skin (looks only, keeps your axe stats)', '2x Money for 7 days'],
+    grant: { gold: 2500, skins: ['diamond-axe-skin'], moneyBoost: { mult: 2, hours: 24 * 7 } },
   },
   {
     id: 'com.lumberempire.megapack', kind: 'pack', title: 'Empire Pack', usd: '$49.99',
@@ -115,8 +119,8 @@ export const PRODUCTS: ShopProduct[] = [
   },
   {
     id: 'com.lumberempire.landpack', kind: 'pack', title: 'Land Baron Pack', usd: '$29.99',
-    perks: ['Redwood Forest unlocked', '1,000 Gold', '10 helpers'],
-    grant: { gold: 1000, land: ['redwood'], helpers: 10 },
+    perks: ['1,000 Gold', '2x Wood for 7 days', 'Small Clearing land (or +500 Gold if you own it)'],
+    grant: { gold: 1000, woodBoost: { mult: 2, hours: 24 * 7 }, landIfMissing: { id: 'clearing', elseGold: 500 } },
   },
   {
     id: 'com.lumberempire.noads', kind: 'pack', title: 'Remove Ads', usd: '$4.99',
@@ -252,7 +256,7 @@ export const GOLD_SHOP = [
   { id: 'wood24h', title: '2x Wood for 24 hours', gold: 150, kind: 'wood' as const, hours: 24 },
   { id: 'money1h', title: '2x Money for 1 hour', gold: 20, kind: 'money' as const, hours: 1 },
 ];
-export const GOLD_REPAIR_ALL = 10; // spec
+export const GOLD_REPAIR_ALL = 10; // spec: repairs the axe and every tool
 
 // 7-day login rewards. Money is "minutes of your income". BALANCE
 export const DAILY_REWARDS: { money?: number; gold?: number; boostMin?: number; big?: boolean }[] = [
@@ -296,3 +300,61 @@ export const PRESTIGE_NAME = 'Timber Baron';
 // Push notifications
 export const NOTIF_QUIET_START = 21; // 9pm
 export const NOTIF_QUIET_END = 9; // 9am
+
+// ======================= PART 4: tools, wages, storage =======================
+
+export const AXE_SKINS: Record<string, { name: string; head: string }> = {
+  'steel-axe-skin': { name: 'Steel', head: '#d7e1ea' },
+  'diamond-axe-skin': { name: 'Diamond', head: '#7fe3f0' },
+};
+
+export interface ToolDef {
+  id: string; name: string; cost: number; icon: string; effect: string;
+  chopPct?: number; // more wood per player chop
+  chopFlat?: number; // + wood per player chop
+  helperPct?: number; // more wood from helpers
+  passiveFlat?: number; // + wood/sec
+  needsHelpers?: boolean; // only works if you have helpers
+  woodSalePct?: number; // more Money from selling wood
+  craftSalePct?: number; // more Money from selling crafted items
+  fellsTrees?: boolean; // each chop fells the whole tree
+  wearChops?: number; // loses 1% every N player chops
+  wearMinutes?: number; // loses 1% every N minutes while working
+  repairCost: number; // Money for 0% -> 100%
+}
+// Section 7 prices +20% (Balance v2). Wear: Chainsaw 10 chops and Harvester 5 uses are from the spec.
+// Repair: Chainsaw $300, Logging Truck $1,200, Harvester $6,000 are spec examples +20%. Everything else BALANCE.
+export const TOOLS: ToolDef[] = [
+  { id: 'sharpstone', name: 'Sharpening Stone', cost: 120, icon: '🪨', effect: '+10% wood per chop', chopPct: 0.1, wearChops: 25, repairCost: 24 },
+  { id: 'handsaw', name: 'Hand Saw', cost: 360, icon: '🪚', effect: '+1 wood per chop', chopFlat: 1, wearChops: 20, repairCost: 60 },
+  { id: 'handle', name: 'Heavy Duty Axe Handle', cost: 960, icon: '🦯', effect: '+20% chop speed (you and helpers)', chopPct: 0.2, helperPct: 0.2, wearChops: 20, wearMinutes: 20, repairCost: 150 },
+  { id: 'chainsaw', name: 'Chainsaw', cost: 1_800, icon: '⚙️', effect: '+5 wood per chop, +20% chop speed', chopFlat: 5, chopPct: 0.2, helperPct: 0.2, wearChops: 10, wearMinutes: 15, repairCost: 300 },
+  { id: 'splitter', name: 'Log Splitter', cost: 6_000, icon: '🪓', effect: '2x Money from selling crafted items', craftSalePct: 1, wearMinutes: 30, repairCost: 720 },
+  { id: 'chipper', name: 'Wood Chipper', cost: 14_400, icon: '🌀', effect: '+15% wood from every chop (you and helpers)', chopPct: 0.15, helperPct: 0.15, wearChops: 15, wearMinutes: 20, repairCost: 1_200 },
+  { id: 'truck', name: 'Logging Truck', cost: 30_000, icon: '🚚', effect: '+50% Money from selling wood', woodSalePct: 0.5, wearMinutes: 15, repairCost: 1_200 },
+  { id: 'crane', name: 'Crane', cost: 90_000, icon: '🏗️', effect: '+100 wood/sec (needs helpers)', passiveFlat: 100, needsHelpers: true, wearMinutes: 15, repairCost: 3_600 },
+  { id: 'harvester', name: 'Harvester Machine', cost: 240_000, icon: '🚜', effect: '+500 wood/sec, every chop fells the whole tree', passiveFlat: 500, fellsTrees: true, wearChops: 5, wearMinutes: 10, repairCost: 6_000 },
+];
+// Golden Chainsaw (Gold only, +100 wood per chop) is NOT built: it is power bought with Gold, which clashes with
+// "sell time, not power". Waiting on Brant / Muse.
+
+// Helper wages per hour (Part 4), +10% per helper level. Unpaid = helpers at 50% until paid.
+export const HELPER_WAGES: Record<string, number> = {
+  apprentice: 50, lumberjack: 150, veteran: 500, feller: 1_500, master: 5_000, crew: 20_000,
+};
+export const WAGE_LEVEL_GROWTH = 0.1;
+export const UNPAID_HELPER_SPEED = 0.5;
+
+// Wood storage (Part 4). Starts at 10,000. A full yard caps how fast wood sells, so storage is the main brake on day 2.
+export const STORAGE_LEVELS = [
+  { cap: 10_000, cost: 0 },
+  { cap: 25_000, cost: 390_000 },
+  { cap: 60_000, cost: 900_000 },
+  { cap: 150_000, cost: 2_340_000 },
+  { cap: 400_000, cost: 6_600_000 },
+  { cap: 1_000_000, cost: 15_600_000 },
+  { cap: 2_500_000, cost: 39_000_000 },
+  { cap: 6_000_000, cost: 90_000_000 },
+  { cap: 15_000_000, cost: 234_000_000 },
+  { cap: 40_000_000, cost: 648_000_000 },
+]; // each upgrade costs about 3 hours of the extra wood sales it allows. BALANCE

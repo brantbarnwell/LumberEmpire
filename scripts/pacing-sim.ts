@@ -3,9 +3,10 @@
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
   makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
+  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
-import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS } from '../src/game/data';
+import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
 
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -13,6 +14,10 @@ const T0 = new Date(2026, 10, 23, 10, 0, 0).getTime(); // a Monday morning (no T
 
 function upkeep(s: GameState) {
   if (s.axeDurability < 50 && s.money >= repairCost(s, 100)) s = repair(s, 100) ?? s;
+  const worn = Object.values(s.tools).some((t) => t.durability < 50);
+  if (worn && s.money >= repairAllCost(s)) s = repairAll(s) ?? s;
+  const sc = storageUpgradeCost(s);
+  if (s.wood > storageCap(s) * 0.85 && sc !== null && s.money >= sc) s = buyStorage(s) ?? s;
   return s;
 }
 
@@ -90,6 +95,17 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
     if (!s.lands[l.id]) opts.push({ cost: l.asking, gain: l.woodPerSec, buy: () => buyLandAtAsking(s, l.id, now) });
     else for (const u of LAND_UPGRADES) if (!s.lands[l.id].upgrades.includes(u.id)) opts.push({ cost: landUpgradeCost(l.id, u.id), gain: l.woodPerSec * u.bonus, buy: () => buyLandUpgrade(s, l.id, u.id) });
   }
+  const helperWps = HELPERS.reduce((a, h) => a + h.woodPerSec * (s.helpers[h.id]?.count ?? 0) * (1 + 0.25 * (s.helpers[h.id]?.level ?? 0)), 0);
+  const nHelpers = Object.values(s.helpers).reduce((a, h) => a + h.count, 0);
+  for (const t of TOOLS) {
+    if (s.tools[t.id]) continue;
+    const gain = (t.chopFlat ?? 0) * 0.15 + (t.chopPct ?? 0) * 0.2 + (t.helperPct ?? 0) * helperWps
+      + (t.needsHelpers && !nHelpers ? 0 : t.passiveFlat ?? 0) + (t.woodSalePct ?? 0) * helperWps + (t.craftSalePct ? 0.01 : 0);
+    if (gain > 0) opts.push({ cost: t.cost, gain, buy: () => buyTool(s, t.id) });
+  }
+  // a full yard means more output is wasted: storage first
+  const sc = storageUpgradeCost(s);
+  if (s.wood > storageCap(s) * 0.85 && sc !== null) return { cost: sc, buy: () => buyStorage(s) };
   opts.sort((a, b) => a.cost / a.gain - b.cost / b.gain);
   return opts[0] ?? null;
 }
@@ -127,13 +143,13 @@ function days(nDays: number) {
         while (marks.length && s.runMoneyEarned >= marks[0]) hits.push(`$${marks.shift()! / 1e6}M after ${((now - T0) / 86400_000).toFixed(1)} days`);
       }
     }
-    log.push(`day ${d + 1}: earned ${Math.round(s.runMoneyEarned).toLocaleString()} this run, ${Object.values(s.helpers).reduce((a, h) => a + h.count, 0)} helpers, ${Object.keys(s.lands).length} lands`);
+    log.push(`day ${d + 1}: earned ${Math.round(s.runMoneyEarned).toLocaleString()} this run, ${Object.values(s.helpers).reduce((a, h) => a + h.count, 0)} helpers, ${Object.keys(s.lands).length} lands, ${Object.keys(s.tools).length} tools, storage ${storageCap(s).toLocaleString()}`);
   }
   return { prestigeAt, gain: gainAt, log, hits };
 }
 
 console.log('\n=== Prestige (4 sessions x 30 min a day, offline between) ===');
-const r = days(5);
+const r = days(6);
 r.log.forEach((l) => console.log(l));
 console.log('Money earned this run: ' + r.hits.join(' | '));
-console.log(`Prestige needs $${PRESTIGE_AT.toLocaleString()} earned. Reached after ${r.prestigeAt ? r.prestigeAt.toFixed(1) + ' days' : 'more than 5 days'}. Run 2 speed if taken then: ${(1 + r.gain).toFixed(1)}x`);
+console.log(`Prestige needs $${PRESTIGE_AT.toLocaleString()} earned. Reached after ${r.prestigeAt ? r.prestigeAt.toFixed(1) + ' days' : 'more than 6 days'}. Run 2 speed if taken then: ${(1 + r.gain).toFixed(1)}x`);

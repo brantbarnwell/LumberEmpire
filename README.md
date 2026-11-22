@@ -73,8 +73,9 @@ lumber-empire/
 - Part 1: Chop screen, top bar, axes and repairs, wood selling with a price slider, golden trees, Shop with App Store purchases.
 - Part 2: Helpers (hire copies, level up 10 times), Land (seller negotiation, reputation, land upgrades), Workshop (8 buildings, 24 crafted items, selling items with sell chance and time).
 - Part 3: opt-in video rewards (Welcome Back 2x, 2x wood 30 min, 5 free Gold videos a day), VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop for time boosts.
-- Typecheck, 35 logic tests, iOS bundle and web click-through all pass.
-- Not built yet: Tools tab, Market tab (bulk orders, sales graph), AI rival companies and land auctions, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
+- Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit and upgrades, ranks up to $200M.
+- Typecheck, 53 logic tests, iOS bundle and web click-through all pass.
+- Not built yet: Golden Chainsaw, Market tab (bulk orders, sales graph), AI rival companies and land auctions, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
 
 ## Testing on your iPhone
 

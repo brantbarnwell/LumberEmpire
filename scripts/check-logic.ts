@@ -2,11 +2,12 @@
 import {
   newGame, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, computeOffline, collectOffline, hireHelper, hireCost,
   levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, listForSale, woodMultFor, moneyMult,
-  passiveWoodPerSec, GameState, workshopUnlocked, addBoost,
+  passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
+  buyStorage, wagePerHour, rankInfo, repairAllCost,
 } from '../src/game/logic';
 import {
   claimLogin, canClaimLogin, rewardGoldVideo, goldVideosLeft, rewardAdBoost, canPrestige, doPrestige, ensureQuests, claimQuest,
-  questProgress,
+  questProgress, goldRepair,
 } from '../src/game/meta';
 import { outOfQuietHours, planNotification } from '../src/services/notify-plan';
 import { HELPERS, LAND, PRESTIGE_AT, PRODUCTS, WORKSHOPS } from '../src/game/data';
@@ -73,7 +74,7 @@ let b = { ...newGame(MON), boosts: addBoost([], 'wood', 2, 1, MON) };
 b = rewardAdBoost(b, MON)!;
 ok(Math.abs(woodMultFor(b, MON, 'pine') - 3) < 1e-9, 'boosts add: 2x + 2x = 3x, not 4x');
 ok(Math.abs(moneyMult({ ...newGame(MON), vipActive: true, boosts: addBoost([], 'money', 2, 1, MON) }, MON) - 3) < 1e-9, 'VIP 2x + money 2x = 3x');
-let off = computeOffline({ ...h, wood: 0, selling: false, lastSaved: MON - 20 * 3600_000 }, MON);
+let off = computeOffline({ ...h, wood: 0, selling: false, storageLevel: 9, lastSaved: MON - 20 * 3600_000 }, MON);
 ok(!!off.result && Math.abs(off.result.produced - 2.5 * 0.5 * 8 * 3600) < 1, `offline: 50% rate, 8h cap (${Math.round(off.result!.produced)} wood)`);
 let off2 = computeOffline({ ...newGame(MON), wood: 500, lastSaved: MON - 3600_000 }, MON);
 ok(!!off2.result && off2.state.money === 0 && collectOffline(off2.state, off2.result!, 2).money === off2.result!.earned * 2, 'welcome back holds Money until Collect; video doubles it');
@@ -92,7 +93,7 @@ if (chopIdx >= 0) {
 let p = { ...rich(newGame(MON)), runMoneyEarned: PRESTIGE_AT * 4, gold: 77, owned: { ...newGame(MON).owned, products: ['com.lumberempire.propack'] } };
 ok(canPrestige(p), 'prestige unlocks at the target');
 const pp = doPrestige(p, MON)!;
-ok(pp.prestige.mult === 3 && pp.money === 0 && pp.gold === 77 && pp.axeIndex === 5 && pp.helpers.apprentice.count === 3, 'prestige: 3x speed, keeps Gold and paid pack items');
+ok(pp.prestige.mult === 3 && pp.money === 0 && pp.gold === 77 && pp.axeIndex === 0 && !pp.helpers.apprentice, 'prestige: 3x speed, keeps Gold, resets run');
 ok(Math.abs(woodMultFor(pp, MON, 'pine') - 3) < 1e-9, 'prestige multiplies wood output');
 
 // notifications
@@ -101,3 +102,38 @@ ok(new Date(outOfQuietHours(nine)).getHours() === 9, 'notification at 10:30pm mo
 const plan = planNotification({ ...h, notif: { ...h.notif, lastFireDay: '2026-11-24' } }, new Date(2026, 10, 24, 1).getTime())!;
 ok(new Date(plan.at).getDate() !== 24 && new Date(plan.at).getHours() >= 9 && new Date(plan.at).getHours() < 21, 'max 1 notification a day, outside quiet hours');
 ok(/logs/.test(plan.body), `personal message: "${plan.body}"`);
+
+// ---- Part 4 ----
+let pro = grantProduct(newGame(MON), 'com.lumberempire.propack', 'p1', MON)!;
+ok(pro.gold === 2500 && pro.axeIndex === 0 && pro.owned.skins.includes('diamond-axe-skin') && moneyMult(pro, MON) === 2, 'Pro Logger Pack: 2500 Gold, Diamond skin only, 2x Money');
+let baron = grantProduct(newGame(MON), 'com.lumberempire.landpack', 'l1', MON)!;
+ok(baron.gold === 1000 && !!baron.lands.clearing && !baron.lands.redwood && helperCountOf(baron) === 0 && woodMultFor(baron, MON, 'pine') === 2, 'Land Baron Pack: 1000 Gold, Small Clearing, 2x Wood, no Redwood or helpers');
+let baron2 = grantProduct({ ...newGame(MON), lands: { clearing: { upgrades: [], paid: 3000 } } }, 'com.lumberempire.landpack', 'l2', MON)!;
+ok(baron2.gold === 1500, 'Land Baron Pack: +500 Gold if Small Clearing is already owned');
+
+let t = buyTool(rich(newGame(MON)), 'chainsaw')!;
+ok(Math.abs(woodPerChop(t, MON) - (0.8 + 5) * 1.2) < 1e-9, 'Chainsaw: +5 wood per chop and +20%');
+for (let i = 0; i < 10 * 60; i++) t = chop(t, MON, () => 0.5).state;
+ok(t.tools.chainsaw.durability === 40 && Math.abs(toolFx(t).chopFlat - 5 * 0.75) < 1e-9, 'Chainsaw wears 1% per 10 chops and works at 75% when worn');
+ok(toolRepairCost(t, 'chainsaw', 100) === 180 && repairTool(t, 'chainsaw', 100)!.tools.chainsaw.durability === 100, 'Chainsaw repair costs Money ($300 for a full 0-100%)');
+let brk = { ...t, axeDurability: 100, tools: { chainsaw: { durability: 0, chopWear: 0, minuteWear: 0 } } };
+ok(toolFx(brk).chopFlat === 0, 'broken tool gives nothing');
+ok(goldRepair({ ...brk, gold: 10 })!.tools.chainsaw.durability === 100 && goldRepair({ ...newGame(MON), gold: 10 }) === null, '10 Gold repairs everything');
+ok(repairAllCost(brk) === 300, 'Repair All cost adds up tools and axe');
+
+let wg = hireHelper(hireHelper(rich(newGame(MON)), 'apprentice')!, 'lumberjack')!;
+ok(wagePerHour(wg) === 200, 'wages: Apprentice $50 + Lumberjack $150 per hour');
+ok(Math.abs(wagePerHour(levelHelper(wg, 'apprentice')!) - 205) < 1e-9, 'wages +10% per helper level');
+let paid = tick({ ...wg, money: 1000, selling: false }, 3600, MON);
+ok(Math.abs(paid.money - 800) < 1e-6 && paid.wagesOwed === 0, 'wages are paid from Money over time');
+let broke = tick({ ...wg, money: 0, selling: false }, 60, MON);
+ok(broke.wagesOwed > 0 && Math.abs(passiveWoodPerSec(broke, MON) - 3.5) < 1e-9 && helperCountOf(broke) === 2, "can't pay: helpers at 50%, nobody quits");
+ok(tick({ ...broke, money: 100 }, 1, MON).wagesOwed === 0, 'owed wages paid as soon as you have the Money');
+
+let st = { ...newGame(MON), wood: 9999.5, selling: false };
+ok(storageCap(st) === 10000 && chop(st, MON, () => 0.5).state.wood === 10000 && chop({ ...st, wood: 10000 }, MON, () => 0.5).result.storageFull, 'storage starts at 10,000 and full storage stops chopping');
+ok(tick({ ...wg, wood: 10000, selling: false }, 60, MON).wood === 10000, 'full storage stops helpers too');
+ok(storageCap(buyStorage(rich(newGame(MON)))!) === 25000, 'storage upgrade costs Money and raises the cap');
+ok(rankInfo(200_000_000).name === 'Global Timber Tycoon' && rankInfo(50_000_000).name === 'National Lumber Co.', 'top rank is now $200M with ranks in between');
+
+function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

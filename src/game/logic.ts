@@ -6,6 +6,7 @@ import {
   HELPERS, HELPER_COPY_SCALE, HELPER_LEVEL_BONUS, HELPER_LEVEL_COST_BASE, HELPER_LEVEL_COST_GROWTH, HELPER_MAX_LEVEL,
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
+  TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
 } from './data';
 
 export interface Boost {
@@ -105,6 +106,12 @@ export interface GameState {
   notif: { asked: boolean; granted: boolean; lastFireDay: string | null; scheduledAt: number | null };
   firstWin: boolean;
   pendingOffline: OfflineResult | null; // Welcome Back money waiting to be collected
+
+  // Part 4
+  tools: Record<string, { durability: number; chopWear: number; minuteWear: number }>;
+  storageLevel: number;
+  wagesOwed: number;
+  equippedSkin: string | null;
 }
 
 export function dayKeyOf(now: number) {
@@ -143,6 +150,9 @@ export function freshRun(now: number) {
     listingsDay: '',
     landGoneUntil: {} as Record<string, number>,
     workshop: { level: -1, buildingTo: null, buildDoneAt: null, queue: [], inventory: {}, forSale: [], history: [], nextSaleId: 1 } as GameState['workshop'],
+    tools: {} as GameState['tools'],
+    storageLevel: 0,
+    wagesOwed: 0,
   };
 }
 
@@ -175,6 +185,7 @@ export function newGame(now = Date.now()): GameState {
     notif: { asked: false, granted: false, lastFireDay: null, scheduledAt: null },
     firstWin: false,
     pendingOffline: null,
+    equippedSkin: null,
     ...freshRun(now),
   };
 }
@@ -266,7 +277,152 @@ export function woodPerChop(s: GameState, now: number) {
   const axe = AXES[s.axeIndex];
   const p = durabilityPower(s.axeDurability);
   const base = p === 0 ? AXES[0].power : axe.power * p;
-  return base * woodMultFor(s, now, HOME_WOOD);
+  const fx = toolFx(s);
+  return (base + fx.chopFlat) * (1 + fx.chopPct) * woodMultFor(s, now, HOME_WOOD);
+}
+
+// ---------- tools ----------
+
+export function toolPower(s: GameState, id: string) {
+  const t = s.tools[id];
+  return t ? durabilityPower(t.durability) : 0;
+}
+
+/** What all your tools add up to right now (worn tools give less, broken give nothing). */
+export function toolFx(s: GameState) {
+  const fx = { chopPct: 0, chopFlat: 0, helperPct: 0, passiveFlat: 0, woodSalePct: 0, craftSalePct: 0, fellsTrees: false };
+  const hasHelpers = helperCount(s) > 0;
+  for (const d of TOOLS) {
+    const p = toolPower(s, d.id);
+    if (!p) continue;
+    fx.chopPct += (d.chopPct ?? 0) * p;
+    fx.chopFlat += (d.chopFlat ?? 0) * p;
+    fx.helperPct += (d.helperPct ?? 0) * p;
+    if (!d.needsHelpers || hasHelpers) fx.passiveFlat += (d.passiveFlat ?? 0) * p;
+    fx.woodSalePct += (d.woodSalePct ?? 0) * p;
+    fx.craftSalePct += (d.craftSalePct ?? 0) * p;
+    if (d.fellsTrees) fx.fellsTrees = true;
+  }
+  return fx;
+}
+
+export function buyTool(s: GameState, id: string): GameState | null {
+  const d = TOOLS.find((x) => x.id === id);
+  if (!d || s.tools[id] || s.money < d.cost) return null;
+  return { ...s, money: s.money - d.cost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0 } }, firstWin: true };
+}
+
+export function toolRepairCost(s: GameState, id: string, to: number) {
+  const t = s.tools[id];
+  const d = TOOLS.find((x) => x.id === id);
+  if (!t || !d) return 0;
+  const missing = Math.max(0, to - t.durability);
+  return missing === 0 ? 0 : Math.max(1, Math.ceil((d.repairCost * missing) / 100));
+}
+
+export function repairTool(s: GameState, id: string, to: number): GameState | null {
+  const cost = toolRepairCost(s, id, to);
+  if (cost === 0 || s.money < cost) return null;
+  return { ...s, money: s.money - cost, tools: { ...s.tools, [id]: { ...s.tools[id], durability: to, chopWear: 0, minuteWear: 0 } } };
+}
+
+/** Cost to repair the axe and every tool to 100%. */
+export function repairAllCost(s: GameState) {
+  return repairCost(s, 100) + Object.keys(s.tools).reduce((a, id) => a + toolRepairCost(s, id, 100), 0);
+}
+
+export function repairAll(s: GameState): GameState | null {
+  const cost = repairAllCost(s);
+  if (cost === 0 || s.money < cost) return null;
+  return fixEverything({ ...s, money: s.money - cost });
+}
+
+export function fixEverything(s: GameState): GameState {
+  const tools: GameState['tools'] = {};
+  for (const id of Object.keys(s.tools)) tools[id] = { durability: 100, chopWear: 0, minuteWear: 0 };
+  return { ...s, axeDurability: 100, chopsSinceWear: 0, tools };
+}
+
+function toolInUse(s: GameState, id: string) {
+  const d = TOOLS.find((x) => x.id === id)!;
+  if (d.woodSalePct) return s.selling && s.wood >= 1;
+  if (d.craftSalePct) return s.workshop.forSale.length > 0;
+  if (d.helperPct || d.needsHelpers) return helperCount(s) > 0;
+  return true;
+}
+
+function wearTools(s: GameState, chops: number, minutes: number): GameState {
+  let changed = false;
+  const tools = { ...s.tools };
+  for (const d of TOOLS) {
+    const t = tools[d.id];
+    if (!t || t.durability <= 0) continue;
+    let { durability, chopWear, minuteWear } = t;
+    if (chops && d.wearChops) {
+      chopWear += chops;
+      while (chopWear >= d.wearChops && durability > 0) { chopWear -= d.wearChops; durability -= 1; }
+    }
+    if (minutes && d.wearMinutes && toolInUse(s, d.id)) {
+      minuteWear += minutes;
+      while (minuteWear >= d.wearMinutes && durability > 0) { minuteWear -= d.wearMinutes; durability -= 1; }
+    }
+    if (durability !== t.durability || chopWear !== t.chopWear || minuteWear !== t.minuteWear) {
+      tools[d.id] = { durability: Math.max(0, durability), chopWear, minuteWear };
+      changed = true;
+    }
+  }
+  return changed ? { ...s, tools } : s;
+}
+
+// ---------- storage ----------
+
+export function storageCap(s: GameState) {
+  return STORAGE_LEVELS[Math.min(s.storageLevel, STORAGE_LEVELS.length - 1)].cap;
+}
+
+export function storageUpgradeCost(s: GameState) {
+  return STORAGE_LEVELS[s.storageLevel + 1]?.cost ?? null;
+}
+
+export function buyStorage(s: GameState): GameState | null {
+  const cost = storageUpgradeCost(s);
+  if (cost === null || s.money < cost) return null;
+  return { ...s, money: s.money - cost, storageLevel: s.storageLevel + 1 };
+}
+
+function addWood(s: GameState, amount: number): { state: GameState; added: number } {
+  const room = Math.max(0, storageCap(s) - s.wood);
+  const added = Math.max(0, Math.min(amount, room));
+  if (added === 0) return { state: s, added };
+  return { state: { ...s, wood: s.wood + added, totalWoodChopped: s.totalWoodChopped + added }, added };
+}
+
+// ---------- wages ----------
+
+export function wagePerHour(s: GameState) {
+  let w = 0;
+  for (const h of HELPERS) {
+    const o = s.helpers[h.id];
+    if (o?.count) w += o.count * HELPER_WAGES[h.id] * (1 + WAGE_LEVEL_GROWTH * o.level);
+  }
+  return w;
+}
+
+export function helperWageSpeed(s: GameState) {
+  return s.wagesOwed > 0 ? UNPAID_HELPER_SPEED : 1;
+}
+
+function payWages(s: GameState, dtSec: number): GameState {
+  const rate = wagePerHour(s);
+  if (rate === 0 && s.wagesOwed === 0) return s;
+  const due = s.wagesOwed + (rate * dtSec) / 3600;
+  if (s.money >= due) return { ...s, money: s.money - due, wagesOwed: 0 };
+  return { ...s, wagesOwed: due };
+}
+
+export function equipSkin(s: GameState, id: string | null): GameState | null {
+  if (id !== null && (!s.owned.skins.includes(id) || !AXE_SKINS[id])) return null;
+  return { ...s, equippedSkin: id };
 }
 
 // ---------- helpers ----------
@@ -322,7 +478,11 @@ export function landOutputBase(id: string, s: GameState) {
 export function passiveWoodPerSec(s: GameState, now: number) {
   let total = 0;
   const home = woodMultFor(s, now, HOME_WOOD);
-  for (const h of HELPERS) total += helperOutputBase(h.id, s.helpers[h.id]) * home;
+  const fx = toolFx(s);
+  let helpers = 0;
+  for (const h of HELPERS) helpers += helperOutputBase(h.id, s.helpers[h.id]);
+  total += helpers * (1 + fx.helperPct) * helperWageSpeed(s) * home;
+  total += fx.passiveFlat * home;
   for (const l of LAND) if (s.lands[l.id]) total += landOutputBase(l.id, s) * woodMultFor(s, now, l.wood);
   return total;
 }
@@ -599,7 +759,7 @@ function tickWorkshop(s: GameState, now: number): GameState {
   }
   if (w.forSale.some((x) => x.sellAt !== null && x.sellAt <= now)) {
     const sold = w.forSale.filter((x) => x.sellAt !== null && x.sellAt <= now);
-    const mm = moneyMult(st, now);
+    const mm = moneyMult(st, now) * (1 + toolFx(st).craftSalePct);
     const history = [
       ...sold.map((x) => ({ itemId: x.itemId, price: x.price * mm, minutes: Math.round((x.sellAt! - x.listedAt) / 60000), at: x.sellAt! })),
       ...w.history,
@@ -621,6 +781,7 @@ export interface ChopResult {
   newGoldenTree: boolean;
   axeBroke: boolean;
   axeLow: boolean;
+  storageFull: boolean;
 }
 
 export function chop(s: GameState, now: number, rand: () => number = Math.random): { state: GameState; result: ChopResult } {
@@ -648,7 +809,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
   let newGoldenTree = false;
   let st: GameState = s;
 
-  if (treeChops >= CHOPS_PER_TREE) {
+  if (treeChops >= CHOPS_PER_TREE || toolFx(s).fellsTrees) {
     felled = true;
     treeChops = 0;
     fellBonus = per * FELL_BONUS_CHOPS;
@@ -666,11 +827,11 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     }
   }
 
-  const gained = wood + fellBonus;
+  const added = addWood(st, wood + fellBonus);
+  st = added.state;
+  const storageFull = added.added < wood + fellBonus - 1e-9;
   st = {
-    ...st,
-    wood: st.wood + gained,
-    totalWoodChopped: st.totalWoodChopped + gained,
+    ...wearTools(st, 1, 0),
     totalChops: st.totalChops + 1,
     axeDurability: dur,
     chopsSinceWear: since,
@@ -679,7 +840,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     treesFelled: st.treesFelled + (felled ? 1 : 0),
     stats: { ...st.stats, chops: st.stats.chops + 1, felled: st.stats.felled + (felled ? 1 : 0) },
   };
-  return { state: st, result: { wood, crit, felled, fellBonus, golden, newGoldenTree, axeBroke, axeLow } };
+  return { state: st, result: { wood: storageFull ? added.added : wood, crit, felled, fellBonus: storageFull ? 0 : fellBonus, golden, newGoldenTree, axeBroke, axeLow, storageFull } };
 }
 
 export function devSpawnGolden(s: GameState, now: number): GameState {
@@ -733,11 +894,10 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
   if (next.treeGoldenUntil && next.treeGoldenUntil <= now) next = { ...next, treeGoldenUntil: null };
   if (next.boosts.some((b) => b.until <= now)) next = { ...next, boosts: next.boosts.filter((b) => b.until > now) };
 
+  next = payWages(next, dtSec);
   const passive = passiveWoodPerSec(next, now) * (offline ? OFFLINE_RATE : 1);
-  if (passive > 0) {
-    const w = passive * dtSec;
-    next = { ...next, wood: next.wood + w, totalWoodChopped: next.totalWoodChopped + w };
-  }
+  if (passive > 0) next = addWood(next, passive * dtSec).state;
+  if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
 
   const rate = salesPerSec(next);
   if (rate > 0) {
@@ -746,7 +906,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     const sold = Math.min(whole, Math.floor(next.wood));
     const carry = sold < whole ? 0 : units - whole;
     if (sold > 0 || carry !== next.sellCarry) {
-      const earned = sold * next.sellPrice * moneyMult(next, now);
+      const earned = sold * next.sellPrice * moneyMult(next, now) * (1 + toolFx(next).woodSalePct);
       next = { ...next, wood: next.wood - sold, sellCarry: carry, soldToday: next.soldToday + sold };
       next = addMoney(bump(next, 'woodSold', sold), earned);
     }
@@ -754,7 +914,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
   return tickWorkshop(next, now);
 }
 
-export interface OfflineResult { away: number; earned: number; sold: number; produced: number }
+export interface OfflineResult { away: number; earned: number; gross?: number; sold: number; produced: number } // earned = after wages
 
 /**
  * Runs the time the player was away (50% helper/land rate, 8 hour cap).
@@ -769,25 +929,28 @@ export function computeOffline(s: GameState, now: number): { state: GameState; r
   const start = now - away * 1000;
   for (let t = 0; t < away; t += step) st = tick(st, Math.min(step, away - t), start + t * 1000, true);
   st = tick(st, 0, now);
-  const earned = st.runMoneyEarned - s.runMoneyEarned;
+  const gross = st.runMoneyEarned - s.runMoneyEarned;
+  const earned = Math.max(0, Math.min(gross, st.money - s.money)); // what is left after wages
   const produced = st.totalWoodChopped - s.totalWoodChopped;
   const sold = st.stats.woodSold - s.stats.woodSold;
   // hold the Money back until collected
   st = {
     ...st,
     money: st.money - earned,
-    totalMoneyEarned: st.totalMoneyEarned - earned,
-    runMoneyEarned: st.runMoneyEarned - earned,
-    moneyToday: Math.max(0, st.moneyToday - earned),
-    stats: { ...st.stats, moneyEarned: st.stats.moneyEarned - earned },
+    totalMoneyEarned: st.totalMoneyEarned - gross,
+    runMoneyEarned: st.runMoneyEarned - gross,
+    moneyToday: Math.max(0, st.moneyToday - gross),
+    stats: { ...st.stats, moneyEarned: st.stats.moneyEarned - gross },
     lastSaved: now,
   };
   if (earned < 0.01 && produced < 1) return { state: st, result: null };
-  return { state: st, result: { away, earned, sold, produced } };
+  return { state: st, result: { away, earned, gross, sold, produced } };
 }
 
 export function collectOffline(s: GameState, r: OfflineResult, mult: number): GameState {
-  return addMoney(s, r.earned * mult);
+  const gross = r.gross ?? r.earned;
+  const st = addMoney(s, gross + r.earned * (mult - 1));
+  return { ...st, money: s.money + r.earned * mult };
 }
 
 // ---------- upgrades ----------
@@ -873,7 +1036,11 @@ export function applyGrant(s: GameState, g: Grant, now: number): GameState {
   if (g.moneyBoost) st.boosts = addBoost(st.boosts, 'money', g.moneyBoost.mult, g.moneyBoost.hours, now);
   if (g.buildings) st.owned.pendingBuildings = [...new Set([...st.owned.pendingBuildings, ...g.buildings])];
   if (g.noAds) st.owned.noAds = true;
-  return applyPackPerks(st, g);
+  if (g.landIfMissing) {
+    if (st.lands[g.landIfMissing.id]) st.gold += g.landIfMissing.elseGold;
+    else st = addLand(st, [g.landIfMissing.id]);
+  }
+  return st;
 }
 
 export function grantProduct(s: GameState, productId: string, txId: string, now: number): GameState | null {

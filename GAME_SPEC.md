@@ -53,9 +53,9 @@ Gold packs:
 
 One-time packs:
 - com.lumberempire.starterpack - Starter Pack - $4.99 - 500 Gold, Steel Axe skin, 2x Wood for 24 hours
-- com.lumberempire.propack - Pro Logger Pack - $19.99 - 2500 Gold, Diamond Axe, 3 helpers, 2x Money for 7 days
+- com.lumberempire.propack - Pro Logger Pack - $19.99 - 2500 Gold, Diamond Axe skin (looks only, keeps your current axe stats), 2x Money for 7 days
 - com.lumberempire.megapack - Empire Pack - $49.99 - 7000 Gold, Dragon Axe, Sawmill, 5x Wood for 7 days
-- com.lumberempire.landpack - Land Baron Pack - $29.99 - unlocks Redwood Forest instantly, 1000 Gold, 10 helpers
+- com.lumberempire.landpack - Land Baron Pack - $29.99 - 1000 Gold, 2x Wood for 7 days, Small Clearing if you don't own it yet (if you do, +500 Gold instead)
 - com.lumberempire.noads - Remove Ads - $4.99 - one-time, removes all ads forever
 
 Subscriptions:
@@ -178,7 +178,7 @@ Every time the player sells something, they set the price with a slider. The hig
 ## 10. Buildings and empire progression
 
 Buildings: Sawmill, Lumber Yard, Warehouse, Furniture Factory, Lumber Store, Trucking Company.
-Empire ranks: Solo Lumberjack, Sawmill Owner, Logging Company, Timber Business, Lumber Empire, Global Timber Tycoon.
+Empire ranks (total Money earned): Solo Lumberjack $0, Sawmill Owner $1,200, Logging Company $30,000, Timber Business $300,000, Lumber Empire $1.2M, Timber Magnate $12M, National Lumber Co. $40M, International Timber Group $100M, Global Timber Tycoon $200M.
 Prestige: after $1,000,000, Prestige to Timber Baron, reset progress, get permanent 2x earnings and a prestige badge.
 Crafting: turn wood into planks, then furniture, then houses for higher profit.
 Daily quests, daily login rewards, 50+ achievements, seasonal events, offline earnings.
@@ -280,3 +280,14 @@ Sell time, not power. About 5% of players pay, so the game must be fully fun for
 4. Push notifications: ask after the first upgrade, not on first launch. Max 1 a day, quiet hours 9pm to 9am, personal ("Your helpers stacked up 12,400 logs").
 5. Offline earnings: helpers and land at 50% rate, 8 hour cap.
 6. Gold shop (sells time): 2x Wood 1 hour 20 Gold, 2x Wood 24 hours 150 Gold, 2x Money 1 hour 20 Gold, instant axe repair 10 Gold, finish workshop builds and crafts at 1 Gold per 3 minutes left.
+
+
+## 18. Part 4 - packs, tools, wages, storage (from Brant, Nov 21 2026)
+
+- Packs fixed so they sell time, not power: Pro Logger Pack = 2500 Gold + Diamond Axe skin + 2x Money 7 days. Land Baron Pack = 1000 Gold + 2x Wood 7 days + Small Clearing (or +500 Gold if owned). Pack land is not given again after prestige.
+- Tools from section 7 (prices +20%) with durability: they wear by chops and/or by time while working, work at 75% at or below 50%, at 50% at or below 25%, do nothing at 0% (red wrench), repair with Money (full or to 50%), Repair All, or 10 Gold for everything.
+  - Coder choices: Stone and Hand Saw help your chops only; Axe Handle, Chainsaw and Wood Chipper also boost helpers; Log Splitter = 2x Money from crafted items (planks are not built); Logging Truck = +50% Money from wood sales; Crane = +100 wood/sec if you have helpers; Harvester = +500 wood/sec and every chop fells the tree.
+  - Not built: Golden Chainsaw (Gold-only power, clashes with "sell time, not power"), equipping tools to single helpers, Repair Shop building.
+- Helper wages per hour: Apprentice $50, Lumberjack $150, Veteran $500, Tree Feller $1,500, Master $5,000, Elite Crew $20,000, +10% per level. Paid from Money continuously (also while away). If you can't pay, helpers work at 50% until it is paid (auto-paid as soon as you have the Money). Nobody quits.
+- Wood storage starts at 10,000. Full = chopping and helpers add nothing. Upgrades: 25K $390K, 60K $900K, 150K $2.34M, 400K $6.6M, 1M $15.6M, 2.5M $39M, 6M $90M, 15M $234M, 40M $648M (BALANCE).
+- Pacing (npm run pacing): day 2 earnings about $2.5M (was $5.2M), day 3 about $32M (was $142M), prestige at $200M in about 3.3 days. First hour unchanged.

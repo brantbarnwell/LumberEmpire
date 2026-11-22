@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getState, update, useGame } from '../game/store';
 import {
-  bestPrice, boostMult, chop, demandFor, helperCount, passiveWoodPerSec, rushInfo, demandLabel, devSpawnGolden, durabilityPower, marketPriceFor,
+  bestPrice, boostMult, chop, demandFor, helperCount, passiveWoodPerSec, rushInfo, storageCap, storageUpgradeCost, buyStorage, demandLabel, devSpawnGolden, durabilityPower, marketPriceFor,
   moneyMult, repair, repairCost, salesPerSec, woodPerChop,
 } from '../game/logic';
 import { AXES, CRIT_CHANCE, CRIT_MULT, HELPERS, PRICE_MAX_FACTOR, PRICE_MIN_FACTOR, WOOD_NAMES, AD_BOOST_MINUTES } from '../game/data';
@@ -124,7 +124,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades: () => void }) {
           <View style={styles.axeRow}>
             <Text style={{ fontSize: 30 }}>🪓</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.h}>{axe.name}</Text>
+              <Text style={styles.h}>{axe.name}{s.equippedSkin ? ' ✨' : ''}</Text>
               <Text style={styles.sub}>
                 {small(woodPerChop(s, now))} wood per chop · {Math.round(CRIT_CHANCE * 100)}% crit for {CRIT_MULT}x
               </Text>
@@ -183,6 +183,7 @@ function Crew() {
         {Object.keys(s.lands).length > 0 && <Text style={{ fontSize: 22 }}>🌲🌲</Text>}
       </View>
       <Text style={styles.crewText}>Your crew and land: +{small(passiveWoodPerSec(s, Date.now()))} wood/sec</Text>
+      {s.wagesOwed > 0 && <Text style={styles.warn}>💸 Wages unpaid: helpers at half speed until you have {money(s.wagesOwed)}</Text>}
     </Card>
   );
 }
@@ -210,8 +211,22 @@ function SellPanel({ now }: { now: number }) {
   const ratio = s.sellPrice / market;
   const priceNote = ratio > 1.6 ? 'Very high price. Wood will sell slowly.' : ratio < 0.6 ? 'Very cheap. Sells fast, but you lose profit.' : null;
 
+  const cap = storageCap(s);
+  const full = s.wood >= cap;
+  const upCost = storageUpgradeCost(s);
   return (
     <Card style={styles.sellCard}>
+      <View style={styles.storeRow}>
+        <Text style={[styles.sub, full && { color: C.red }]}>{full ? 'Storage FULL: sell wood or upgrade' : 'Storage'}</Text>
+        <View style={{ flex: 1 }}>
+          <View style={styles.storeBar}><View style={{ width: `${Math.min(100, (s.wood / cap) * 100)}%`, height: '100%', borderRadius: 4, backgroundColor: full ? C.red : s.wood / cap > 0.8 ? C.gold : C.leafLight }} /></View>
+        </View>
+        <Text style={styles.tiny}>{whole(s.wood)}/{whole(cap)}</Text>
+      </View>
+      {s.wood / cap > 0.8 && upCost !== null && (
+        <Button small variant={s.money >= upCost ? 'green' : 'ghost'} label={`Bigger yard: ${money(upCost)}`} disabled={s.money < upCost}
+          onPress={() => update((st) => buyStorage(st)) && haptic.success()} />
+      )}
       <View style={styles.sellHead}>
         <Text style={styles.h}>Sell Wood</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -313,6 +328,9 @@ const styles = StyleSheet.create({
   adChip: { backgroundColor: '#2e8a3e' },
   adMsg: { textAlign: 'center', fontSize: 12, fontWeight: '800', color: C.ink, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 8, padding: 6, overflow: 'hidden' },
   crew: { paddingVertical: 8, alignItems: 'center' },
+  warn: { fontSize: 12, fontWeight: '800', color: C.red, marginTop: 3, textAlign: 'center' },
+  storeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  storeBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.1)', overflow: 'hidden' },
   crewRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4 },
   crewText: { fontSize: 12.5, fontWeight: '900', color: C.leaf, marginTop: 4 },
   boostRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },

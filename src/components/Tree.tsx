@@ -120,7 +120,7 @@ export function Tree({
     const id = nextId.current;
     nextId.current += 6;
     const x = W / 2 - 40 + Math.random() * 80;
-    const add: Floater[] = [
+    const add: Floater[] = r.storageFull ? [{ id, text: 'Storage full!', color: '#ff8a7a', size: 22, x: W / 2 - 70 }] : [
       r.crit
         ? { id, text: `CRIT! +${small(r.wood)}`, color: '#ff8a1f', size: 30, x: x - 30 }
         : { id, text: `+${small(r.wood)}`, color: C.cream, size: 24, x },

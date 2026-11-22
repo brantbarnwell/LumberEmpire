@@ -1,7 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
-import { helperCount, helperOutputBase, hireCost, hireHelper, levelCost, levelHelper, woodMultFor } from '../game/logic';
-import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HOME_WOOD } from '../game/data';
+import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor } from '../game/logic';
+import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH } from '../game/data';
 import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card } from './ui';
@@ -11,7 +11,7 @@ export function HelpersScreen() {
   const s = useGame();
   const now = Date.now();
   const mult = woodMultFor(s, now, HOME_WOOD);
-  const total = HELPERS.reduce((a, h) => a + helperOutputBase(h.id, s.helpers[h.id]), 0) * mult;
+  const total = HELPERS.reduce((a, h) => a + helperOutputBase(h.id, s.helpers[h.id]), 0) * mult * (1 + toolFx(s).helperPct) * helperWageSpeed(s);
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -20,7 +20,13 @@ export function HelpersScreen() {
         <Text style={styles.big}>{whole(helperCount(s))} helpers</Text>
         <Text style={styles.sub}>chopping {small(total)} wood/sec, even when you are not tapping</Text>
         {mult !== 1 && <Text style={[styles.sub, { color: C.leaf }]}>Boosts active: x{small(mult)}</Text>}
+        {wagePerHour(s) > 0 && <Text style={styles.sub}>Wages: {money(wagePerHour(s))} per hour, paid from your Money</Text>}
       </Card>
+      {s.wagesOwed > 0 && (
+        <Card style={styles.owe}>
+          <Text style={styles.oweText}>💸 You owe {money(s.wagesOwed)} in wages. Your helpers work at half speed until you can pay. It pays itself as soon as you have the Money.</Text>
+        </Card>
+      )}
       {HELPERS.map((h, i) => {
         const owned = s.helpers[h.id] ?? { count: 0, level: 0 };
         const hc = hireCost(s, h.id);
@@ -33,7 +39,7 @@ export function HelpersScreen() {
               <View style={styles.avatar}><Text style={{ fontSize: 30 }}>{h.icon}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{h.name}</Text>
-                <Text style={styles.sub}>{small(perOne)} wood/sec each · Level {owned.level}/{HELPER_MAX_LEVEL}</Text>
+                <Text style={styles.sub}>{small(perOne)} wood/sec each · Level {owned.level}/{HELPER_MAX_LEVEL} · wage {money(HELPER_WAGES[h.id] * (1 + WAGE_LEVEL_GROWTH * owned.level))}/hr</Text>
                 {owned.count > 0 && <Text style={styles.owned}>You have {owned.count} · {small(helperOutputBase(h.id, owned) * mult)} wood/sec total</Text>}
               </View>
             </View>
@@ -79,5 +85,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, fontWeight: '700', color: C.inkSoft },
   owned: { fontSize: 12, fontWeight: '800', color: C.leaf, marginTop: 2 },
   need: { fontSize: 11, fontWeight: '700', color: C.inkSoft, textAlign: 'right', marginTop: 4 },
+  owe: { backgroundColor: '#fde0dc', borderColor: '#f1a59a' },
+  oweText: { fontWeight: '800', color: C.ink, fontSize: 13 },
   foot: { fontSize: 11, color: C.inkSoft, fontWeight: '600', textAlign: 'center' },
 });

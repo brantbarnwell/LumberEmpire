@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../game/store';
-import { passiveWoodPerSec, rankInfo } from '../game/logic';
+import { passiveWoodPerSec, rankInfo, storageCap } from '../game/logic';
 import { money, small, whole } from '../game/format';
 import { recentWoodPerSec } from '../game/rate';
 import { GoldCoin, ProgressBar } from './ui';
@@ -37,7 +37,7 @@ export function TopBar({ onShop }: { onShop: () => void }) {
         </Pressable>
       </View>
       <View style={[styles.row, { marginTop: 6 }]}>
-        <Text style={styles.stat}>🪵 {whole(s.wood)} wood</Text>
+        <Text style={[styles.stat, s.wood >= storageCap(s) && { color: '#ff8a7a' }]}>🪵 {whole(s.wood)}/{whole(storageCap(s))}</Text>
         <Text style={styles.stat}>⚡ {small(wps + passiveWoodPerSec(s, Date.now()))}/sec</Text>
         <View style={{ flex: 1 }} />
         <Text style={styles.rank} numberOfLines={1}>🏆 {rank.name}</Text>

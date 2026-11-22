@@ -1,8 +1,11 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
-import { buyAxe, durabilityPower, repair, repairCost } from '../game/logic';
-import { AXES, CRIT_CHANCE, CRIT_MULT } from '../game/data';
-import { money, small } from '../game/format';
+import {
+  buyAxe, buyStorage, buyTool, durabilityPower, equipSkin, repair, repairAll, repairAllCost, repairCost, repairTool, storageCap,
+  storageUpgradeCost, toolPower, toolRepairCost,
+} from '../game/logic';
+import { AXES, AXE_SKINS, CRIT_CHANCE, CRIT_MULT, STORAGE_LEVELS, TOOLS } from '../game/data';
+import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card, DurabilityBar } from './ui';
 import { C } from './theme';
@@ -16,14 +19,23 @@ export function UpgradesScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.cream }} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Upgrades</Text>
+      <Text style={styles.title}>Tools</Text>
+      {repairAllCost(s) > 0 && (
+        <Button
+          variant="brown"
+          label="Repair All (axe + tools)"
+          sub={money(repairAllCost(s))}
+          disabled={s.money < repairAllCost(s)}
+          onPress={() => update((st) => repairAll(st)) && haptic.success()}
+        />
+      )}
 
       <Card>
         <Text style={styles.label}>YOUR AXE</Text>
         <View style={styles.row}>
-          <AxeIcon color={cur.head} />
+          <AxeIcon color={s.equippedSkin ? AXE_SKINS[s.equippedSkin]?.head ?? cur.head : cur.head} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{cur.name}</Text>
+            <Text style={styles.name}>{cur.name}{s.equippedSkin ? ` (${AXE_SKINS[s.equippedSkin]?.name} skin)` : ''}</Text>
             <Text style={styles.sub}>
               {small(cur.power)} wood per chop · {Math.round(CRIT_CHANCE * 100)}% crit for {CRIT_MULT}x
             </Text>
@@ -98,12 +110,71 @@ export function UpgradesScreen() {
         );
       })}
 
+      <Text style={styles.section}>Tools</Text>
+      <Text style={styles.sub}>Tools wear out as they work. Worn tools are weaker (75% at half, 50% under 25%) and broken tools do nothing until you repair them.</Text>
+      {TOOLS.map((t) => {
+        const owned = s.tools[t.id];
+        const p = toolPower(s, t.id);
+        const full = owned ? toolRepairCost(s, t.id, 100) : 0;
+        const half = owned ? toolRepairCost(s, t.id, 50) : 0;
+        return (
+          <Card key={t.id} style={[styles.axeCard, owned && owned.durability === 0 && styles.broken] as any}>
+            <View style={styles.row}>
+              <View style={[styles.icon, owned?.durability === 0 && { opacity: 0.4 }]}><Text style={{ fontSize: 24 }}>{t.icon}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{t.name}{owned?.durability === 0 ? '  🔧' : ''}</Text>
+                <Text style={styles.sub}>{t.effect}</Text>
+                {owned && (
+                  <View style={styles.durRow}>
+                    <DurabilityBar value={owned.durability} width={110} />
+                    <Text style={[styles.durText, owned.durability < 25 && { color: C.red }]}>
+                      {owned.durability}%{owned.durability === 0 ? ' BROKEN' : p < 1 ? ` · ${p * 100}% power` : ''}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {!owned && (
+                <Button small variant={s.money >= t.cost ? 'green' : 'ghost'} label={money(t.cost)} disabled={s.money < t.cost}
+                  onPress={() => update((st) => buyTool(st, t.id)) && haptic.success()} />
+              )}
+            </View>
+            {owned && full > 0 && (
+              <View style={[styles.row, { marginTop: 8 }]}>
+                <Button style={{ flex: 1 }} small variant={owned.durability < 25 ? 'red' : 'brown'} label="Repair to 100%" sub={money(full)}
+                  disabled={s.money < full} onPress={() => update((st) => repairTool(st, t.id, 100)) && haptic.success()} />
+                {half > 0 && (
+                  <Button style={{ flex: 1 }} small variant="ghost" label="Repair to 50%" sub={money(half)}
+                    disabled={s.money < half} onPress={() => update((st) => repairTool(st, t.id, 50)) && haptic.success()} />
+                )}
+              </View>
+            )}
+          </Card>
+        );
+      })}
+
+      <Text style={styles.section}>Wood storage</Text>
+      <Card>
+        <Text style={styles.name}>🏚️ Holds {whole(storageCap(s))} wood</Text>
+        <Text style={styles.sub}>When it is full, chopping and helpers stop adding wood until you sell some or upgrade. A bigger yard also lets you sell faster.</Text>
+        {storageUpgradeCost(s) !== null ? (
+          <Button style={{ marginTop: 8 }} variant={s.money >= storageUpgradeCost(s)! ? 'green' : 'ghost'}
+            label={`Upgrade to ${whole(STORAGE_LEVELS[s.storageLevel + 1].cap)} wood`} sub={money(storageUpgradeCost(s)!)}
+            disabled={s.money < storageUpgradeCost(s)!} onPress={() => update((st) => buyStorage(st)) && haptic.success()} />
+        ) : <Text style={[styles.sub, { marginTop: 6 }]}>Biggest yard reached!</Text>}
+      </Card>
+
       {s.owned.exclusiveAxes.length + s.owned.skins.length > 0 && (
         <>
           <Text style={styles.section}>Your special items</Text>
           <Card>
             {s.owned.exclusiveAxes.includes('dragon') && <Text style={styles.item}>🐉 Dragon Axe (Gold exclusive)</Text>}
-            {s.owned.skins.includes('steel-axe-skin') && <Text style={styles.item}>✨ Steel Axe skin</Text>}
+            {s.owned.skins.filter((k) => AXE_SKINS[k]).map((k) => (
+              <View key={k} style={[styles.row, { paddingVertical: 4 }]}>
+                <Text style={[styles.item, { flex: 1 }]}>✨ {AXE_SKINS[k].name} Axe skin (looks only)</Text>
+                <Button small variant={s.equippedSkin === k ? 'ghost' : 'gold'} label={s.equippedSkin === k ? 'Take off' : 'Use'}
+                  onPress={() => update((st) => equipSkin(st, st.equippedSkin === k ? null : k))} />
+              </View>
+            ))}
           </Card>
         </>
       )}
@@ -132,6 +203,7 @@ const styles = StyleSheet.create({
   durText: { fontSize: 12, fontWeight: '900', color: C.inkSoft },
   axeCard: { paddingVertical: 10 },
   current: { borderColor: C.leafLight, borderWidth: 2 },
+  broken: { borderColor: C.red, borderWidth: 2 },
   equipped: { color: C.leaf, fontWeight: '900' },
   ownedText: { color: C.inkSoft, fontWeight: '800' },
   need: { fontSize: 11, color: C.inkSoft, fontWeight: '700', textAlign: 'right', marginTop: 4 },
