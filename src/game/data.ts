@@ -396,3 +396,24 @@ export const BULK_BUYERS = ['BuildRight Homes', 'Cabin Co.', 'Fireside Fuel', 'M
 export const BULK_ORDERS_PER_DAY = 2;
 export const BULK_COUNTER_BONUS = 0.1;
 export const BULK_COUNTER_CHANCE = 0.5;
+
+// ======================= PART 6: AI rivals and land auctions (section 8) =======================
+// Rivals are bots, never real people.
+export type RivalStyle = 'fast' | 'sniper' | 'steady' | 'cautious';
+export const RIVALS: { name: string; style: RivalStyle; budget: number; blurb: string }[] = [
+  { name: 'Timber Titans Inc', style: 'fast', budget: 1.25, blurb: 'Rich and bids fast' },
+  { name: 'Redwood Corp', style: 'sniper', budget: 1.15, blurb: 'Waits until the last seconds' },
+  { name: 'Big Pine Logging', style: 'steady', budget: 1.0, blurb: 'Bids steady, stops at a fair price' },
+  { name: 'Mountain Wood Co.', style: 'cautious', budget: 0.9, blurb: 'Careful, only likes a bargain' },
+]; // budget = how far over asking they will go (x0.85 to x1.15 each time). BALANCE
+
+export const AUCTION_CHANCE = 0.4; // share of daily listings that are auctions (never the Small Clearing). BALANCE
+export const AUCTION_SECONDS = 60; // spec
+export const AUCTION_OUTBID_SECONDS = 10; // spec: after a rival outbids you, you get at least 10 seconds
+export const AUCTION_START = 0.5; // opening bid = 50% of asking. BALANCE
+export const AUCTION_STEP = 0.02; // each bid is at least +2% of asking. BALANCE
+export const RIVAL_FREE_LAND = ['clearing']; // rivals ignore the first small plot so new players are not blocked
+// First come, first served: rivals make 1-3 offers over the next hours, then the top one buys if you have not.
+export const RIVAL_FIRST_OFFER_MIN = [60, 180]; // minutes after the listing appears. BALANCE
+export const RIVAL_BUY_AFTER_MIN = [120, 300]; // minutes after their last offer. BALANCE
+export const GOLDEN_CHAINSAW_ID = 'goldchainsaw';

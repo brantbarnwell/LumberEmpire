@@ -6,6 +6,7 @@ import {
   buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed, salesPerSec,
 } from '../src/game/logic';
 import { demandOf, shownChance, timeToSell, marketPriceOf, bestCommodityPrice } from '../src/game/market';
+import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import {
   claimLogin, canClaimLogin, rewardGoldVideo, goldVideosLeft, rewardAdBoost, canPrestige, doPrestige, ensureQuests, claimQuest,
   questProgress, goldRepair,
@@ -166,5 +167,49 @@ let gc = buyTool(rich(newGame(MON)), 'goldchainsaw')!;
 ok(gc.money === 1e9 - 500_000 && Math.abs(woodPerChop(gc, MON) - 100.8) < 1e-9, 'Golden Chainsaw: $500,000 Money, +100 wood per chop');
 ok(buyToolWithGold({ ...newGame(MON), gold: 1500 }, 'goldchainsaw')!.gold === 0 && buyToolWithGold({ ...newGame(MON), gold: 1499 }, 'goldchainsaw') === null, 'Golden Chainsaw: or 1,500 Gold');
 ok(buyToolWithGold({ ...newGame(MON), gold: 9999 }, 'chainsaw') === null, 'other tools cannot be bought with Gold');
+
+// ---- Part 6: rivals and auctions ----
+let rv = ensureListings(rich(newGame(MON)), MON);
+ok(rv.listings.clearing.rivalBuysAt === null && rv.listings.clearing.saleType === 'negotiate', 'rivals leave the Small Clearing alone');
+const rid = Object.keys(rv.listings).find((k) => rv.listings[k].saleType === 'negotiate' && rv.listings[k].rivalPlan.length)!;
+const firstAt = rv.listings[rid].rivalPlan[0].at;
+let rv2 = tick(rv, 1, firstAt + 1);
+ok(!!rv2.listings[rid].rivalOffer && rv2.feed.some((f) => /just offered/.test(f.text)), 'rival offers show up in the activity feed');
+const ro = rv2.listings[rid].rivalOffer!.amount;
+let low = makeOffer(rv2, rid, Math.round(ro * 0.9), firstAt + 2);
+ok(low.outcome.kind === 'countered' && low.state.listings[rid].counter! >= ro, 'seller asks you to beat the rival offer');
+let late = tick(rv, 1, rv.listings[rid].rivalBuysAt! + 1);
+ok(late.listings[rid].status === 'sold' && late.feed.some((f) => /took too long/.test(f.text)), 'take too long and a rival buys the land');
+let au: GameState = { ...rv, listings: { ...rv.listings, pine: { ...rv.listings.pine, saleType: 'auction', status: 'open' } } };
+au = startAuction(au, 'pine', MON)!;
+ok(!!au.auction && au.auction.endsAt - MON === 60000 && au.auction.bid === 7500, 'auction: 60 seconds, opens at half the asking price');
+au = placeBid(au, minNextBid(au.auction!), MON + 500).state;
+ok(au.auction!.leader === 'you', 'you can bid and lead');
+let t2 = MON;
+let outbidSeen = false;
+while (au.auction && au.auction.leader === 'you' && t2 < MON + 60000) { t2 += 1000; au = tick(au, 1, t2); }
+outbidSeen = !!au.auction && au.auction.leader !== 'you';
+ok(outbidSeen && au.auction!.outbid, `a rival outbids you (${au.auction?.leader})`);
+let late2 = au;
+// let it run to the last seconds, then check the 10-second rule after a rival outbids you near the end
+let lt = t2;
+while (late2.auction && late2.auction.endsAt - lt > 3000) { lt += 1000; late2 = tick(late2, 1, lt); }
+if (late2.auction) {
+  late2 = placeBid(late2, minNextBid(late2.auction), lt).state;
+  ok(late2.auction!.endsAt - lt >= 10000, 'a late bid gives at least 10 seconds');
+}
+let big = placeBid(au, 15000 * 2, t2 + 1).state;
+let bt = t2 + 1;
+while (big.auction && bt < t2 + 300000) { bt += 1000; big = tick(big, 1, bt); }
+ok(!!big.lands.pine && big.lands.pine.paid === 30000 && big.feed.some((f) => /You won/.test(f.text)), 'bid high enough and you win the land');
+const aId = Object.keys(rv.listings).find((k) => rv.listings[k].saleType === 'auction');
+if (aId) {
+  let skip = tick(rv, 1, rv.listings[aId].rivalBuysAt! + 1);
+  ok(skip.listings[aId].status === 'sold' && /did not join/.test(skip.feed.map((f) => f.text).join('|')), 'skip an auction and a rival wins it');
+}
+let gs = buyToolWithGold({ ...newGame(MON), gold: 1500, runMoneyEarned: PRESTIGE_AT }, 'goldchainsaw')!;
+ok(!!doPrestige(gs, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Gold is kept through prestige');
+let ms = buyTool({ ...rich(newGame(MON)), runMoneyEarned: PRESTIGE_AT }, 'goldchainsaw')!;
+ok(!doPrestige(ms, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Money is lost on prestige');
 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

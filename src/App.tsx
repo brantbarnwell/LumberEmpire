@@ -22,6 +22,7 @@ import { ShopScreen } from './components/ShopScreen';
 import { PopupView } from './components/PopupView';
 import { WelcomeBack } from './components/WelcomeBack';
 import { NotifPrompt } from './components/NotifPrompt';
+import { AuctionBanner } from './components/AuctionBanner';
 import { C } from './components/theme';
 
 const TICK_MS = 250;
@@ -126,6 +127,7 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
     <>
       <TopBar onShop={() => setTab('shop')} />
+      {tab !== 'land' && <AuctionBanner onOpen={() => setTab('land')} />}
       <View style={{ flex: 1 }}>
         {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} onOpenMarket={() => setTab('market')} />}
         {tab === 'upgrades' && <UpgradesScreen />}

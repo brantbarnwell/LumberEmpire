@@ -6,6 +6,7 @@ import {
   buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
+import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
 
 let seed = 7;
@@ -26,11 +27,29 @@ function upkeep(s: GameState) {
 function buyLandAtAsking(s: GameState, id: string, now: number) {
   s = ensureListings(s, now);
   const def = LAND.find((l) => l.id === id)!;
-  if (!s.listings[id] || s.money < def.asking) return null;
-  const r = makeOffer(s, id, def.asking, now);
+  const L = s.listings[id];
+  if (!L || L.status === 'sold' || L.status === 'gone' || s.money < def.asking) return null;
+  if (L.saleType === 'auction') {
+    // play the auction: bid the minimum when outbid, up to 1.3x asking (time inside the auction is not counted)
+    let st = startAuction(s, id, now);
+    if (!st) return null;
+    let t = now;
+    while (st.auction && t < now + 600_000) {
+      t += 1000;
+      st = tick(st, 1, t);
+      if (st.auction && st.auction.leader !== 'you') {
+        const bid = minNextBid(st.auction);
+        if (bid <= Math.min(st.money, def.asking * 1.3)) st = placeBid(st, bid, t).state;
+      }
+    }
+    return st.lands[id] ? st : ({ ...st, __lostAuction: true } as GameState);
+  }
+  const offer = Math.max(def.asking, (L.rivalOffer?.amount ?? 0) * 1.05);
+  if (s.money < offer) return null;
+  const r = makeOffer(s, id, offer, now);
   if (r.outcome.kind === 'accepted') return r.state;
-  if (r.outcome.kind === 'countered' && r.state.listings[id]?.counter && r.state.money >= r.state.listings[id].counter!) {
-    const c = r.state.listings[id].counter!;
+  const c = r.state.listings[id]?.counter;
+  if (r.outcome.kind === 'countered' && c && r.state.money >= c) {
     return { ...r.state, money: r.state.money - c, lands: { ...r.state.lands, [id]: { upgrades: [], paid: c } } } as GameState;
   }
   return null;
@@ -102,7 +121,11 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
     if (lc !== null && (s.helpers[h.id]?.count ?? 0) > 0) opts.push({ cost: lc, gain: h.woodPerSec * s.helpers[h.id].count * 0.25, buy: () => levelHelper(s, h.id) });
   }
   for (const l of LAND) {
-    if (!s.lands[l.id]) opts.push({ cost: l.asking, gain: l.woodPerSec, buy: () => buyLandAtAsking(s, l.id, now) });
+    if (!s.lands[l.id]) {
+      const L = ensureListings(s, now).listings[l.id];
+      const open = L && (L.status === 'open' || L.status === 'counter');
+      if (open) opts.push({ cost: l.asking * (L.saleType === 'auction' ? 1.15 : 1), gain: l.woodPerSec, buy: () => buyLandAtAsking(s, l.id, now) });
+    }
     else for (const u of LAND_UPGRADES) if (!s.lands[l.id].upgrades.includes(u.id)) opts.push({ cost: landUpgradeCost(l.id, u.id), gain: l.woodPerSec * u.bonus, buy: () => buyLandUpgrade(s, l.id, u.id) });
   }
   const helperWps = HELPERS.reduce((a, h) => a + h.woodPerSec * (s.helpers[h.id]?.count ?? 0) * (1 + 0.25 * (s.helpers[h.id]?.level ?? 0)), 0);

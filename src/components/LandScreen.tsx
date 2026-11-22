@@ -4,7 +4,9 @@ import { getState, update, useGame } from '../game/store';
 import {
   acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, makeOffer, rejectCounter, woodMultFor,
 } from '../game/logic';
-import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES } from '../game/data';
+import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, RIVALS } from '../game/data';
+import { canStartAuction, startAuction, toggleWatch } from '../game/rivals';
+import { AuctionPanel } from './AuctionPanel';
 import { duration, money, small } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card, ProgressBar } from './ui';
@@ -16,7 +18,7 @@ export function LandScreen() {
   const now = Date.now();
   const [open, setOpen] = useState<string | null>(null);
   const owned = LAND.filter((l) => s.lands[l.id]);
-  const forSale = LAND.filter((l) => !s.lands[l.id]);
+  const forSale = LAND.filter((l) => !s.lands[l.id]).sort((a, b) => Number(s.watched.includes(b.id)) - Number(s.watched.includes(a.id)));
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -28,6 +30,16 @@ export function LandScreen() {
           <Text style={styles.repNum}>{Math.round(s.reputation)}/100</Text>
         </View>
         <Text style={styles.sub}>Fair offers raise it and sellers go easier on you. Lowballing lowers it.</Text>
+      </Card>
+
+      <Card>
+        <Text style={styles.label}>RIVAL ACTIVITY (BOTS, NOT REAL PEOPLE)</Text>
+        {s.feed.length === 0 && <Text style={styles.sub}>{RIVALS.map((r) => r.name).join(', ')} also want land. Their moves show up here.</Text>}
+        {s.feed.slice(0, 8).map((f, i) => (
+          <Text key={i} style={[styles.feed, f.kind === 'lose' && { color: C.red }, f.kind === 'win' && { color: C.leaf }, f.kind === 'you' && { color: C.inkSoft }]}>
+            {f.landId && s.watched.includes(f.landId) ? '⭐ ' : ''}{ago(now - f.at)} · {f.text}
+          </Text>
+        ))}
       </Card>
 
       {owned.length > 0 && <Text style={styles.section}>Your land</Text>}
@@ -70,6 +82,19 @@ export function LandScreen() {
       {forSale.map((l) => {
         const L = s.listings[l.id];
         const goneUntil = s.landGoneUntil[l.id] ?? 0;
+        if (L && L.status === 'sold') {
+          return (
+            <Card key={l.id} style={{ opacity: 0.6 }}>
+              <View style={styles.row}>
+                <Text style={styles.icon}>{l.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{l.name}</Text>
+                  <Text style={[styles.sub, { color: C.red }]}>Sold to {L.soldTo} for {money(L.soldFor ?? 0)}. New sellers tomorrow.</Text>
+                </View>
+              </View>
+            </Card>
+          );
+        }
         if (!L || L.status === 'gone') {
           return (
             <Card key={l.id} style={{ opacity: 0.6 }}>
@@ -87,17 +112,48 @@ export function LandScreen() {
         }
         const P = PERSONALITY[L.personality];
         const isOpen = open === l.id;
+        const watched = s.watched.includes(l.id);
+        const rivalsIn = L.rivalBuysAt !== null;
+        const head = (
+          <View style={styles.row}>
+            <Text style={styles.icon}>{l.icon}</Text>
+            <View style={{ flex: 1 }}>
+              <View style={styles.row}>
+                <Text style={[styles.name, { flex: 1 }]}>{l.name}</Text>
+                <Text style={[styles.badge, L.saleType === 'auction' && styles.badgeAuction]}>{L.saleType === 'auction' ? 'AUCTION' : 'MAKE AN OFFER'}</Text>
+                <Text style={styles.star} onPress={() => update((st) => toggleWatch(st, l.id))} accessibilityLabel="Watch this land">{watched ? '⭐' : '☆'}</Text>
+              </View>
+              <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]} · +{small(l.woodPerSec)} wood/sec</Text>
+              <Text style={styles.asking}>Asking {money(l.asking)}</Text>
+              {L.saleType === 'negotiate' && <Text style={styles.sub}>Seller: {L.seller} · {P.label}</Text>}
+              {L.rivalOffer && L.saleType === 'negotiate' && <Text style={[styles.sub, { color: C.red }]}>Best rival offer: {L.rivalOffer.rival} {money(L.rivalOffer.amount)}</Text>}
+              {rivalsIn && L.rivalBuysAt! > now && (
+                <Text style={[styles.sub, { color: C.bark }]}>
+                  {L.saleType === 'auction' ? `Rivals will run this auction without you in about ${duration(L.rivalBuysAt! - now)}.` : `Rivals are interested. One may buy it in about ${duration(L.rivalBuysAt! - now)}.`}
+                </Text>
+              )}
+              {!rivalsIn && <Text style={[styles.sub, { color: C.leaf }]}>No rivals want this small plot. Take your time.</Text>}
+            </View>
+          </View>
+        );
+        if (L.saleType === 'auction') {
+          const live = s.auction?.landId === l.id;
+          return (
+            <Card key={l.id}>
+              {head}
+              {live ? <AuctionPanel /> : (
+                <>
+                  <Text style={[styles.sub, { marginTop: 6 }]}>60-second auction against rival companies. Bids start at half the asking price. If a rival outbids you near the end, you get 10 more seconds.</Text>
+                  <Button style={{ marginTop: 8 }} variant="gold" label={s.auction ? 'Another auction is running' : 'Join auction now'} disabled={!canStartAuction(s, l.id)}
+                    onPress={() => update((st) => startAuction(st, l.id, Date.now())) && haptic.success()} />
+                </>
+              )}
+            </Card>
+          );
+        }
         return (
           <Card key={l.id}>
-            <View style={styles.row}>
-              <Text style={styles.icon}>{l.icon}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{l.name}</Text>
-                <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]} · +{small(l.woodPerSec)} wood/sec</Text>
-                <Text style={styles.asking}>Asking {money(l.asking)}</Text>
-                <Text style={styles.sub}>Seller: {L.seller} · {P.label}</Text>
-              </View>
-            </View>
+            {head}
             {!isOpen ? (
               <Button style={{ marginTop: 8 }} variant="brown" label={L.history.length ? 'Keep negotiating' : 'Make an offer'} onPress={() => setOpen(l.id)} />
             ) : (
@@ -109,6 +165,11 @@ export function LandScreen() {
       <Text style={styles.foot}>Land is bought with Money only. Gold and real money can never be used to bid on land.</Text>
     </ScrollView>
   );
+}
+
+function ago(ms: number) {
+  if (ms < 60000) return 'now';
+  return duration(ms).split(' ')[0] + ' ago';
 }
 
 function Negotiation({ landId, onClose }: { landId: string; onClose: () => void }) {
@@ -219,5 +280,9 @@ const styles = StyleSheet.create({
   },
   dollar: { fontWeight: '900', fontSize: 17, color: C.money },
   inputText: { flex: 1, fontWeight: '900', fontSize: 17, color: C.money, paddingVertical: 0 },
+  feed: { fontSize: 12, fontWeight: '700', color: C.ink, paddingVertical: 2 },
+  badge: { fontSize: 9.5, fontWeight: '900', color: C.bark, backgroundColor: '#efe2c4', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  badgeAuction: { color: '#fff', backgroundColor: '#c2571a' },
+  star: { fontSize: 20, paddingHorizontal: 4 },
   foot: { fontSize: 11, color: C.inkSoft, fontWeight: '600', textAlign: 'center' },
 });

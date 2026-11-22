@@ -159,7 +159,7 @@ export function GoalsScreen() {
             <Button style={{ marginTop: 10 }} variant="gold" label={`Prestige: wood ${small(s.prestige.mult + prestigeGain(s))}x faster`} onPress={() => setConfirmPrestige(true)} />
           ) : (
             <View style={{ gap: 6, marginTop: 10 }}>
-              <Text style={styles.pWarn}>You will lose your Money, wood, axe, helpers, land and workshop. You keep Gold, purchases, VIP, streaks and quests. Wood is {small(s.prestige.mult + prestigeGain(s))}x faster forever.</Text>
+              <Text style={styles.pWarn}>You will lose your Money, wood, axe, tools, helpers, land and workshop. You keep Gold, purchases, VIP, streaks, quests, and a Golden Chainsaw bought with Gold. Wood is {small(s.prestige.mult + prestigeGain(s))}x faster forever.</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button style={{ flex: 1 }} variant="gold" label="Yes, prestige" onPress={() => {
                   if (update((st) => doPrestige(st, Date.now()))) {

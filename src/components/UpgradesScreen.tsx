@@ -124,6 +124,12 @@ export function UpgradesScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{t.name}{owned?.durability === 0 ? '  🔧' : ''}</Text>
                 <Text style={styles.sub}>{t.effect}</Text>
+                {t.goldCost && !owned ? (
+                  <Text style={styles.keepNote}>Gold purchase: kept forever, even after prestige. Money purchase: lost on prestige.</Text>
+                ) : null}
+                {owned && t.goldCost ? (
+                  <Text style={[styles.keepNote, { color: owned.keep ? C.leaf : C.bark }]}>{owned.keep ? 'Bought with Gold: kept forever, even after prestige.' : 'Bought with Money: lost when you prestige.'}</Text>
+                ) : null}
                 {owned && (
                   <View style={styles.durRow}>
                     <DurabilityBar value={owned.durability} width={110} />
@@ -210,6 +216,7 @@ const styles = StyleSheet.create({
   axeCard: { paddingVertical: 10 },
   current: { borderColor: C.leafLight, borderWidth: 2 },
   broken: { borderColor: C.red, borderWidth: 2 },
+  keepNote: { fontSize: 11.5, fontWeight: '800', color: C.goldDark, marginTop: 3 },
   equipped: { color: C.leaf, fontWeight: '900' },
   ownedText: { color: C.inkSoft, fontWeight: '800' },
   need: { fontSize: 11, color: C.inkSoft, fontWeight: '700', textAlign: 'right', marginTop: 4 },

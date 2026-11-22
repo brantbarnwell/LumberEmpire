@@ -304,6 +304,21 @@ Muse's own section 19 is the source of truth; this is what the code does.
 - Planks: turn on "Cut planks" to turn 2 wood into 1 plank, 2 planks a second. Planks sell for about $0.25 (2.5x wood) and take 2 yard spaces. Log Splitter doubles plank Money.
 - Furniture: priced one by one (same as the Workshop), with today's furniture demand.
 - Bulk orders: 2 a day, a buyer wants a big batch at a fixed price. Accept, say no, or ask for 10% more once (half agree, half walk).
-- Golden Chainsaw: $500,000 Money in the Tools tab, or 1,500 Gold to buy it instantly. +100 wood per chop. Wears out like other tools (1% per 8 chops, $12,000 full repair). It resets on prestige like every tool.
+- Golden Chainsaw: $500,000 Money in the Tools tab, or 1,500 Gold to buy it instantly. +100 wood per chop. Wears out like other tools (1% per 8 chops, $12,000 full repair). Prestige rule: see section 20.
 - Bug fixed: the daily random roll barely changed day to day, so demand, sellers, quests and Timber Rush were nearly the same every day. Fixed; wood price re-tuned to $0.10 so approved pacing holds.
 - Not built (as asked): rivals and auctions, manager helper, Sawmill, wood quality.
+
+
+## 20. Part 6 - AI rivals, land auctions, Golden Chainsaw prestige rule (from Brant, Nov 21 2026)
+
+Muse's own section 20 is the source of truth; this is what the code does.
+
+- Rivals (bots, never real people): Timber Titans Inc (rich, bids fast, up to about 1.25x asking), Redwood Corp (waits until the last seconds, about 1.15x), Big Pine Logging (steady, about 1.0x), Mountain Wood Co. (careful, about 0.9x). Each one's limit varies +/-15% per land.
+- Every day each piece of land you don't own is listed as either "Make an offer" (60%) or "Auction" (40%). The Small Clearing is always "Make an offer" and rivals ignore it, so new players can always get their first land.
+- Make an offer land is first come, first served: over the next hours 1-3 rival offers come in (shown in the activity feed and on the listing). If you offer less than the best rival offer, the seller asks you to beat it. If you take too long (about 4 to 15 hours after the listing appears), the best rival buys it and it is gone until tomorrow.
+- Auctions: tap Join, 60-second timer, opening bid 50% of asking, each bid at least +2% of asking. Shows the timer, highest bid, who is winning, who you are bidding against, and the bids. If a rival outbids you with less than 10 seconds left, you get 10 seconds to answer. A banner shows on every tab while an auction runs. If you never join, the rivals run it without you and the land is sold.
+- Live activity feed on the Land tab ("Timber Titans just offered $48,000 for Pine Grove", "Redwood Corp outbid you by $300"). Watch land with the star: watched land shows first and its feed lines get a star.
+- Test (npm run auction-test, 200 auctions): rivals outbid you in 100% of them. Bidding up to the asking price wins 6%, up to 1.3x wins 75% (pays about 1.16x on average), up to 1.5x wins all.
+- Pacing with rivals: first hour unchanged; prestige 2.5-3.9 days.
+- Golden Chainsaw: bought with Gold (1,500) = kept forever, even after prestige. Bought with Money ($500,000) = lost on prestige. Shown in plain words in the Tools tab before buying.
+- Not built (as asked): manager helper, Sawmill.

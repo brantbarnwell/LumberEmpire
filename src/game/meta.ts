@@ -165,9 +165,13 @@ export function canPrestige(s: GameState) {
 export function doPrestige(s: GameState, now: number): GameState | null {
   if (!canPrestige(s)) return null;
   const mult = s.prestige.mult + prestigeGain(s);
-  let st: GameState = {
+  // Tools bought with Gold (Golden Chainsaw) are kept forever; Money-bought tools reset.
+  const kept: GameState['tools'] = {};
+  for (const [id, t] of Object.entries(s.tools)) if (t.keep) kept[id] = { durability: 100, chopWear: 0, minuteWear: 0, keep: true };
+  const st: GameState = {
     ...s,
     ...freshRun(now),
+    tools: kept,
     boosts: s.boosts,
     prestige: { count: s.prestige.count + 1, mult },
   };

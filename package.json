@@ -35,7 +35,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx scripts/check-logic.ts",
     "pacing": "tsx scripts/pacing-sim.ts",
-    "price-test": "tsx scripts/price-test.ts"
+    "price-test": "tsx scripts/price-test.ts",
+    "auction-test": "tsx scripts/auction-test.ts"
   },
   "private": true
 }

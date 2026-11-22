@@ -9,6 +9,7 @@ import {
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
+import { planRivals, rivalTick } from './rivals';
 import { bestCommodityPrice, commodityRate, demandOf, hash, marketPriceOf, sellCurve, demandLabel as demandLabelM } from './market';
 
 export interface Boost {
@@ -25,10 +26,18 @@ export interface Listing {
   min: number; // secret minimum price
   mood: number; // 0..100
   rejections: number;
-  status: 'open' | 'counter' | 'gone';
+  status: 'open' | 'counter' | 'gone' | 'sold';
   counter: number | null;
   greedyCountered: boolean;
   history: { who: 'you' | 'seller'; text: string }[];
+  // Part 6: rivals
+  saleType: 'negotiate' | 'auction';
+  createdAt: number;
+  rivalPlan: { at: number; rival: string; amount: number }[]; // rival offers still to come
+  rivalOffer: { rival: string; amount: number } | null; // best rival offer so far
+  rivalBuysAt: number | null; // when a rival buys it if you have not
+  soldTo?: string;
+  soldFor?: number;
 }
 
 export interface Craft { itemId: string; startedAt: number; doneAt: number }
@@ -110,7 +119,7 @@ export interface GameState {
   pendingOffline: OfflineResult | null; // Welcome Back money waiting to be collected
 
   // Part 4
-  tools: Record<string, { durability: number; chopWear: number; minuteWear: number }>;
+  tools: Record<string, { durability: number; chopWear: number; minuteWear: number; keep?: boolean }>; // keep = bought with Gold, survives prestige
   storageLevel: number;
   wagesOwed: number;
   equippedSkin: string | null;
@@ -121,6 +130,10 @@ export interface GameState {
   plankSelling: boolean;
   plankCarry: number;
   cutting: boolean;
+  // Part 6
+  auction: Auction | null;
+  feed: FeedItem[];
+  watched: string[];
   chopRate: number; // wood/sec from your own chopping, smoothed
   chopAcc: number;
   buyers: { wood: number; planks: number }; // buyers a second at market price, updated every tick
@@ -132,6 +145,18 @@ export interface GameState {
   };
 }
 
+export interface Auction {
+  landId: string;
+  startedAt: number;
+  endsAt: number;
+  bid: number; // current highest bid (or the opening price if nobody has bid)
+  leader: string | null; // 'you', a rival name, or nobody yet
+  participants: { rival: string; max: number }[];
+  lastSec: number;
+  log: { who: string; amount: number; at: number }[];
+  outbid: boolean; // a rival just took the lead from you
+}
+export interface FeedItem { at: number; text: string; kind: 'rival' | 'you' | 'win' | 'lose'; landId?: string }
 export interface DayStats { day: string; wood: number; planks: number; furniture: number; money: number; woodMoney: number }
 export interface BulkOrder { id: string; buyer: string; product: 'wood' | 'planks'; amount: number; price: number; status: 'open' | 'done' | 'gone'; countered: boolean }
 export interface SaleLog { what: string; units: number; price: number; at: number; minutes: number | null }
@@ -183,6 +208,7 @@ export function freshRun(now: number) {
     chopRate: 0,
     chopAcc: 0,
     buyers: { wood: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT, planks: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT },
+    auction: null as Auction | null,
   };
 }
 
@@ -217,6 +243,8 @@ export function newGame(now = Date.now()): GameState {
     pendingOffline: null,
     equippedSkin: null,
     market: { days: [], orders: [], ordersDay: '', log: [] },
+    feed: [],
+    watched: [],
     ...freshRun(now),
   };
 }
@@ -342,7 +370,7 @@ export function buyTool(s: GameState, id: string): GameState | null {
 export function buyToolWithGold(s: GameState, id: string): GameState | null {
   const d = TOOLS.find((x) => x.id === id);
   if (!d || !d.goldCost || s.tools[id] || s.gold < d.goldCost) return null;
-  return { ...s, gold: s.gold - d.goldCost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0 } }, firstWin: true };
+  return { ...s, gold: s.gold - d.goldCost, tools: { ...s.tools, [id]: { durability: 100, chopWear: 0, minuteWear: 0, keep: true } }, firstWin: true };
 }
 
 export function toolRepairCost(s: GameState, id: string, to: number) {
@@ -372,7 +400,7 @@ export function repairAll(s: GameState): GameState | null {
 
 export function fixEverything(s: GameState): GameState {
   const tools: GameState['tools'] = {};
-  for (const id of Object.keys(s.tools)) tools[id] = { durability: 100, chopWear: 0, minuteWear: 0 };
+  for (const id of Object.keys(s.tools)) tools[id] = { ...s.tools[id], durability: 100, chopWear: 0, minuteWear: 0 };
   return { ...s, axeDurability: 100, chopsSinceWear: 0, tools };
 }
 
@@ -400,7 +428,7 @@ function wearTools(s: GameState, chops: number, minutes: number): GameState {
       while (minuteWear >= d.wearMinutes && durability > 0) { minuteWear -= d.wearMinutes; durability -= 1; }
     }
     if (durability !== t.durability || chopWear !== t.chopWear || minuteWear !== t.minuteWear) {
-      tools[d.id] = { durability: Math.max(0, durability), chopWear, minuteWear };
+      tools[d.id] = { ...t, durability: Math.max(0, durability), chopWear, minuteWear };
       changed = true;
     }
   }
@@ -532,7 +560,7 @@ function repFactor(rep: number) {
 /** New sellers every day for every piece of land you don't own. */
 export function ensureListings(s: GameState, now: number): GameState {
   const dk = dayKeyOf(now);
-  if (s.listingsDay === dk) return s;
+  if (s.listingsDay === dk || s.auction) return s;
   const listings: Record<string, Listing> = {};
   LAND.forEach((l, i) => {
     if (s.lands[l.id]) return;
@@ -546,6 +574,7 @@ export function ensureListings(s: GameState, now: number): GameState {
       landId: l.id,
       seller: SELLER_NAMES[(Math.floor(r('n') * SELLER_NAMES.length) + i) % SELLER_NAMES.length],
       personality, min, mood: 70, rejections: 0, status: 'open', counter: null, greedyCountered: false, history: [],
+      ...planRivals(l.id, l.asking, dk, s.prestige.count, now),
     };
   });
   return { ...s, listings, listingsDay: dk };
@@ -553,7 +582,7 @@ export function ensureListings(s: GameState, now: number): GameState {
 
 export type OfferOutcome = { kind: 'accepted' | 'countered' | 'rejected' | 'walked' | 'error'; message: string };
 
-function buyLand(s: GameState, id: string, price: number): GameState {
+export function buyLand(s: GameState, id: string, price: number): GameState {
   const def = LAND.find((x) => x.id === id)!;
   const fair = price >= def.asking * 0.9;
   const listings = { ...s.listings };
@@ -581,6 +610,14 @@ export function makeOffer(s: GameState, id: string, amount: number, now: number)
   const ratio = amount / l.min;
   const say = (t: string) => l.history.push({ who: 'seller', text: t });
   let outcome: OfferOutcome;
+
+  // a rival already offered more: the seller asks you to beat it
+  if (l.rivalOffer && amount < l.rivalOffer.amount * 1.02) {
+    l.counter = Math.max(l.counter ?? 0, Math.round(l.rivalOffer.amount * 1.05));
+    l.status = 'counter';
+    say(`${l.rivalOffer.rival} already offered $${l.rivalOffer.amount.toLocaleString('en-US')}. Beat it: $${l.counter.toLocaleString('en-US')} and it's yours.`);
+    return { state: { ...st, listings: { ...st.listings, [id]: l } }, outcome: { kind: 'countered', message: `${l.rivalOffer.rival} offered more. The seller wants you to beat it.` } };
+  }
 
   if (ratio >= 1 && !(l.personality === 'greedy' && !l.greedyCountered)) {
     say('Deal! The land is yours.');
@@ -970,7 +1007,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
       if (sold > 0) next = recordSale(next, 'planks', sold, earned, now);
     }
   }
-  return tickWorkshop(next, now);
+  return rivalTick(tickWorkshop(next, now), now);
 }
 
 export interface OfflineResult { away: number; earned: number; gross?: number; sold: number; produced: number } // earned = after wages
@@ -1120,6 +1157,7 @@ export function migrate(s: GameState): GameState {
   if (st.owned.pendingHelpers > 0) st = addApprentices({ ...st, owned: { ...st.owned, pendingHelpers: 0 } }, st.owned.pendingHelpers);
   if (st.owned.pendingLand.length) st = addLand({ ...st, owned: { ...st.owned, pendingLand: [] } }, st.owned.pendingLand);
   if (st.runMoneyEarned === 0 && st.prestige.count === 0 && st.totalMoneyEarned > 0) st = { ...st, runMoneyEarned: st.totalMoneyEarned };
+  if (Object.values(st.listings).some((l) => !l.saleType || !l.rivalPlan)) st = { ...st, listings: {}, listingsDay: '' }; // pre-rivals saves
   return { ...st, version: 2 };
 }
 

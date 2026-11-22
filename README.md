@@ -75,8 +75,9 @@ lumber-empire/
 - Part 3: opt-in video rewards (Welcome Back 2x, 2x wood 30 min, 5 free Gold videos a day), VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop for time boosts.
 - Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit and upgrades, ranks up to $200M.
 - Part 5: Market tab (wood, planks, furniture, demand, news, bulk orders, 7-day graph), Golden Chainsaw ($500,000 or 1,500 Gold).
-- Typecheck, 65 logic tests, iOS bundle and web click-through all pass. `npm run price-test` shows how price changes selling.
-- Not built yet: AI rival companies and land auctions, manager helper, wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
+- Part 6: AI rival companies (offers, counters, buy-outs, activity feed), 60-second land auctions, Golden Chainsaw kept through prestige when bought with Gold.
+- Typecheck, 77 logic tests, iOS bundle and web click-through all pass. `npm run price-test` and `npm run auction-test` show selling and auctions.
+- Not built yet: manager helper, wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
 
 ## Testing on your iPhone
 
@@ -97,4 +98,5 @@ npm run typecheck    # check for code errors
 npm test             # check game rules
 npm run pacing       # see how long upgrades take
 npm run price-test   # see how price changes selling
+npm run auction-test # play 200 land auctions against the rivals
 ```
