@@ -8,7 +8,7 @@ import {
   WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, MARKET_SIZE_MULT, MIN_BUYERS_PER_SEC, Product,
-  MANAGER_COST, MANAGER_SELL_AT, MANAGER_EXTRA_BUYERS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
+  MANAGER_COST, MANAGER_SELL_AT, MANAGER_EXTRA_BUYERS, MANAGER_WAGE, SAWMILL_LEVELS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
 } from './data';
 import { planRivals, rivalTick } from './rivals';
 import { bestCommodityPrice, commodityRate, demandOf, hash, marketPriceOf as mpo, sellCurve as sc, marketPriceOf, sellCurve, demandLabel as demandLabelM } from './market';
@@ -133,6 +133,8 @@ export interface GameState {
   cutting: boolean;
   // Part 7
   manager: Manager;
+  // Part 8
+  sawmill: { level: number; on: boolean }; // level 0 = not built
   // Part 6
   auction: Auction | null;
   feed: FeedItem[];
@@ -163,7 +165,10 @@ export interface Manager {
   hired: boolean;
   on: boolean;
   carry: number;
+  plankCarry?: number;
+  owed?: number; // unpaid wage; while > 0 he pauses selling and collecting
   day: string;
+  planksToday?: number; // planks he sold today
   soldToday: number; // wood he sold today
   moneyToday: number; // Money from his sales today
   collectedToday: number; // Money he collected for you when you came back
@@ -223,7 +228,8 @@ export function freshRun(now: number) {
     chopAcc: 0,
     buyers: { wood: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT, planks: MIN_BUYERS_PER_SEC * MARKET_SIZE_MULT },
     auction: null as Auction | null,
-    manager: { hired: false, on: true, carry: 0, day: '', soldToday: 0, moneyToday: 0, collectedToday: 0, soldTotal: 0, moneyTotal: 0 } as Manager,
+    manager: { hired: false, on: true, carry: 0, plankCarry: 0, owed: 0, day: '', soldToday: 0, planksToday: 0, moneyToday: 0, collectedToday: 0, soldTotal: 0, moneyTotal: 0 } as Manager,
+    sawmill: { level: 0, on: true },
   };
 }
 
@@ -984,15 +990,16 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
       chopAcc: 0,
       buyers: {
         wood: MARKET_SIZE_MULT * Math.max(MIN_BUYERS_PER_SEC, made),
-        planks: MARKET_SIZE_MULT * Math.max(MIN_BUYERS_PER_SEC, next.cutting ? PLANK_CUT_PER_SEC : 0),
+        planks: MARKET_SIZE_MULT * Math.max(MIN_BUYERS_PER_SEC, plankCutRate(next)),
       },
     };
   }
   if (passive > 0) next = addWood(next, passive * dtSec).state;
   if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
 
-  if (next.cutting && next.wood >= PLANK_WOOD && dtSec > 0) {
-    const n = Math.min(PLANK_CUT_PER_SEC * dtSec, next.wood / PLANK_WOOD);
+  const cutRate = plankCutRate(next);
+  if (cutRate > 0 && next.wood >= PLANK_WOOD && dtSec > 0) {
+    const n = Math.min(cutRate * dtSec, next.wood / PLANK_WOOD);
     next = { ...next, wood: next.wood - n * PLANK_WOOD, planks: next.planks + n };
   }
 
@@ -1147,7 +1154,9 @@ export function applyGrant(s: GameState, g: Grant, now: number): GameState {
   if (g.exclusiveAxes) st.owned.exclusiveAxes = [...new Set([...st.owned.exclusiveAxes, ...g.exclusiveAxes])];
   if (g.woodBoost) st.boosts = addBoost(st.boosts, 'wood', g.woodBoost.mult, g.woodBoost.hours, now);
   if (g.moneyBoost) st.boosts = addBoost(st.boosts, 'money', g.moneyBoost.mult, g.moneyBoost.hours, now);
-  if (g.buildings) st.owned.pendingBuildings = [...new Set([...st.owned.pendingBuildings, ...g.buildings])];
+  if (g.buildings?.includes('sawmill')) st = { ...st, sawmill: { ...st.sawmill, level: Math.max(1, st.sawmill.level) } };
+  const later = (g.buildings ?? []).filter((b) => b !== 'sawmill');
+  if (later.length) st.owned.pendingBuildings = [...new Set([...st.owned.pendingBuildings, ...later])];
   if (g.noAds) st.owned.noAds = true;
   if (g.landIfMissing) {
     if (st.lands[g.landIfMissing.id]) st.gold += g.landIfMissing.elseGold;
@@ -1173,6 +1182,7 @@ export function migrate(s: GameState): GameState {
   let st = s;
   if (st.owned.pendingHelpers > 0) st = addApprentices({ ...st, owned: { ...st.owned, pendingHelpers: 0 } }, st.owned.pendingHelpers);
   if (st.owned.pendingLand.length) st = addLand({ ...st, owned: { ...st.owned, pendingLand: [] } }, st.owned.pendingLand);
+  if (st.owned.pendingBuildings.includes('sawmill')) st = { ...st, sawmill: { ...st.sawmill, level: Math.max(1, st.sawmill.level) }, owned: { ...st.owned, pendingBuildings: st.owned.pendingBuildings.filter((b) => b !== 'sawmill') } };
   if (st.runMoneyEarned === 0 && st.prestige.count === 0 && st.totalMoneyEarned > 0) st = { ...st, runMoneyEarned: st.totalMoneyEarned };
   if (Object.values(st.listings).some((l) => !l.saleType || !l.rivalPlan)) st = { ...st, listings: {}, listingsDay: '' }; // pre-rivals saves
   return { ...st, version: 2 };
@@ -1267,41 +1277,76 @@ export function setManagerOn(s: GameState, on: boolean): GameState | null {
 }
 
 export function managerActive(s: GameState) {
-  return s.manager.hired && s.manager.on && storageUsed(s) >= storageCap(s) * MANAGER_SELL_AT;
+  return s.manager.hired && s.manager.on && !(s.manager.owed! > 0) && storageUsed(s) >= storageCap(s) * MANAGER_SELL_AT;
+}
+
+/** Pays the manager's wage while he is switched on. If you can't pay, it adds up and he pauses. */
+function payManager(s: GameState, dtSec: number): GameState {
+  const m = s.manager;
+  if (!m.hired || !m.on || dtSec <= 0) return s;
+  const due = (m.owed ?? 0) + (MANAGER_WAGE * dtSec) / 3600;
+  if (s.money >= due) return { ...s, money: s.money - due, manager: { ...m, owed: 0 } };
+  return { ...s, manager: { ...m, owed: due } };
 }
 
 /**
- * When the yard is 80% full the manager brings extra buyers, at YOUR price (he never changes it),
- * and sells wood back down to 80%. He works even if you paused selling.
- * He can't beat the yard limit: a pile only sells so fast, so a yard can still fill if you make more than it can sell.
+ * When the yard (wood + planks) is 80% full the manager brings half a crowd of extra buyers, at YOUR prices
+ * (he never changes them), and sells wood and planks back down to 80%. He works even if you paused selling.
+ * He can't beat the yard limit: a pile only sells so fast. Not furniture, not bulk orders.
  */
 function managerTick(s: GameState, dtSec: number, now: number): GameState {
   const dk = dayKeyOf(now);
-  let st = s.manager.day !== dk && s.manager.hired ? { ...s, manager: { ...s.manager, day: dk, soldToday: 0, moneyToday: 0, collectedToday: 0 } } : s;
-  if (!managerActive(st) || dtSec <= 0 || st.wood < 1) return st.manager.carry && !managerActive(st) ? { ...st, manager: { ...st.manager, carry: 0 } } : st;
-  const yes = (sc(st.sellPrice / mpo(st.dayKey, 'wood')).chance / 0.7) * demandOf(st.dayKey, 'wood');
-  const pile = Math.max(1, st.wood * BUYERS_PER_WOOD_IN_STOCK);
-  const crowd = st.buyers.wood;
-  const normal = st.selling ? yes * Math.min(crowd, pile) : 0;
-  const withManager = yes * Math.min(crowd * (st.selling ? 1 + MANAGER_EXTRA_BUYERS : 1), pile);
-  const extra = Math.max(0, withManager - normal);
-  if (extra <= 0) return st;
-  const excess = storageUsed(st) - storageCap(st) * MANAGER_SELL_AT;
-  const units = extra * dtSec + st.manager.carry;
-  const sold = Math.max(0, Math.min(Math.floor(units), Math.floor(st.wood), Math.ceil(excess)));
-  const carry = sold < Math.floor(units) ? 0 : units - Math.floor(units);
-  if (sold === 0) return { ...st, manager: { ...st.manager, carry } };
-  const earned = sold * st.sellPrice * moneyMult(st, now) * (1 + toolFx(st).woodSalePct);
-  st = { ...st, wood: st.wood - sold, soldToday: st.soldToday + sold };
-  st = addMoney(bump(st, 'woodSold', sold), earned);
-  st = recordSale(st, 'wood', sold, earned, now);
-  const m = st.manager;
-  return { ...st, manager: { ...m, carry, soldToday: m.soldToday + sold, moneyToday: m.moneyToday + earned, soldTotal: m.soldTotal + sold, moneyTotal: m.moneyTotal + earned } };
+  let st = s.manager.day !== dk && s.manager.hired ? { ...s, manager: { ...s.manager, day: dk, soldToday: 0, planksToday: 0, moneyToday: 0, collectedToday: 0 } } : s;
+  st = payManager(st, dtSec);
+  if (!managerActive(st) || dtSec <= 0) return st;
+  let excess = storageUsed(st) - storageCap(st) * MANAGER_SELL_AT;
+  const fx = toolFx(st);
+  for (const p of ['wood', 'planks'] as const) {
+    const isWood = p === 'wood';
+    const stock = isWood ? st.wood : st.planks;
+    if (stock < 1 || excess <= 0) continue;
+    const price = isWood ? st.sellPrice : st.plankPrice;
+    const on = isWood ? st.selling : st.plankSelling;
+    const chance = sc(price / mpo(st.dayKey, p)).chance;
+    const yes = (chance / 0.7) * demandOf(st.dayKey, p);
+    // his extra buyers are bargain hunters: above market price even fewer of them say yes (so overpricing never pays)
+    const yesHunters = yes * Math.min(1, chance / 0.7);
+    const pile = Math.max(1, stock * BUYERS_PER_WOOD_IN_STOCK);
+    const crowd = st.buyers[p];
+    const normal = on ? yes * Math.min(crowd, pile) : 0;
+    const extraCrowd = crowd * MANAGER_EXTRA_BUYERS;
+    const room = Math.max(0, pile - (on ? Math.min(crowd, pile) : 0)); // the pile limit still applies
+    const extra = Math.max(0, yesHunters * Math.min(extraCrowd, room));
+    const carry0 = isWood ? st.manager.carry : st.manager.plankCarry ?? 0;
+    const units = extra * dtSec + carry0;
+    const size = isWood ? 1 : PLANK_WOOD;
+    const sold = Math.max(0, Math.min(Math.floor(units), Math.floor(stock), Math.ceil(excess / size)));
+    const carry = sold < Math.floor(units) ? 0 : units - Math.floor(units);
+    st = { ...st, manager: { ...st.manager, [isWood ? 'carry' : 'plankCarry']: carry } };
+    if (sold === 0) continue;
+    excess -= sold * size;
+    const earned = sold * price * moneyMult(st, now) * (1 + (isWood ? fx.woodSalePct : fx.plankSalePct));
+    st = isWood ? bump({ ...st, wood: st.wood - sold, soldToday: st.soldToday + sold }, 'woodSold', sold) : { ...st, planks: st.planks - sold };
+    st = recordSale(addMoney(st, earned), p, sold, earned, now);
+    const m = st.manager;
+    st = {
+      ...st,
+      manager: {
+        ...m,
+        soldToday: m.soldToday + (isWood ? sold : 0),
+        planksToday: (m.planksToday ?? 0) + (isWood ? 0 : sold),
+        moneyToday: m.moneyToday + earned,
+        soldTotal: m.soldTotal + sold,
+        moneyTotal: m.moneyTotal + earned,
+      },
+    };
+  }
+  return st;
 }
 
 /** Manager collects the Welcome Back Money for you (1x). A video can still add the 2x bonus on top. */
 export function managerCollect(s: GameState, r: OfflineResult): { state: GameState; result: OfflineResult } {
-  if (!s.manager.hired || !s.manager.on || r.collectedBy) return { state: s, result: r };
+  if (!s.manager.hired || !s.manager.on || (s.manager.owed ?? 0) > 0 || r.collectedBy) return { state: s, result: r };
   const st = collectOffline(s, r, 1);
   return { state: { ...st, manager: { ...st.manager, collectedToday: st.manager.collectedToday + r.earned } }, result: { ...r, collectedBy: 'manager' } };
 }
@@ -1309,4 +1354,28 @@ export function managerCollect(s: GameState, r: OfflineResult): { state: GameSta
 /** Optional video bonus after the manager already collected: adds the second 1x. */
 export function collectOfflineBonus(s: GameState, r: OfflineResult): GameState {
   return addMoney(s, r.earned);
+}
+
+// ---------- Sawmill (Part 8) ----------
+
+/** Planks cut per second from Cut planks and the Sawmill together. */
+export function plankCutRate(s: GameState) {
+  const mill = s.sawmill.level > 0 && s.sawmill.on ? SAWMILL_LEVELS[s.sawmill.level - 1].planksPerSec : 0;
+  return (s.cutting ? PLANK_CUT_PER_SEC : 0) + mill;
+}
+
+export function sawmillNextCost(s: GameState) {
+  return SAWMILL_LEVELS[s.sawmill.level]?.cost ?? null;
+}
+
+/** Build (level 1) or upgrade the Sawmill with Money. */
+export function upgradeSawmill(s: GameState): GameState | null {
+  const cost = sawmillNextCost(s);
+  if (cost === null || s.money < cost) return null;
+  return { ...s, money: s.money - cost, sawmill: { level: s.sawmill.level + 1, on: true }, firstWin: true };
+}
+
+export function setSawmillOn(s: GameState, on: boolean): GameState | null {
+  if (s.sawmill.level === 0 || s.sawmill.on === on) return null;
+  return { ...s, sawmill: { ...s.sawmill, on } };
 }

@@ -421,4 +421,15 @@ export const GOLDEN_CHAINSAW_ID = 'goldchainsaw';
 // ======================= PART 7: manager helper =======================
 export const MANAGER_COST = 20_000; // Money, one manager for the whole empire
 export const MANAGER_SELL_AT = 0.8; // starts selling when the yard is 80% full, sells back down to 80%
-export const MANAGER_EXTRA_BUYERS = 1; // brings 1 extra crowd of buyers (2x buyers) while selling. BALANCE
+export const MANAGER_EXTRA_BUYERS = 0.5; // Part 8 (section 22): half a crowd of extra buyers (was 1)
+export const MANAGER_WAGE = 1_000; // Part 8: $ per hour while he is switched on. Unpaid = he pauses selling and collecting.
+
+// ======================= PART 8: Sawmill (building from section 10, comes with the Empire Pack) =======================
+// Turns wood into planks (2 wood each) much faster than Cut planks (2 a second). Upgrades are instant. BALANCE
+export const SAWMILL_LEVELS = [
+  { level: 1, cost: 25_000, planksPerSec: 10 },
+  { level: 2, cost: 100_000, planksPerSec: 25 },
+  { level: 3, cost: 400_000, planksPerSec: 60 },
+  { level: 4, cost: 1_500_000, planksPerSec: 150 },
+  { level: 5, cost: 6_000_000, planksPerSec: 400 },
+];

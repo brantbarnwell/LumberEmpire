@@ -2,7 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
 import { helperCount, helperOutputBase, helperWageSpeed, hireCost, hireHelper, levelCost, levelHelper, toolFx, wagePerHour, woodMultFor, hireManager, setManagerOn, managerActive, storageCap, storageUsed } from '../game/logic';
 import { Switch } from 'react-native';
-import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT } from '../game/data';
+import { HELPERS, HELPER_LEVEL_BONUS, HELPER_MAX_LEVEL, HELPER_WAGES, HOME_WOOD, WAGE_LEVEL_GROWTH, MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE } from '../game/data';
 import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card } from './ui';
@@ -91,20 +91,25 @@ function ManagerCard() {
         )}
       </View>
       <View style={styles.mgrList}>
-        <Text style={styles.mgrLine}>✅ Sells wood when your yard is {Math.round(MANAGER_SELL_AT * 100)}% full, at the price you set in the Market. He never changes your price.</Text>
+        <Text style={styles.mgrLine}>✅ Sells wood and planks when your yard is {Math.round(MANAGER_SELL_AT * 100)}% full, at the prices you set in the Market. He never changes your prices.</Text>
         <Text style={styles.mgrLine}>✅ Collects your Money when you come back, so you don't have to tap Collect.</Text>
-        <Text style={styles.mgrLine}>❌ Does not chop, buy land, or repair tools.</Text>
+        <Text style={styles.mgrLine}>❌ Does not chop, buy land, repair tools, sell furniture, or take bulk orders.</Text>
+        <Text style={styles.mgrLine}>💵 Wage: {money(MANAGER_WAGE)} per hour while switched on, paid automatically.</Text>
       </View>
       {!m.hired ? (
         <Button style={{ marginTop: 8 }} label="Hire manager" sub={money(MANAGER_COST)} variant={s.money >= MANAGER_COST ? 'green' : 'ghost'}
           disabled={s.money < MANAGER_COST} onPress={() => update((st) => hireManager(st)) && haptic.success()} />
       ) : (
         <View style={{ gap: 4, marginTop: 8 }}>
-          <Text style={[styles.owned, !m.on && { color: C.inkSoft }]}>
-            {!m.on ? 'Manager is OFF' : managerActive(s) ? `Selling now: yard is ${pct}% full` : `Waiting: yard is ${pct}% full`}
-          </Text>
+          {(m.owed ?? 0) > 0 ? (
+            <Text style={styles.oweText}>💸 You owe your manager {money(m.owed!)}. He is paused (no selling, no collecting) until you can pay. It pays itself as soon as you have the Money.</Text>
+          ) : (
+            <Text style={[styles.owned, !m.on && { color: C.inkSoft }]}>
+              {!m.on ? 'Manager is OFF (no wage while off)' : managerActive(s) ? `Selling now: yard is ${pct}% full` : `Waiting: yard is ${pct}% full`}
+            </Text>
+          )}
           <View style={styles.mgrStats}>
-            <View style={styles.mgrStat}><Text style={styles.mgrNum}>{whole(m.soldToday)}</Text><Text style={styles.sub}>wood sold today</Text></View>
+            <View style={styles.mgrStat}><Text style={styles.mgrNum}>{whole(m.soldToday)} + {whole(m.planksToday ?? 0)}</Text><Text style={styles.sub}>wood + planks sold today</Text></View>
             <View style={styles.mgrStat}><Text style={styles.mgrNum}>{money(m.moneyToday)}</Text><Text style={styles.sub}>from his sales today</Text></View>
             <View style={styles.mgrStat}><Text style={styles.mgrNum}>{money(m.collectedToday)}</Text><Text style={styles.sub}>collected for you today</Text></View>
           </View>

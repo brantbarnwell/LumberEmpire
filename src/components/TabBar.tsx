@@ -9,7 +9,7 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'upgrades', icon: '⚒️', label: 'Tools' },
   { id: 'helpers', icon: '👷', label: 'Helpers' },
   { id: 'land', icon: '🗺️', label: 'Land' },
-  { id: 'workshop', icon: '🛖', label: 'Workshop' },
+  { id: 'workshop', icon: '🏭', label: 'Buildings' },
   { id: 'market', icon: '📈', label: 'Market' },
   { id: 'goals', icon: '🎯', label: 'Goals' },
   { id: 'shop', icon: '🛒', label: 'Shop' },

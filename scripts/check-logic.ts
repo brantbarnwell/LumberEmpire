@@ -4,7 +4,7 @@ import {
   levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, listForSale, woodMultFor, moneyMult,
   passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
   buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed, salesPerSec,
-  hireManager, setManagerOn, managerCollect, collectOfflineBonus, managerActive,
+  hireManager, setManagerOn, managerCollect, collectOfflineBonus, managerActive, upgradeSawmill, setSawmillOn, plankCutRate,
 } from '../src/game/logic';
 import { demandOf, shownChance, timeToSell, marketPriceOf, bestCommodityPrice } from '../src/game/market';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
@@ -217,20 +217,38 @@ ok(!doPrestige(ms, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Money 
 let mg = hireManager({ ...newGame(MON), money: 25_000 })!;
 ok(mg.money === 5_000 && mg.manager.hired && mg.manager.on && hireManager({ ...mg, money: 1e6 }) === null, 'manager costs $20,000, only one for the whole empire');
 ok(setManagerOn(mg, false)!.manager.on === false, 'manager has an on/off switch');
-const base: GameState = { ...mg, helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6, selling: false, sellPrice: 0.123 };
+const base: GameState = { ...mg, money: 1e6, selling: false, sellPrice: 0.123 };
 let full = { ...base, wood: 9_500 };
 ok(managerActive(full) && !managerActive({ ...full, wood: 7_000 }), 'manager starts at 80% full');
 let after = full;
 for (let i = 1; i <= 720; i++) after = tick(after, 5, MON + i * 5000);
 ok(after.wood <= 8_000 + 1 && after.wood >= 7_900 && after.manager.soldToday > 0 && after.sellPrice === 0.123, 'manager sells back down to 80% at your price, even with selling paused, never changes price');
 ok(tick({ ...base, wood: 5_000 }, 60, MON).manager.soldToday === 0, 'manager does not sell below 80%');
-let plain: GameState = { ...base, wood: 9_500, manager: { ...base.manager, on: false } };
-for (let i = 1; i <= 720; i++) plain = tick(plain, 5, MON + i * 5000);
-ok(after.axeDurability === plain.axeDurability && Object.keys(after.lands).length === 0 && after.totalChops === 0 && after.totalWoodChopped >= plain.totalWoodChopped, 'manager does not chop, buy land, or repair (he only frees yard space)');
+ok(Math.abs(after.money - (1e6 + after.manager.moneyToday - 1000)) < 1, 'manager wage is $1,000 per hour, paid automatically');
+let broke2 = tick({ ...full, money: 0 }, 60, MON);
+ok((broke2.manager.owed ?? 0) > 0 && !managerActive(broke2) && broke2.manager.soldToday === 0, "can't pay him: he pauses selling and the amount owed adds up");
+ok(managerCollect(broke2, { away: 3600, earned: 500, gross: 500, sold: 1, produced: 1 }).state.money === broke2.money, "can't pay him: he does not collect either");
+let pk = { ...base, wood: 0, planks: 4_900, plankSelling: false };
+for (let i = 1; i <= 720; i++) pk = tick(pk, 5, MON + i * 5000);
+ok((pk.manager.planksToday ?? 0) > 0 && pk.planks * 2 <= 8_001, 'manager sells planks too, back down to 80% of the yard');
+let fu: GameState = { ...base, wood: 9_500, workshop: { ...base.workshop, level: 0, inventory: { stool: 3 } } };
+fu = tick(fu, 60, MON);
+ok(fu.workshop.inventory.stool === 3 && fu.market.orders.every((o) => o.status !== 'done'), 'manager does not sell furniture or take bulk orders');
 const offR = { away: 3600, earned: 500, gross: 500, sold: 5000, produced: 5000 };
 const col = managerCollect({ ...mg, money: 0 }, offR);
 ok(col.state.money === 500 && col.result.collectedBy === 'manager' && col.state.manager.collectedToday === 500, 'manager collects Welcome Back Money for you');
 ok(collectOfflineBonus(col.state, col.result).money === 1000, 'optional video still adds the 2x bonus on top');
 ok(managerCollect({ ...newGame(MON), money: 0 }, offR).state.money === 0, 'no manager: you collect it yourself');
+
+// ---- Part 8: Sawmill ----
+let sm = upgradeSawmill({ ...newGame(MON), money: 30_000 })!;
+ok(sm.sawmill.level === 1 && sm.money === 5_000 && plankCutRate(sm) === 10 && plankCutRate({ ...newGame(MON), cutting: true }) === 2, 'Sawmill level 1: $25,000, 10 planks a second (Cut planks is 2)');
+let sm2 = upgradeSawmill({ ...sm, money: 1e6 })!;
+ok(sm2.sawmill.level === 2 && plankCutRate(sm2) === 25, 'Sawmill upgrades: level 2 is 25 planks a second');
+let mill = tick({ ...sm2, wood: 1000, selling: false, plankSelling: false }, 10, MON);
+ok(Math.abs(mill.planks - 250) < 1e-6 && Math.abs(mill.wood - 500) < 1e-6, 'Sawmill turns 2 wood into 1 plank');
+ok(plankCutRate(setSawmillOn(sm2, false)!) === 0, 'Sawmill can be switched off');
+let emp = grantProduct(newGame(MON), 'com.lumberempire.megapack', 'e1', MON)!;
+ok(emp.sawmill.level === 1 && !emp.owned.pendingBuildings.includes('sawmill'), 'Empire Pack gives the Sawmill');
 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }

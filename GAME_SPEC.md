@@ -328,7 +328,7 @@ Muse's own section 20 is the source of truth; this is what the code does.
 
 Muse's own section is the source of truth; this is what the code does.
 
-- Hire in the Helpers tab for $20,000 Money. One manager for the whole empire. On/off switch. Shows wood he sold today, Money from his sales today, and Money he collected for you today. No wage (not in the spec). Resets on prestige like helpers.
+- Hire in the Helpers tab for $20,000 Money. One manager for the whole empire. On/off switch. Shows what he sold today, Money from his sales today, and Money he collected for you today. Wage: see section 22. Resets on prestige like helpers.
 - Sells: when the yard (wood + planks) is 80% full, he brings in a second crowd of buyers at YOUR Market price (never changes it) and sells wood back down to 80%. Works even if you paused selling. Wood only, not planks.
 - He cannot beat the yard limit (Part 4 brake): a pile only sells so fast, so if you make more than your yard can sell, it still fills. Upgrade storage for that.
 - Collects: Welcome Back Money is added for you automatically. The screen says "Your manager already collected it", with an optional video for the 2x bonus on top (or instant for VIP / No Ads).
@@ -339,3 +339,17 @@ Muse's own section is the source of truth; this is what the code does.
   - selling paused: off = full 3.9 h, 278,000 wasted; on = held at 80%, nothing wasted
   - 400 wood/sec into a 10,000 yard: full all 4 hours with or without him (storage brake); a 150,000 yard fixes it
 - Rival rules from Part 6 unchanged.
+
+
+## 22. Part 8 - manager fixes and Sawmill (from Brant, Nov 21 2026)
+
+Muse's own section is the source of truth; this is what the code does.
+
+- Manager brings half as many extra buyers (0.5 crowd instead of 1).
+- Halving alone did NOT stop overpricing from winning (2x price + manager earned $40,578 vs $35,297 for the best-price tip without him). So his extra buyers are bargain hunters: above market price even fewer of them say yes. At or below market nothing changes, and he still sells at your price.
+- Re-test (npm run manager-test, 10 helpers, 10,000 yard, 4 hours): 2x price + manager = $32,101; best-price tip without manager = $35,297. High pricing no longer wins.
+- Manager wage $1,000 per hour while he is switched on (nothing while off), paid automatically. If you can't pay, the amount owed adds up and he pauses selling and collecting until it is paid (pays itself as soon as you have the Money). Owed amount shown in the Helpers tab.
+- He sells planks too, same 80% yard rule, at your plank price. Still no furniture, no bulk orders.
+- Trade-off: with half the extra buyers he can't keep up with a full crew alone any more (selling paused: he sold 168,536 wood but the yard still filled).
+- Sawmill (Buildings tab, renamed from Workshop): turns 2 wood into 1 plank. Level 1 $25,000 = 10 planks/sec, level 2 $100,000 = 25, level 3 $400,000 = 60, level 4 $1.5M = 150, level 5 $6M = 400 (Cut planks by hand = 2). Upgrades are instant. On/off switch. The Empire Pack gives level 1. Resets on prestige like other buildings (the pack's Sawmill is not given again).
+- The game is now complete per the spec. No new features after this.

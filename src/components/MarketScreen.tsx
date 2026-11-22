@@ -128,7 +128,7 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
   const st: GameState = isWood ? { ...s, selling: true } : { ...s, plankSelling: true };
   const perSec = isWood ? salesPerSec(st, price, forecastStock) : plankSalesPerSec(st, price, forecastStock);
   const tts = timeToSell(s.dayKey, p, price, stock, BUYERS_PER_WOOD_IN_STOCK, isWood ? s.buyers.wood : s.buyers.planks);
-  const made = isWood ? s.buyers.wood / 1.1 : (s.cutting ? 2 : 0);
+  const made = isWood ? s.buyers.wood / 1.1 : s.buyers.planks / 1.1;
   const growing = on && stock > 50 && made > 2.01 && perSec < made * 0.98;
   const best = bestCommodityPrice(s.dayKey, p);
   const today = s.market.days.find((d) => d.day === s.dayKey);
@@ -145,7 +145,7 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
         <View style={styles.cutRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>Cut planks</Text>
-            <Text style={styles.small}>{PLANK_WOOD} wood → 1 plank, {PLANK_CUT_PER_SEC} planks a second. Planks sell for more than wood.{fx.plankSalePct > 0 ? ' Log Splitter: 2x plank Money!' : ''}</Text>
+            <Text style={styles.small}>{PLANK_WOOD} wood → 1 plank, {PLANK_CUT_PER_SEC} planks a second. Planks sell for more than wood.{fx.plankSalePct > 0 ? ' Log Splitter: 2x plank Money!' : ''}{s.sawmill.level > 0 ? ` Your Sawmill adds more (see Buildings).` : ''}</Text>
           </View>
           <Switch value={s.cutting} trackColor={{ true: C.gold, false: '#bbb' }} onValueChange={(v) => { update((x) => ({ ...x, cutting: v })); }} />
         </View>
@@ -180,7 +180,7 @@ function Commodity({ p }: { p: 'wood' | 'planks' }) {
         <Stat label="est. profit / hour" value={money(perSec * 3600 * price * mult)} color={C.money} />
       </View>
       {isWood && s.manager.hired && (
-        <Text style={styles.small}>👔 Manager {s.manager.on ? `is on: sells extra at your price when the yard is 80% full (sold ${whole(s.manager.soldToday)} today)` : 'is off'}</Text>
+        <Text style={styles.small}>👔 Manager {s.manager.on ? `is on: sells extra wood and planks at your prices when the yard is 80% full (sold ${whole(s.manager.soldToday)} wood today)` : 'is off'}</Text>
       )}
       {growing && <Text style={styles.warnText}>⚠️ At this price you make more than buyers take. Your pile will grow until the yard is full. Lower the price to sell it all.</Text>}
       <Text style={styles.small}>

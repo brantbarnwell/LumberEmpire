@@ -4,9 +4,10 @@ import Slider from '@react-native-community/slider';
 import { update, useGame } from '../game/store';
 import {
   bestItemPrice, cancelSale, changeSalePrice, craftTimeMs, finishBuildWithGold, finishCraftWithGold, goldToSkip,
-  listForSale, sellOdds, startBuild, startCraft, workshopUnlocked,
+  listForSale, sellOdds, startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost,
 } from '../game/logic';
-import { ITEMS, WORKSHOPS } from '../game/data';
+import { Switch } from 'react-native';
+import { ITEMS, WORKSHOPS, SAWMILL_LEVELS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
 import { duration, money, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card, GoldCoin, ProgressBar } from './ui';
@@ -32,7 +33,9 @@ export function WorkshopScreen() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Workshop</Text>
+      <Text style={styles.title}>Buildings</Text>
+      <SawmillCard />
+      <Text style={styles.section}>Workshop</Text>
 
       {/* building */}
       <Card style={[!unlocked && w.level < 0 && { opacity: 0.55 }] as any}>
@@ -180,6 +183,43 @@ export function WorkshopScreen() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+function SawmillCard() {
+  const s = useGame();
+  const lvl = s.sawmill.level;
+  const cur = lvl > 0 ? SAWMILL_LEVELS[lvl - 1] : null;
+  const next = SAWMILL_LEVELS[lvl];
+  const cost = sawmillNextCost(s);
+  return (
+    <Card>
+      <View style={styles.row}>
+        <Text style={styles.bigIcon}>🪚</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>Sawmill{cur ? ` · Level ${lvl}/${SAWMILL_LEVELS.length}` : ''}</Text>
+          <Text style={styles.sub}>
+            {cur
+              ? `Cuts ${cur.planksPerSec} planks a second (${cur.planksPerSec * PLANK_WOOD} wood a second). Cut planks by hand is only ${PLANK_CUT_PER_SEC}.`
+              : `Turns wood into planks much faster than Cut planks (${PLANK_CUT_PER_SEC} a second). Comes with the Empire Pack, or build it with Money.`}
+          </Text>
+        </View>
+        {cur && <Switch value={s.sawmill.on} onValueChange={(v) => { update((st) => setSawmillOn(st, v)); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Sawmill on or off" />}
+      </View>
+      {cur && <Text style={[styles.small, { marginTop: 6 }]}>{s.sawmill.on ? (s.wood >= PLANK_WOOD ? 'Running. Sell planks in the Market.' : 'Waiting for wood.') : 'Switched off.'}</Text>}
+      {next && cost !== null ? (
+        <Button
+          style={{ marginTop: 8 }}
+          variant={s.money >= cost ? 'green' : 'ghost'}
+          label={lvl === 0 ? 'Build Sawmill' : `Upgrade to level ${lvl + 1}`}
+          sub={`${money(cost)} · ${next.planksPerSec} planks a second`}
+          disabled={s.money < cost}
+          onPress={() => update((st) => upgradeSawmill(st)) && haptic.success()}
+        />
+      ) : (
+        <Text style={[styles.sub, { marginTop: 6 }]}>Top level reached!</Text>
+      )}
+    </Card>
   );
 }
 
