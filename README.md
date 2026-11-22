@@ -55,11 +55,13 @@ lumber-empire/
       logic.ts      - game rules (chop, sell, helpers, land deals, workshop, offline)
       meta.ts       - daily rewards, quests, video rewards, Gold shop, prestige
       store.ts, save.ts, format.ts, rate.ts
-    components/     - one file per screen (Chop, Upgrades, Helpers, Land, Workshop, Goals, Shop) + TopBar, TabBar, WelcomeBack
+    components/     - one file per screen (Chop/Home, Upgrades, Helpers, Land, Buildings, Market, Goals, Shop) + TopBar, TabBar, WelcomeBack
+      art/          - all drawings in one style: Icons, Axe, TreeArt, Buildings (workshops, sawmill, land, Golden Log), Crew, Mill, ToolArt
     services/
       purchases.ts  - real App Store purchases via RevenueCat
       ads.ts        - opt-in rewarded videos (AdMob); ads.web.ts for the browser preview
       notify.ts     - local notifications; notify-plan.ts has the timing rules
+      feel.ts       - sound + haptics + counter pops for every tap, purchase, unlock, prestige, reward (respects Settings)
       haptics.ts
   scripts/
     check-logic.ts  - npm test
@@ -70,17 +72,25 @@ lumber-empire/
 
 ## Status
 
-- Part 1: Chop screen, top bar, axes and repairs, wood selling with a price slider, golden trees, Shop with App Store purchases.
-- Part 2: Helpers (hire copies, level up 10 times), Land (seller negotiation, reputation, land upgrades), Workshop (8 buildings, 24 crafted items, selling items with sell chance and time).
-- Part 3: opt-in video rewards (Welcome Back 2x, 2x wood 30 min, 5 free Gold videos a day), VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop for time boosts.
-- Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit and upgrades, ranks up to $200M.
-- Part 5: Market tab (wood, planks, furniture, demand, news, bulk orders, 7-day graph), Golden Chainsaw ($500,000 or 1,500 Gold).
-- Part 6: AI rival companies (offers, counters, buy-outs, activity feed), 60-second land auctions, Golden Chainsaw kept through prestige when bought with Gold.
-- Part 7: manager helper ($20,000): sells at 80% yard at your price, collects Welcome Back Money.
-- Part 8: manager fixes (half extra buyers, bargain hunters, $1,000/h wage, sells planks) and the Sawmill building (Buildings tab).
-- The game is complete per the spec.
-- Typecheck, 95 logic tests, iOS bundle and web click-through all pass. `npm run price-test` and `npm run auction-test` show selling and auctions.
-- Not built yet: wood quality, Buildings (Sawmill etc), Empire Map, Leaderboard, weather, sounds, achievements.
+Built:
+- Part 1: Chop screen, top bar, axes and repairs, golden trees, Shop with App Store purchases.
+- Part 2: Helpers (hire copies, level up 10 times), Land (seller negotiation, reputation, land upgrades), Workshop (8 buildings, 24 crafted items).
+- Part 3: opt-in video rewards, VIP $4.99 / $39.99, 7-day daily rewards, daily and weekly quests, weekend Timber Rush, prestige (Timber Baron), push notifications, Gold shop.
+- Part 4: packs fixed (no power for money), Tools with durability and repairs, helper wages, wood storage limit, ranks up to $200M.
+- Part 5: Market tab (wood, planks, furniture, news, bulk orders, 7-day graph), Golden Chainsaw ($500,000 or 1,500 Gold).
+- Part 6: AI rival companies (offers, counters, buy-outs, activity feed), 60-second land auctions.
+- Part 7: manager helper ($20,000): sells at 80% yard, collects Welcome Back Money.
+- Part 8: manager fixes and the Sawmill building (Buildings tab).
+- Section 24: manual SELL button, Yard Seller ($1,500), 3 bigger forests, 2 more land upgrades, new auction screen, drawn art and animations.
+  Commit: "Manual selling, Yard Seller, more land, lost-bid penalty, new art and animations (section 24)".
+- Update 2 (section 25):
+  - Selling: no price slider. Everything sells at the market price in one tap.
+  - Auctions: losing an auction you bid in costs 5% of your Money. Offers cost nothing.
+  - Home screen: 4 counters at the top, the tree in the middle, one SELL button at the bottom.
+  - Fun: Golden Log Frenzy (7x for 30 seconds), cost growth 1.10, prestige preview.
+  - Look and feel: one flat art style, an icon set, the sawmill line with machines, sounds, haptics, and a Settings page with Reduce motion.
+- Typecheck and the logic tests pass (`npm test`). Pacing: `npm run pacing`.
+- Not built: wood quality, Empire Map, Leaderboard, achievements, research.
 
 ## Testing on your iPhone
 
@@ -100,7 +110,6 @@ npx expo start       # run the game (press w for a browser preview)
 npm run typecheck    # check for code errors
 npm test             # check game rules
 npm run pacing       # see how long upgrades take
-npm run price-test   # see how price changes selling
 npm run auction-test # play 200 land auctions against the rivals
 npm run manager-test # does the yard fill with the manager on
 ```

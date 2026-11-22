@@ -3,7 +3,7 @@ import { Animated, Platform, StyleSheet, Text, TextInput, View } from 'react-nat
 import { getState, update, useGame } from '../game/store';
 import { minNextBid, placeBid, stepFor } from '../game/rivals';
 import { LAND, LOST_BID_PENALTY, RIVALS } from '../game/data';
-import { money } from '../game/format';
+import { exactMoney, money } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button } from './ui';
 import { C } from './theme';
@@ -70,7 +70,7 @@ export function AuctionPanel() {
   return (
     <View style={[styles.box, winning ? styles.win : a.leader ? styles.lose : null]}>
       <View style={styles.row}>
-        <Text style={styles.title}>🔨 {land.icon} {land.name}</Text>
+        <Text style={styles.title}>{land.name}</Text>
         <Animated.Text style={[styles.timer, hot && { color: C.red, transform: [{ scale: beat }] }]}>{left}s</Animated.Text>
       </View>
       <View style={styles.timeBar}><View style={[styles.timeFill, { width: `${Math.min(100, (left / total) * 100)}%`, backgroundColor: hot ? C.red : left < 25 ? C.gold : C.leafLight }]} /></View>
@@ -92,6 +92,7 @@ export function AuctionPanel() {
         ))}
       </View>
 
+      <Text style={styles.risk}>If you lose, you pay 5% of your Money, {exactMoney(s.money * LOST_BID_PENALTY)}.</Text>
       {a.outbid && !winning && <Text style={styles.outbid}>⚡ You were outbid! Bid again: you get at least 10 more seconds.</Text>}
       {err && <Text style={styles.err}>{err}</Text>}
       {!winning && (
@@ -110,7 +111,6 @@ export function AuctionPanel() {
           </View>
         </>
       )}
-      <Text style={styles.risk}>⚠️ If a rival wins after you bid, you lose 20% of your Money ({money(Math.round(s.money * LOST_BID_PENALTY))}).</Text>
       <Text style={styles.small}>You have {money(s.money)}. Asking price was {money(land.asking)}.</Text>
       <View style={styles.log}>
         {[...a.log].reverse().slice(0, 5).map((b, i) => (

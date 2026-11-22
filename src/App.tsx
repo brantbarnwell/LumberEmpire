@@ -16,7 +16,6 @@ import { UpgradesScreen } from './components/UpgradesScreen';
 import { HelpersScreen } from './components/HelpersScreen';
 import { LandScreen } from './components/LandScreen';
 import { WorkshopScreen } from './components/WorkshopScreen';
-import { GoalsScreen } from './components/GoalsScreen';
 import { MarketScreen } from './components/MarketScreen';
 import { ShopScreen } from './components/ShopScreen';
 import { PopupView } from './components/PopupView';
@@ -24,6 +23,8 @@ import { WelcomeBack } from './components/WelcomeBack';
 import { NotifPrompt } from './components/NotifPrompt';
 import { AuctionBanner } from './components/AuctionBanner';
 import { Celebrate } from './components/Celebrate';
+import { FlyLayer } from './components/TopBar';
+import { setFeelFlags } from './services/feel';
 import { C } from './components/theme';
 
 const TICK_MS = 250;
@@ -132,25 +133,26 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     canClaimLogin(s, now) ||
     s.daily.quests.some((q) => !q.claimed && questProgress(s, q) >= q.target) ||
     (!!s.weekly.quest && !s.weekly.quest.claimed && questProgress(s, s.weekly.quest) >= s.weekly.quest.target);
+  useEffect(() => { setFeelFlags(s.settings ?? { sound: true, haptics: true, reduceMotion: false }); }, [s.settings]);
   return (
     <>
-      <TopBar onShop={() => setTab('shop')} />
+      <TopBar />
       {tab !== 'land' && <AuctionBanner onOpen={() => setTab('land')} />}
       <View style={{ flex: 1 }}>
-        {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} onOpenMarket={() => setTab('market')} />}
+        {tab === 'chop' && <ChopScreen onOpenUpgrades={() => setTab('upgrades')} />}
         {tab === 'upgrades' && <UpgradesScreen />}
         {tab === 'helpers' && <HelpersScreen />}
         {tab === 'land' && <LandScreen />}
         {tab === 'workshop' && <WorkshopScreen />}
         {tab === 'market' && <MarketScreen />}
-        {tab === 'goals' && <GoalsScreen />}
         {tab === 'shop' && <ShopScreen />}
       </View>
-      <TabBar tab={tab} onTab={setTab} dots={{ goals: goalsDot }} />
-      {tab === 'chop' && <NotifPrompt />}
+      <TabBar tab={tab} onTab={setTab} dots={{ upgrades: goalsDot }} />
+      {tab === 'upgrades' && <NotifPrompt />}
       <WelcomeBack />
       <PopupView />
       <Celebrate />
+      <FlyLayer />
     </>
   );
 }

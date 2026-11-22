@@ -188,3 +188,15 @@ export function prestigeProgress(s: GameState) {
 }
 
 export { AXES, marketPriceFor };
+
+/**
+ * Update 2: prestige preview. "+38% forever" and roughly how long until you are back where you are today,
+ * at your current Money per minute sped up by the new multiplier.
+ */
+export function prestigePreview(s: GameState, now: number) {
+  const gain = prestigeGain(s);
+  const pct = Math.round((gain / s.prestige.mult) * 100);
+  const perMin = incomePerMin(s, now) * ((s.prestige.mult + gain) / s.prestige.mult);
+  const minutes = perMin > 0 ? Math.max(1, Math.round(s.moneyToday / perMin)) : null;
+  return { pct, minutes };
+}

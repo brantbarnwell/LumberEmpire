@@ -1,5 +1,5 @@
 // Market rules that only depend on the date and price (section 9). No game state here.
-import { MARKET_BASE_PRICE, MARKET_EVENTS, MARKET_EVENT_CHANCE, MARKET_SIZE_MULT, PLANK_BASE_PRICE, Product, SELL_CURVE } from './data';
+import { MARKET_BASE_PRICE, MARKET_EVENTS, MARKET_EVENT_CHANCE, PLANK_BASE_PRICE, Product } from './data';
 
 /** Turns a text (like a date) into a steady random number from 0 to 1. */
 export function hash(str: string) {
@@ -47,73 +47,41 @@ export function demandLabel(d: number) {
   return 'Very High';
 }
 
-/** Average price other sellers ask today (within 10% of base). */
+export type Weather = { id: 'sunny' | 'rain' | 'snow' | 'storm'; icon: string; mult: number };
+/** Today's weather. Storms and snow make wood dearer (people rebuild and heat their homes). */
+export function weatherOf(dayKey: string): Weather {
+  const month = Number(dayKey.split('-')[1]);
+  const winter = month === 12 || month <= 2;
+  const r = hash('weather:' + dayKey);
+  if (r < 0.1) return { id: 'storm', icon: '⛈️', mult: 1.12 };
+  if (r < 0.35) return winter ? { id: 'snow', icon: '❄️', mult: 1.06 } : { id: 'rain', icon: '🌧️', mult: 0.96 };
+  return { id: 'sunny', icon: '☀️', mult: 1 };
+}
+
+/**
+ * Update 2: one market price set by the game. Base $0.10 for wood, moved by demand
+ * (which includes news events and season), weather and a small daily wobble.
+ */
 export function marketPriceOf(dayKey: string, p: 'wood' | 'planks') {
-  return BASE_PRICE[p] * (0.9 + hash(`price:${p === 'wood' ? '' : p}${dayKey}`) * 0.2);
+  const wobble = 0.92 + hash(`price:${p === 'wood' ? '' : p}${dayKey}`) * 0.16;
+  return BASE_PRICE[p] * wobble * demandOf(dayKey, p) * weatherOf(dayKey).mult;
 }
 
-/** Chance a buyer says yes and typical minutes to sell one item, by price / market price. Before demand. */
-export function sellCurve(ratio: number) {
-  const r = Math.max(SELL_CURVE[0].r, Math.min(SELL_CURVE[SELL_CURVE.length - 1].r, ratio));
-  let i = 0;
-  while (i < SELL_CURVE.length - 2 && r > SELL_CURVE[i + 1].r) i++;
-  const a = SELL_CURVE[i];
-  const b = SELL_CURVE[i + 1];
-  const t = (Math.log(r) - Math.log(a.r)) / (Math.log(b.r) - Math.log(a.r));
-  return {
-    chance: a.chance + (b.chance - a.chance) * t,
-    minutes: Math.exp(Math.log(a.min) + (Math.log(b.min) - Math.log(a.min)) * t),
-  };
+/** What one crafted item sells for today. */
+export function itemPriceOf(dayKey: string, value: number) {
+  return value * demandOf(dayKey, 'furniture') * weatherOf(dayKey).mult;
 }
 
-const BASE_CHANCE = 0.7; // chance at market price
-
-/**
- * Units sold per second. Two limits, the smaller wins:
- *  - buyers: `buyers` a second at market price, fewer say yes at a higher price
- *  - your pile: a small pile can't serve many buyers (this is why a bigger yard sells faster)
- */
-export function commodityRate(dayKey: string, p: 'wood' | 'planks', price: number, stock: number, buyersPerStock: number, buyers: number) {
-  if (stock < 1 || price <= 0) return 0;
-  const yes = (sellCurve(price / marketPriceOf(dayKey, p)).chance / BASE_CHANCE) * demandOf(dayKey, p);
-  return yes * Math.min(buyers, Math.max(1, stock * buyersPerStock));
+export function yesterdayOf(dayKey: string) {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const t = new Date(y, m - 1, d - 1);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-/** Shown sell chance (per buyer) including today's demand. */
-export function shownChance(dayKey: string, p: Product, ratio: number) {
-  return Math.min(0.99, sellCurve(ratio).chance * demandOf(dayKey, p));
-}
-
-/** Seconds to sell `stock` if nothing new comes in. Infinity if it would take more than a week. */
-export function timeToSell(dayKey: string, p: 'wood' | 'planks', price: number, stock: number, buyersPerStock: number, buyers: number) {
-  let left = stock;
-  let t = 0;
-  while (left >= 1 && t < 7 * 86400) {
-    const r = commodityRate(dayKey, p, price, left, buyersPerStock, buyers);
-    if (r <= 0) return Infinity;
-    const dt = Math.max(1, (0.05 * left) / r);
-    left -= r * dt;
-    t += dt;
-  }
-  return left >= 1 ? Infinity : t;
-}
-
-/**
- * Best price tip: the highest price where buyers still take everything you make (so your yard never fills).
- * On a very slow day where even cheap wood can't all sell, it picks the price with the most Money per hour.
- */
-export function bestCommodityPrice(dayKey: string, p: 'wood' | 'planks') {
-  const m = marketPriceOf(dayKey, p);
-  const d = demandOf(dayKey, p);
-  const takes = (r: number) => MARKET_SIZE_MULT * d * (sellCurve(r).chance / BASE_CHANCE);
-  let best = 0;
-  for (let r = 0.3; r <= 3; r += 0.01) if (takes(r) >= 1.02) best = r;
-  if (best === 0) {
-    let bestV = 0;
-    for (let r = 0.3; r <= 3; r += 0.01) {
-      const v = r * Math.min(1, takes(r));
-      if (v > bestV) [bestV, best] = [v, r];
-    }
-  }
-  return Math.round(m * best * 100) / 100;
+/** +1 up, -1 down, 0 about the same as yesterday. */
+export function priceTrend(dayKey: string, p: 'wood' | 'planks' | 'furniture') {
+  const today = p === 'furniture' ? itemPriceOf(dayKey, 1) : marketPriceOf(dayKey, p);
+  const before = p === 'furniture' ? itemPriceOf(yesterdayOf(dayKey), 1) : marketPriceOf(yesterdayOf(dayKey), p);
+  const r = today / before;
+  return r > 1.01 ? 1 : r < 0.99 ? -1 : 0;
 }

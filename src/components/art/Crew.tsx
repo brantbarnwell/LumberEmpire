@@ -11,9 +11,9 @@ const SKIN = '#f2c79b';
 // ---------- people ----------
 
 type Hat = 'cap' | 'beanie' | 'hardhat' | 'helmet' | 'hood';
-type Who = { shirt: string; pants: string; hat: Hat; hatColor: string; beard?: string; vest?: boolean; plaid?: boolean; belt?: string; big?: boolean };
+export type Who = { shirt: string; pants: string; hat: Hat; hatColor: string; beard?: string; vest?: boolean; plaid?: boolean; belt?: string; big?: boolean };
 
-function Person({ w }: { w: Who }) {
+export function Person({ w }: { w: Who }) {
   const torsoW = w.big ? 28 : 22;
   const tx = 25 - torsoW / 2;
   return (
@@ -172,7 +172,7 @@ function useLoop(duration: number, delay: number) {
 
 // ---------- one station per helper type ----------
 
-const WHO: Record<string, Who> = {
+export const WHO: Record<string, Who> = {
   apprentice: { shirt: '#4f9a4f', pants: '#3b5b8a', hat: 'cap', hatColor: '#2f6fb0' },
   lumberjack: { shirt: '#c9372a', pants: '#2f3f5a', hat: 'beanie', hatColor: '#8e1f17', beard: '#6b3a1c', plaid: true },
   veteran: { shirt: '#e07b26', pants: '#4a4a4a', hat: 'hardhat', hatColor: '#f5c542', beard: '#9aa0a6' },

@@ -7,18 +7,21 @@ import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card } from './ui';
 import { C } from './theme';
+import { Person, WHO, WorkYard } from './art/Crew';
+import { Icon } from './art/Icons';
+import { ToolArt } from './art/ToolArt';
 
-/** Section 24: the cash helper that sells wood and planks for you at your price. */
+/** Section 24: the cash helper that sells wood and planks for you at the market price. */
 function YardSellerCard() {
   const s = useGame();
   return (
     <Card style={[styles.card, { borderColor: C.gold, borderWidth: 2 }] as any}>
       <View style={styles.row}>
-        <View style={styles.avatar}><Text style={{ fontSize: 30 }}>🧑‍💼</Text></View>
+        <View style={styles.avatar}><Icon name="seller" size={40} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>Yard Seller</Text>
-          <Text style={styles.sub}>Sells your wood and planks for you at YOUR price, all day and while you are away. No wage.</Text>
-          {s.yardSeller && <Text style={styles.owned}>{s.selling ? 'Selling now' : 'Paused'} · change your price on the Chop or Market screen</Text>}
+          <Text style={styles.sub}>Sells all your wood and planks at the market price, all day and while you are away. No wage.</Text>
+          {s.yardSeller && <Text style={styles.owned}>{s.selling ? 'Selling now' : 'Paused'}</Text>}
         </View>
         {s.yardSeller && <Switch value={s.selling} onValueChange={(v) => { update((st) => ({ ...st, selling: v, plankSelling: v })); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Yard Seller on or off" />}
       </View>
@@ -45,6 +48,7 @@ export function HelpersScreen() {
         {mult !== 1 && <Text style={[styles.sub, { color: C.leaf }]}>Boosts active: x{small(mult)}</Text>}
         {wagePerHour(s) > 0 && <Text style={styles.sub}>Wages: {money(wagePerHour(s))} per hour, paid from your Money</Text>}
       </Card>
+      <WorkYard s={s} />
       <YardSellerCard />
       <ManagerCard />
       {s.wagesOwed > 0 && (
@@ -61,7 +65,7 @@ export function HelpersScreen() {
         return (
           <Card key={h.id} style={[styles.card, !prevOwned && { opacity: 0.55 }] as any}>
             <View style={styles.row}>
-              <View style={styles.avatar}><Text style={{ fontSize: 30 }}>{h.icon}</Text></View>
+              <View style={styles.avatar}>{WHO[h.id] ? <View style={{ transform: [{ scale: 0.8 }] }}><Person w={WHO[h.id]} /></View> : <ToolArt id="truck" size={44} />}</View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{h.name}</Text>
                 <Text style={styles.sub}>{small(perOne)} wood/sec each · Level {owned.level}/{HELPER_MAX_LEVEL} · wage {money(HELPER_WAGES[h.id] * (1 + WAGE_LEVEL_GROWTH * owned.level))}/hr</Text>
@@ -104,7 +108,7 @@ function ManagerCard() {
   return (
     <Card style={styles.mgr}>
       <View style={styles.row}>
-        <View style={styles.avatar}><Text style={{ fontSize: 30 }}>👔</Text></View>
+        <View style={styles.avatar}><View style={{ transform: [{ scale: 0.8 }] }}><Person w={{ shirt: '#2b3a5a', pants: '#2b2b3a', hat: 'cap', hatColor: '#2b3a5a', belt: '#f5c542' }} /></View></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>Manager</Text>
           <Text style={styles.sub}>One manager runs sales for your whole empire.</Text>
@@ -114,7 +118,7 @@ function ManagerCard() {
         )}
       </View>
       <View style={styles.mgrList}>
-        <Text style={styles.mgrLine}>✅ Sells wood and planks when your yard is {Math.round(MANAGER_SELL_AT * 100)}% full, at the prices you set in the Market. He never changes your prices.</Text>
+        <Text style={styles.mgrLine}>✅ Sells wood and planks when your yard is {Math.round(MANAGER_SELL_AT * 100)}% full, at the market price.</Text>
         <Text style={styles.mgrLine}>✅ Collects your Money when you come back, so you don't have to tap Collect.</Text>
         <Text style={styles.mgrLine}>❌ Does not chop, buy land, repair tools, sell furniture, or take bulk orders.</Text>
         <Text style={styles.mgrLine}>💵 Wage: {money(MANAGER_WAGE)} per hour while switched on, paid automatically.</Text>
@@ -156,7 +160,7 @@ const styles = StyleSheet.create({
   big: { fontSize: 22, fontWeight: '900', color: C.ink },
   card: { paddingVertical: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#efe2c4', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#cdeef5', alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden', borderWidth: 2, borderColor: '#3a2210' },
   name: { fontSize: 16, fontWeight: '900', color: C.ink },
   sub: { fontSize: 12, fontWeight: '700', color: C.inkSoft },
   owned: { fontSize: 12, fontWeight: '800', color: C.leaf, marginTop: 2 },

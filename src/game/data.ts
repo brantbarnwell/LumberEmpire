@@ -16,7 +16,7 @@ export interface Axe {
 // Repair: spec examples +20% (Rusty $12, Iron $90), rest BALANCE.
 export const AXES: Axe[] = [
   { id: 'rusty', name: 'Rusty Axe', cost: 0, power: 0.8, wearEvery: 20, repairCost: 12, head: '#9c6b4e' },
-  { id: 'stone', name: 'Stone Axe', cost: 75, power: 2, wearEvery: 18, repairCost: 30, head: '#8d939a' },
+  { id: 'stone', name: 'Stone Axe', cost: 82, power: 2, wearEvery: 18, repairCost: 30, head: '#8d939a' },
   { id: 'iron', name: 'Iron Axe', cost: 350, power: 5, wearEvery: 15, repairCost: 90, head: '#b9c2cc' },
   { id: 'steel', name: 'Steel Axe', cost: 1_200, power: 12, wearEvery: 12, repairCost: 240, head: '#d7e1ea' },
   { id: 'titanium', name: 'Titanium Axe', cost: 6_000, power: 30, wearEvery: 10, repairCost: 720, head: '#9fb7d0' },
@@ -36,15 +36,8 @@ export const GOLDEN_GOLD_MIN = 3; // spec
 export const GOLDEN_GOLD_MAX = 10; // spec
 export const GOLDEN_MONEY_PER_POWER = 25; // bonus Money = 25 x axe power. BALANCE
 
-// Selling wood (simple first version of the Market, spec section 9)
+// Selling (update 2): everything sells at the market price, set by the game. No price slider.
 export const MARKET_BASE_PRICE = 0.1; // $ per wood at normal demand. Re-tuned in Part 5 after the demand fix. BALANCE
-// Price slider goes from 20% to 300% of market price
-export const PRICE_MIN_FACTOR = 0.2;
-export const PRICE_MAX_FACTOR = 3;
-// Sales fall off as price goes over market price. Fits the spec example:
-// 2x price sells ~30%, half price sells ~2x.
-export const PRICE_SENSITIVITY = 1.2;
-export const BUYERS_PER_WOOD_IN_STOCK = 0.02; // more wood in the yard draws more buyers. BALANCE
 export const OFFLINE_MAX_HOURS = 8; // spec Part 3: keep 8 hour cap
 export const OFFLINE_RATE = 0.5; // spec Part 3: helpers and land work at 50% while you are away
 
@@ -156,18 +149,18 @@ export const HOME_WOOD: WoodType = 'pine'; // your own trees and your helpers ch
 
 export interface HelperDef { id: string; name: string; cost: number; woodPerSec: number; icon: string }
 export const HELPERS: HelperDef[] = [
-  { id: 'apprentice', name: 'Apprentice Helper', cost: 450, woodPerSec: 2, icon: '🧒' },
+  { id: 'apprentice', name: 'Apprentice Helper', cost: 400, woodPerSec: 2, icon: '🧒' },
   { id: 'lumberjack', name: 'Lumberjack Helper', cost: 1_500, woodPerSec: 5, icon: '🧔' },
-  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 15, icon: '👷' },
-  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 50, icon: '🦺' },
-  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 200, icon: '🧙' },
-  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 1_000, icon: '🚜' },
+  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 10, icon: '👷' },
+  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 20, icon: '🦺' },
+  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 50, icon: '🧙' },
+  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 150, icon: '🚜' },
 ];
-export const HELPER_COPY_SCALE = 1.15; // each extra copy of the same helper costs 15% more. BALANCE
+export const HELPER_COPY_SCALE = 1.1; // update 2 (Playbook 1): each extra copy costs 10% more. BALANCE
 export const HELPER_MAX_LEVEL = 10; // spec
 export const HELPER_LEVEL_BONUS = 0.25; // spec: +25% output per level
 export const HELPER_LEVEL_COST_BASE = 1.0; // level 1 costs 1x the hire price... BALANCE
-export const HELPER_LEVEL_COST_GROWTH = 1.6; // ...and each level after costs 1.6x more. BALANCE
+export const HELPER_LEVEL_COST_GROWTH = 1.15; // update 2 (Playbook 1): ...and each level after costs 10% more. BALANCE
 
 export type Personality = 'flexible' | 'stubborn' | 'desperate' | 'greedy';
 export const PERSONALITY: Record<Personality, { label: string; blurb: string; minLo: number; minHi: number }> = {
@@ -189,14 +182,14 @@ export interface LandDef {
 export const LAND: LandDef[] = [
   { id: 'clearing', name: 'Small Clearing', asking: 3_000, acres: 2, trees: 10, woodPerSec: 5, wood: 'pine', icon: '🌱' },
   { id: 'pine', name: 'Pine Grove', asking: 15_000, acres: 6, trees: 25, woodPerSec: 20, wood: 'pine', icon: '🌲' },
-  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 75, wood: 'oak', icon: '⛰️' },
-  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 250, wood: 'maple', icon: '🏞️' },
-  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 800, wood: 'redwood', icon: '🌳' },
-  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 3_000, wood: 'spruce', icon: '🏔️' },
+  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 50, wood: 'oak', icon: '⛰️' },
+  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 140, wood: 'maple', icon: '🏞️' },
+  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 350, wood: 'redwood', icon: '🌳' },
+  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 1_000, wood: 'spruce', icon: '🏔️' },
   // Section 24: bigger late-game forests (more land to buy)
-  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 9_000, wood: 'oak', icon: '🌄' },
-  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 27_000, wood: 'maple', icon: '🍁' },
-  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 80_000, wood: 'redwood', icon: '🌴' },
+  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 2_500, wood: 'oak', icon: '🌄' },
+  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 6_000, wood: 'maple', icon: '🍁' },
+  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 15_000, wood: 'redwood', icon: '🌴' },
 ];
 export const LAND_UPGRADES = [
   { id: 'plant', name: 'Plant Trees', costFrac: 0.25, bonus: 0.2 },
@@ -206,9 +199,13 @@ export const LAND_UPGRADES = [
   { id: 'nursery', name: 'Tree Nursery', costFrac: 1.6, bonus: 1.0 },
 ]; // BALANCE. Section 24 added the last two.
 // Section 24: manual selling
+// Update 2: Golden Log. Spawns every 3 to 5 minutes, glows for 60 seconds; tap it for a Frenzy.
+export const GOLDEN_LOG_EVERY_MIN: [number, number] = [3, 5];
+export const GOLDEN_LOG_LASTS_SEC = 60;
+export const FRENZY_SEC = 30;
+export const FRENZY_MULT = 7; // 7x wood/sec from helpers and land while it lasts
 export const YARD_SELLER_COST = 1_500; // cash helper that sells wood and planks for you at your price
-export const BUYER_POOL_MINUTES = 10; // buyers wait up to 10 minutes of crowd for your SELL button
-export const LOST_BID_PENALTY = 0.2; // lose 20% of your Money when a seller says no or a rival wins an auction you bid in
+export const LOST_BID_PENALTY = 0.05; // update 2: lose 5% of your Money only when you bid in an auction and a rival wins
 export const SELLER_WALKAWAY_HOURS = 24; // spec
 export const MAX_REJECTIONS = 3; // spec
 
@@ -376,20 +373,6 @@ export type Product = 'wood' | 'planks' | 'furniture';
 export const PLANK_BASE_PRICE = 0.25; // $ per plank at normal demand. BALANCE
 export const PLANK_WOOD = 2; // wood per plank (a plank also takes 2 spaces in storage). BALANCE
 export const PLANK_CUT_PER_SEC = 2; // planks you cut per second while cutting is on. BALANCE
-// Buyers: at market price on a normal day, about 10% more buyers than the wood you produce (never fewer than 2 a second).
-// Raise the price and fewer of them say yes; the rest of your wood piles up.
-export const MARKET_SIZE_MULT = 1.1;
-export const MIN_BUYERS_PER_SEC = 2;
-
-// Sell chance curve for every product (spec section 9 chair example):
-// half price 95% in ~5 min, base price 70% in ~1 hour, 2x 30% in ~6 hours, 4x 5% (may never sell).
-export const SELL_CURVE = [
-  { r: 0.25, chance: 0.99, min: 2 },
-  { r: 0.5, chance: 0.95, min: 5 },
-  { r: 1, chance: 0.7, min: 60 },
-  { r: 2, chance: 0.3, min: 360 },
-  { r: 4, chance: 0.05, min: 1440 },
-];
 
 // News events, one per day at most (seeded by date). Multiplies demand.
 export const MARKET_EVENTS = [
@@ -431,7 +414,6 @@ export const GOLDEN_CHAINSAW_ID = 'goldchainsaw';
 // ======================= PART 7: manager helper =======================
 export const MANAGER_COST = 20_000; // Money, one manager for the whole empire
 export const MANAGER_SELL_AT = 0.8; // starts selling when the yard is 80% full, sells back down to 80%
-export const MANAGER_EXTRA_BUYERS = 0.5; // Part 8 (section 22): half a crowd of extra buyers (was 1)
 export const MANAGER_WAGE = 1_000; // Part 8: $ per hour while he is switched on. Unpaid = he pauses selling and collecting.
 
 // ======================= PART 8: Sawmill (building from section 10, comes with the Empire Pack) =======================

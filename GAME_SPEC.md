@@ -405,3 +405,63 @@ Brant played the finished game on his iPhone and asked for these changes. They r
 - 2 taps a second, with the player tapping SELL about every 15 seconds: first axe 4m, helper 14m, land 52m, workshop 118m.
 - The Yard Seller is usually bought right after the first land.
 - Prestige takes about 4.3 days.
+
+## 25. Update 2: fixes, simple selling, simple homepage, fun and graphics (Nov 22)
+
+**Fixes**
+- Lost-bid penalty is now **5% of your current Money**, and only when you bid in an auction and a rival wins.
+  - No penalty if you never bid, and none on Make an Offer.
+  - The auction screen says "If you lose, you pay 5% of your Money, $X." with the exact amount, live.
+- Prestige pace is back to 2.5 to 3.9 days by tuning late-game production only:
+  - Helpers: Veteran 15 → 10, Tree Feller 50 → 20, Master 200 → 50, Elite Crew 1,000 → 150 wood/sec.
+  - Land: Hillside 75 → 50, River 250 → 140, Redwood 800 → 350, Mountain 3,000 → 1,000, Old Growth 9,000 → 2,500, Northwoods 27,000 → 6,000, Rainforest 80,000 → 15,000 wood/sec.
+- Early pacing is held by Stone Axe $75 → $82 and Apprentice $450 → $400.
+- README status updated.
+
+**Selling (no slider)**
+- The price slider, sell chance, time-to-sell and "pile will grow" warning are gone for wood, planks and furniture.
+- One tap sells everything at the market price, for example "Sell 1,000 wood for $96" and "$0.096 per wood".
+  - Market price = base ($0.10 wood, $0.25 planks) × daily wobble (±8%) × demand (news events and season) × weather (storm +12%, snow +6%, rain −4%).
+  - A small up or down arrow compares the price with yesterday's.
+- Furniture sells instantly at its value × today's demand and weather.
+- The Yard Seller sells everything at the market price as it is made (straight from the forest, so a small yard never wastes wood).
+- The Manager sells down to 80% of the yard at the market price.
+- Bulk orders stay.
+
+**Homepage**
+- Top bar: Money, Gold, wood and wood/sec only.
+- Centre: the tree, a big tap zone (the whole middle of the screen), the sawmill line behind it.
+- Bottom: one SELL button and the tabs Home, Upgrades, Helpers, Land, Buildings, Market, Shop. Goals and Settings live inside Upgrades.
+- Unlock messages are a short banner under the top bar that never covers the tree or blocks a tap.
+
+**Fun (Playbook 1)**
+- Cost growth 1.10 per helper copy and per helper level.
+- Golden Log: appears every 3 to 5 minutes, glows for 60 seconds. Tap it for a Frenzy: 7x wood/sec from helpers and land for 30 seconds. Missing it costs nothing. Golden Trees stay too.
+- Prestige preview: "Reset now for +X% forever. You will re-earn today's progress in about N minutes."
+- Prestige keeps Gold, skins, VIP and purchases, a Golden Chainsaw bought with Gold (forever), and Empire Pack Sawmill level 1. Money upgrades go back to the start.
+
+**Graphics and feel**
+- One style: flat vector, thick dark-brown outlines, soft shadows; palette of wood browns, pine green, sawdust gold and sky blue. All text is real UI text.
+- One icon set (`src/components/art/Icons.tsx`) for Money, Gold, wood, planks, tools, helpers, land, Market and the tabs.
+- Redrawn in that style:
+  - Tree and Golden Tree
+  - Axes (7 tiers plus skins) and tools (10)
+  - Helpers
+  - Shed-to-Hub buildings (8) and Sawmill
+  - Land plots (9)
+  - Golden Log
+- Animated:
+  - Tree: shakes on every tap, sways when idle, falls with TIMBER after 18 chops, a new tree grows in.
+  - Sawmill line: the blade spins and logs ride the conveyor while wood is being made. A gold log travels down the line on every purchase that adds wood/sec.
+  - Helpers: chop in a loop (Helpers tab) and walk logs from the tree to the mill (home).
+  - Machines: debarker, canting machine, forklift and truck move when working and stop when not.
+- Every tap, purchase, unlock, prestige and reward reacts on the impact frame:
+  - Visual: squash and stretch, flash, 3-5 chips, a +X rising from your finger, coins and logs flying into the counter, the counter popping, wood/sec flashing green, the progress bar filling.
+  - Sound: chop with rising pitch over 5 fast taps, coin, sell, unlock, prestige and golden sounds.
+  - Haptics: light on taps, stronger on milestones and unlocks.
+- Settings: Sound, Vibration, Reduce motion. Reduce motion is also on if the iPhone has it on. The iPhone silent switch mutes the game.
+
+**Pacing (`npm run pacing`, 2 taps/sec, Monday start)**
+- First axe 5 minutes, first helper 15 minutes, first land 51 minutes, first workshop 116 minutes.
+- Prestige: 2.9 days with Golden Log taps, 3.5 days for an idle player.
+- By start day, Monday to Sunday: 2.9 / 3.1 / 2.9 / 2.3 / 1.5 / 1.3 / 1.9 days. Thursday to Sunday starts are quicker because the weekend Timber Rush doubles pine output.

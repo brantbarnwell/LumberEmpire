@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Slider from '@react-native-community/slider';
-import { update, useGame } from '../game/store';
+import { getState, update, useGame } from '../game/store';
 import {
-  bestItemPrice, cancelSale, changeSalePrice, craftTimeMs, finishBuildWithGold, finishCraftWithGold, goldToSkip,
-  listForSale, sellOdds, startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost,
+  craftTimeMs, finishBuildWithGold, finishCraftWithGold, goldToSkip, itemPrice, plankCutRate, sellItems,
+  startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost,
 } from '../game/logic';
+import { SawmillArt, WorkshopArt } from './art/Buildings';
+import { Icon } from './art/Icons';
+import { feel } from '../services/feel';
 import { Switch } from 'react-native';
 import { EMPIRE_PACK_ID } from '../game/meta';
 import { ITEMS, WORKSHOPS, SAWMILL_LEVELS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
@@ -27,7 +29,6 @@ export function WorkshopScreen() {
   const s = useGame();
   const now = useNow();
   const w = s.workshop;
-  const [selling, setSelling] = useState<{ itemId: string; saleId?: number } | null>(null);
   const cur = w.level >= 0 ? WORKSHOPS[w.level] : null;
   const next = WORKSHOPS[w.level + 1];
   const unlocked = workshopUnlocked(s);
@@ -41,7 +42,7 @@ export function WorkshopScreen() {
       {/* building */}
       <Card style={[!unlocked && w.level < 0 && { opacity: 0.55 }] as any}>
         <View style={styles.row}>
-          <Text style={styles.bigIcon}>{cur ? cur.icon : WORKSHOPS[0].icon}</Text>
+          <View style={styles.art}><WorkshopArt level={Math.max(0, w.buildingTo ?? w.level)} size={100} /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{cur ? cur.name : 'No workshop yet'}</Text>
             <Text style={styles.sub}>
@@ -61,7 +62,7 @@ export function WorkshopScreen() {
           </View>
         ) : next ? (
           w.level < 0 && !unlocked ? (
-            <Text style={styles.locked}>🔒 Buy your first land to unlock the workshop</Text>
+            <View style={styles.lockRow}><Icon name="lock" size={22} /><Text style={styles.locked}>Buy your first land first</Text></View>
           ) : (
             <Button
               style={{ marginTop: 10 }}
@@ -131,40 +132,15 @@ export function WorkshopScreen() {
                 <Text style={styles.icon}>{it.icon}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{it.name} x{w.inventory[it.id]}</Text>
-                  <Text style={styles.sub}>Base value {money(it.value)}</Text>
+                  <Text style={styles.sub}>{money(itemPrice(s, it.id, now))} each today</Text>
                 </View>
-                <Button small variant="gold" label="Sell" onPress={() => setSelling({ itemId: it.id })} />
+                <Button small variant="gold" label={`Sell for ${money(itemPrice(s, it.id, now) * w.inventory[it.id])}`} onPress={() => {
+                  const r = sellItems(getState(), it.id, Date.now());
+                  if (r.sold) { update(() => r.state); feel.sell(); }
+                }} />
               </View>
-              {selling?.itemId === it.id && selling.saleId === undefined && (
-                <SellPanel itemId={it.id} onDone={() => setSelling(null)} />
-              )}
             </Card>
           ))}
-        </>
-      )}
-
-      {w.forSale.length > 0 && (
-        <>
-          <Text style={styles.section}>In your shop</Text>
-          {w.forSale.map((x) => {
-            const it = ITEMS.find((i) => i.id === x.itemId)!;
-            return (
-              <Card key={x.id} style={styles.recipe}>
-                <View style={styles.row}>
-                  <Text style={styles.icon}>{it.icon}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{it.name} · {money(x.price)}</Text>
-                    <Text style={[styles.sub, x.sellAt === null && { color: C.red }]}>
-                      {x.sellAt === null ? 'No buyers at this price. Try lowering it.' : 'Waiting for a buyer...'}
-                    </Text>
-                  </View>
-                  <Button small variant="ghost" label="Price" onPress={() => setSelling({ itemId: x.itemId, saleId: x.id })} />
-                  <Button small variant="ghost" label="Take back" onPress={() => update((st) => cancelSale(st, x.id))} />
-                </View>
-                {selling?.saleId === x.id && <SellPanel itemId={x.itemId} saleId={x.id} start={x.price} onDone={() => setSelling(null)} />}
-              </Card>
-            );
-          })}
         </>
       )}
 
@@ -176,7 +152,7 @@ export function WorkshopScreen() {
               const it = ITEMS.find((x) => x.id === h.itemId)!;
               return (
                 <Text key={i} style={styles.hist}>
-                  {it.icon} {it.name} sold for {money(h.price)} after {duration(h.minutes * 60000)}
+                  {it.icon} {it.name} sold for {money(h.price)}
                 </Text>
               );
             })}
@@ -196,7 +172,7 @@ function SawmillCard() {
   return (
     <Card>
       <View style={styles.row}>
-        <Text style={styles.bigIcon}>🪚</Text>
+        <SawmillArt level={lvl} running={lvl > 0 && s.sawmill.on && plankCutRate(s) > 0 && s.wood >= PLANK_WOOD} width={110} />
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>Sawmill{cur ? ` · Level ${lvl}/${SAWMILL_LEVELS.length}` : ''}</Text>
           <Text style={styles.sub}>
@@ -235,54 +211,6 @@ function GoldButton({ gold, have, label, onPress }: { gold: number; have: number
   );
 }
 
-export function SellPanel({ itemId, saleId, start, onDone }: { itemId: string; saleId?: number; start?: number; onDone: () => void }) {
-  const s = useGame();
-  const it = ITEMS.find((x) => x.id === itemId)!;
-  const [price, setPrice] = useState(start ?? bestItemPrice(s, itemId));
-  const o = sellOdds(s, itemId, price);
-  const best = bestItemPrice(s, itemId);
-  const chance = Math.round(o.chance * 100);
-  return (
-    <View style={styles.sell}>
-      <View style={styles.row}>
-        <Text style={styles.priceBig}>{money(price)}</Text>
-        <Text style={styles.small}>base {money(it.value)}</Text>
-      </View>
-      <Slider
-        style={{ width: '100%', height: 36 }}
-        minimumValue={Math.max(1, Math.round(it.value * 0.3))}
-        maximumValue={Math.round(it.value * 3)}
-        step={1}
-        value={price}
-        onValueChange={(v) => setPrice(Math.round(v))}
-        minimumTrackTintColor={C.leafLight}
-        maximumTrackTintColor="#d6c7a4"
-        thumbTintColor={C.bark}
-      />
-      <View style={styles.odds}>
-        <View style={styles.odd}><Text style={[styles.oddNum, { color: chance > 60 ? C.money : chance > 25 ? C.goldDark : C.red }]}>{chance}%</Text><Text style={styles.small}>sell chance</Text></View>
-        <View style={styles.odd}><Text style={styles.oddNum}>{chance < 8 ? 'Maybe never' : `~${duration(o.minutes * 60000)}`}</Text><Text style={styles.small}>time to sell</Text></View>
-        <View style={styles.odd}><Text style={styles.oddNum}>{money(price * o.chance)}</Text><Text style={styles.small}>expected</Text></View>
-      </View>
-      <Text style={styles.small}>Best price hint: about {money(best)}. Demand today changes these numbers.</Text>
-      <View style={[styles.row, { marginTop: 6 }]}>
-        <Button
-          style={{ flex: 1 }}
-          label={saleId === undefined ? 'Put in shop' : 'Change price'}
-          onPress={() => {
-            const ok = saleId === undefined
-              ? update((st) => listForSale(st, itemId, price, Date.now()))
-              : update((st) => changeSalePrice(st, saleId, price, Date.now()));
-            if (ok) haptic.success();
-            onDone();
-          }}
-        />
-        <Button style={{ flex: 1 }} variant="ghost" label="Cancel" onPress={onDone} />
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: C.cream },
   content: { padding: 14, gap: 10, paddingBottom: 40 },
@@ -290,12 +218,13 @@ const styles = StyleSheet.create({
   keep: { fontSize: 11.5, fontWeight: '800', color: C.goldDark, marginTop: 6 },
   section: { fontSize: 18, fontWeight: '900', color: C.forest, marginTop: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  bigIcon: { fontSize: 40, width: 54, textAlign: 'center' },
+  art: { width: 100, alignItems: 'center' },
+  lockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
   icon: { fontSize: 26, width: 36, textAlign: 'center' },
   name: { fontSize: 15, fontWeight: '900', color: C.ink },
   sub: { fontSize: 12, fontWeight: '700', color: C.inkSoft },
   small: { fontSize: 11, fontWeight: '700', color: C.inkSoft },
-  locked: { marginTop: 10, fontSize: 14, fontWeight: '900', color: C.bark, textAlign: 'center' },
+  locked: { fontSize: 14, fontWeight: '900', color: C.bark, textAlign: 'center' },
   queue: { paddingVertical: 10 },
   recipe: { paddingVertical: 8 },
   hist: { fontSize: 12, fontWeight: '700', color: C.ink, paddingVertical: 2 },

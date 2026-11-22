@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { update, useGame } from '../game/store';
 import {
   buyAxe, buyStorage, buyTool, buyToolWithGold, durabilityPower, equipSkin, repair, repairAll, repairAllCost, repairCost, repairTool, storageCap,
@@ -9,8 +10,63 @@ import { money, small, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card, DurabilityBar } from './ui';
 import { C } from './theme';
+import { AxeArt, axeLookOf, AxeLook } from './art/Axe';
+import { ToolArt } from './art/ToolArt';
+import { Icon, IconName } from './art/Icons';
+import { GoalsScreen } from './GoalsScreen';
 
+type Seg = 'tools' | 'goals' | 'settings';
+
+/** Update 2: Upgrades holds Tools, Goals (quests, daily, prestige) and Settings, so the tab bar stays short. */
 export function UpgradesScreen() {
+  const [seg, setSeg] = useState<Seg>('tools');
+  const tabs: { id: Seg; icon: IconName; label: string }[] = [
+    { id: 'tools', icon: 'tools', label: 'Tools' },
+    { id: 'goals', icon: 'goals', label: 'Goals' },
+    { id: 'settings', icon: 'settings', label: 'Settings' },
+  ];
+  return (
+    <View style={{ flex: 1, backgroundColor: C.cream }}>
+      <View style={styles.segs}>
+        {tabs.map((t) => (
+          <Pressable key={t.id} onPress={() => setSeg(t.id)} style={[styles.seg, seg === t.id && styles.segOn]} accessibilityRole="tab" accessibilityState={{ selected: seg === t.id }}>
+            <Icon name={t.icon} size={20} />
+            <Text style={[styles.segText, seg === t.id && { color: C.ink }]}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {seg === 'tools' && <ToolsList />}
+      {seg === 'goals' && <GoalsScreen />}
+      {seg === 'settings' && <SettingsPanel />}
+    </View>
+  );
+}
+
+function SettingsPanel() {
+  const s = useGame();
+  const set = (k: 'sound' | 'haptics' | 'reduceMotion', v: boolean) => update((st) => ({ ...st, settings: { ...st.settings, [k]: v } }));
+  const row = (k: 'sound' | 'haptics' | 'reduceMotion', label: string, sub: string) => (
+    <Card key={k}>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{label}</Text>
+          <Text style={styles.sub}>{sub}</Text>
+        </View>
+        <Switch value={s.settings[k]} onValueChange={(v) => { set(k, v); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel={label} />
+      </View>
+    </Card>
+  );
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Settings</Text>
+      {row('sound', 'Sound', 'Chops, coins and unlocks. The iPhone silent switch mutes it too.')}
+      {row('haptics', 'Vibration', 'Small taps you feel when you chop and buy.')}
+      {row('reduceMotion', 'Reduce motion', 'Fewer shakes, chips and flying coins. Also on if your iPhone has Reduce Motion turned on.')}
+    </ScrollView>
+  );
+}
+
+function ToolsList() {
   const s = useGame();
   const cur = AXES[s.axeIndex];
   const full = repairCost(s, 100);
@@ -19,7 +75,6 @@ export function UpgradesScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.cream }} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Tools</Text>
       {repairAllCost(s) > 0 && (
         <Button
           variant="brown"
@@ -33,7 +88,7 @@ export function UpgradesScreen() {
       <Card>
         <Text style={styles.label}>YOUR AXE</Text>
         <View style={styles.row}>
-          <AxeIcon color={s.equippedSkin ? AXE_SKINS[s.equippedSkin]?.head ?? cur.head : cur.head} />
+          <View style={styles.icon}><AxeArt look={axeLookOf(s)} size={50} /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{cur.name}{s.equippedSkin ? ` (${AXE_SKINS[s.equippedSkin]?.name} skin)` : ''}</Text>
             <Text style={styles.sub}>
@@ -82,7 +137,7 @@ export function UpgradesScreen() {
         return (
           <Card key={a.id} style={[styles.axeCard, current && styles.current] as any}>
             <View style={styles.row}>
-              <AxeIcon color={a.head} dim={!owned && !afford} />
+              <View style={[styles.icon, { opacity: !owned && !afford ? 0.5 : 1 }]}><AxeArt look={a.id as AxeLook} size={50} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{a.name}</Text>
                 <Text style={styles.sub}>{small(a.power)} wood per chop</Text>
@@ -120,7 +175,7 @@ export function UpgradesScreen() {
         return (
           <Card key={t.id} style={[styles.axeCard, owned && owned.durability === 0 && styles.broken] as any}>
             <View style={styles.row}>
-              <View style={[styles.icon, owned?.durability === 0 && { opacity: 0.4 }]}><Text style={{ fontSize: 24 }}>{t.icon}</Text></View>
+              <View style={[styles.icon, owned?.durability === 0 && { opacity: 0.4 }]}><ToolArt id={t.id} size={44} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{t.name}{owned?.durability === 0 ? '  🔧' : ''}</Text>
                 <Text style={styles.sub}>{t.effect}</Text>
@@ -166,8 +221,8 @@ export function UpgradesScreen() {
 
       <Text style={styles.section}>Wood storage</Text>
       <Card>
-        <Text style={styles.name}>🏚️ Holds {whole(storageCap(s))} wood</Text>
-        <Text style={styles.sub}>When it is full, chopping and helpers stop adding wood until you sell some or upgrade. A bigger yard also lets you sell faster.</Text>
+        <View style={styles.row}><Icon name="wood" size={26} /><Text style={styles.name}>Holds {whole(storageCap(s))} wood</Text></View>
+        <Text style={styles.sub}>When it is full, new wood is lost until you sell. The Yard Seller sells straight from the forest.</Text>
         {storageUpgradeCost(s) !== null ? (
           <Button style={{ marginTop: 8 }} variant={s.money >= storageUpgradeCost(s)! ? 'green' : 'ghost'}
             label={`Upgrade to ${whole(STORAGE_LEVELS[s.storageLevel + 1].cap)} wood`} sub={money(storageUpgradeCost(s)!)}
@@ -204,6 +259,10 @@ function AxeIcon({ color, dim }: { color: string; dim?: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  segs: { flexDirection: 'row', gap: 6, padding: 10, paddingBottom: 0 },
+  seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: C.cardEdge, backgroundColor: '#f1e4c6' },
+  segOn: { backgroundColor: C.card, borderColor: '#3a2210' },
+  segText: { fontSize: 13, fontWeight: '900', color: C.inkSoft },
   content: { padding: 14, gap: 10, paddingBottom: 30 },
   title: { fontSize: 26, fontWeight: '900', color: C.forest },
   section: { fontSize: 18, fontWeight: '900', color: C.forest, marginTop: 6 },

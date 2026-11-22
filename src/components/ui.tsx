@@ -3,13 +3,10 @@ import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, Vie
 import { LinearGradient } from 'expo-linear-gradient';
 import { durabilityColor } from '../game/logic';
 import { C, shadow } from './theme';
+import { Icon } from './art/Icons';
 
 export function GoldCoin({ size = 18 }: { size?: number }) {
-  return (
-    <View style={[styles.coin, { width: size, height: size, borderRadius: size / 2, borderWidth: Math.max(1.5, size / 10) }]}>
-      <Text style={[styles.coinG, { fontSize: size * 0.55 }]}>G</Text>
-    </View>
-  );
+  return <Icon name="gold" size={size + 2} />;
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle | ViewStyle[] }) {
@@ -79,8 +76,8 @@ export function ProgressBar({ value, color = C.gold, height = 8 }: { value: numb
 const styles = StyleSheet.create({
   coin: { backgroundColor: C.gold, borderColor: C.goldDark, alignItems: 'center', justifyContent: 'center' },
   coinG: { color: '#8a5d00', fontWeight: '900' },
-  card: { backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.cardEdge, padding: 12, ...shadow },
-  btn: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', minHeight: 42 },
+  card: { backgroundColor: C.card, borderRadius: 16, borderWidth: 2, borderColor: '#d9c39a', padding: 12, ...shadow },
+  btn: { borderRadius: 12, borderWidth: 2, borderColor: '#3a2210', paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', minHeight: 42 },
   btnShine: { borderBottomWidth: 3, borderBottomColor: 'rgba(0,0,0,0.22)' },
   btnSmall: { paddingVertical: 6, paddingHorizontal: 10, minHeight: 34 },
   btnText: { fontWeight: '900', fontSize: 15, textShadowColor: 'rgba(0,0,0,0.18)', textShadowRadius: 1, textShadowOffset: { width: 0, height: 1 } },

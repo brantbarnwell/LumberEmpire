@@ -207,12 +207,12 @@ function finishAuction(s: GameState, at: number): GameState {
     return addFeed(st, { at, kind: 'rival', landId: a.landId, text: `Nobody bid on ${landName(a.landId)}. Back tomorrow.` });
   }
   st = { ...st, listings: { ...st.listings, [a.landId]: { ...L, status: 'sold', soldTo: winner, soldFor: price, rivalPlan: [] } } };
-  // section 24: bidding and losing costs 20% of your Money
+  // update 2: bidding in an auction and losing costs 5% of your Money (never charged if you did not bid)
   if (a.log.some((x) => x.who === 'you')) {
     const lost = Math.round(st.money * LOST_BID_PENALTY);
     if (lost > 0) {
       st = { ...st, money: st.money - lost, lastAuctionLoss: { landId: a.landId, lost, winner, at } };
-      st = addFeed(st, { at, kind: 'lose', landId: a.landId, text: `You lost the auction and ${fmt(lost)} (20% of your Money).` });
+      st = addFeed(st, { at, kind: 'lose', landId: a.landId, text: `You lost the auction and paid ${fmt(lost)} (5% of your Money).` });
     }
   }
   return addFeed(st, {

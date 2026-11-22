@@ -1,12 +1,12 @@
 // npm test: checks the game rules.
 import {
   newGame, chop, devSpawnGolden, grantProduct, claimVip, repair, repairCost, computeOffline, collectOffline, hireHelper, hireCost,
-  levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, listForSale, woodMultFor, moneyMult,
+  levelHelper, ensureListings, makeOffer, acceptCounter, startBuild, startCraft, tick, woodMultFor, moneyMult,
   passiveWoodPerSec, GameState, workshopUnlocked, addBoost, buyTool, toolFx, woodPerChop, repairTool, toolRepairCost, storageCap,
-  buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed, salesPerSec,
+  buyStorage, wagePerHour, rankInfo, repairAllCost, buyToolWithGold, ensureOrders, acceptOrder, counterOrder, storageUsed,
   hireManager, setManagerOn, managerCollect, collectOfflineBonus, managerActive, upgradeSawmill, setSawmillOn, plankCutRate,
 } from '../src/game/logic';
-import { demandOf, shownChance, timeToSell, marketPriceOf, bestCommodityPrice } from '../src/game/market';
+import { demandOf, marketPriceOf, priceTrend, weatherOf } from '../src/game/market';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import {
   claimLogin, canClaimLogin, rewardGoldVideo, goldVideosLeft, rewardAdBoost, canPrestige, doPrestige, ensureQuests, claimQuest,
@@ -33,9 +33,9 @@ ok(v.gold === 100 && claimVip(v, MON) === null, 'VIP daily 100 Gold once per day
 ok(PRODUCTS.find((p) => p.id === 'com.lumberempire.vip.monthly')!.usd === '$4.99 / month' && PRODUCTS.find((p) => p.id === 'com.lumberempire.vip.yearly')!.usd === '$39.99 / year', 'VIP is $4.99/month and $39.99/year');
 
 // ---- Part 2: helpers ----
-ok(HELPERS[0].cost === 450 && HELPERS[5].cost === 750_000, 'helper prices are 3x (Apprentice $450, Elite $750,000)');
+ok(HELPERS[0].cost === 400 && HELPERS[5].cost === 750_000, 'helper prices are 3x (Apprentice $400 (update 2), Elite $750,000)');
 let h = hireHelper(rich(newGame(MON)), 'apprentice')!;
-ok(h.helpers.apprentice.count === 1 && hireCost(h, 'apprentice') === Math.round(450 * 1.15), 'hiring works and next copy costs 15% more');
+ok(h.helpers.apprentice.count === 1 && hireCost(h, 'apprentice') === Math.round(400 * 1.1), 'hiring works and next copy costs 10% more');
 ok(passiveWoodPerSec(h, MON) === 2, 'Apprentice makes 2 wood/sec');
 h = levelHelper(h, 'apprentice')!;
 ok(passiveWoodPerSec(h, MON) === 2.5, 'level up gives +25%');
@@ -65,9 +65,8 @@ ws = startCraft({ ...ws, wood: 1000 }, 'stool', MON)!;
 ok(ws.workshop.queue.length === 1 && startCraft(ws, 'stool', MON) === null, 'craft uses the one shed slot');
 ws = tick(ws, 0, MON + 3_600_000);
 ok(ws.workshop.inventory.stool === 1, 'crafted item lands in inventory');
-ws = listForSale(ws, 'stool', 1, MON, () => 0)!;
-ws = tick(ws, 0, MON + 86_400_000);
-ok(ws.workshop.history.length === 1, 'cheap item sells');
+const soldItems = L24x.sellItems(ws, 'stool', MON + 3_600_000);
+ok(soldItems.sold === 1 && soldItems.state.money > ws.money && soldItems.state.workshop.inventory.stool === 0, 'crafted item sells instantly at today\'s price');
 
 // ---- Part 3 ----
 let ad = newGame(MON);
@@ -141,16 +140,8 @@ ok(rankInfo(200_000_000).name === 'Global Timber Tycoon' && rankInfo(50_000_000)
 
 // ---- Part 5: Market ----
 const DK = '2026-11-23';
-ok(shownChance(DK, 'wood', 2) < shownChance(DK, 'wood', 1) && shownChance(DK, 'wood', 1) < shownChance(DK, 'wood', 0.5), 'higher price = lower sell chance');
-ok(timeToSell(DK, 'wood', 0.3, 5000, 0.02, 2.2) > timeToSell(DK, 'wood', 0.1, 5000, 0.02, 2.2) * 2, 'higher price = slower to sell a pile');
-function run4h(f: number) {
-  let x: GameState = { ...newGame(MON), yardSeller: true, helpers: { apprentice: { count: 10, level: 0 } }, money: 1e6 };
-  x = { ...x, sellPrice: marketPriceOf(x.dayKey, 'wood') * f };
-  for (let t = 0; t < 4 * 3600; t += 5) x = tick(x, 5, MON + t * 1000);
-  return x.money - 1e6;
-}
-const best = bestCommodityPrice(newGame(MON).dayKey, 'wood') / marketPriceOf(newGame(MON).dayKey, 'wood');
-ok(run4h(3) < run4h(best) * 0.8, `with helpers working, 3x price earns much less than the best-price tip (${best.toFixed(2)}x)`);
+ok(marketPriceOf(DK, 'wood') > 0.05 && marketPriceOf(DK, 'wood') < 0.2, `wood market price is near $0.10 (${marketPriceOf(DK, 'wood').toFixed(3)})`);
+ok([-1, 0, 1].includes(priceTrend(DK, 'wood')) && !!weatherOf(DK).icon, 'price arrow and weather work');
 let days14 = Array.from({ length: 14 }, (_, i) => demandOf(`2026-12-${i + 1}`, 'wood'));
 ok(Math.max(...days14) - Math.min(...days14) > 0.2, 'demand really changes day to day');
 let pl = tick({ ...newGame(MON), wood: 100, cutting: true, selling: false, plankSelling: false }, 10, MON);
@@ -217,12 +208,12 @@ ok(!doPrestige(ms, MON)!.tools.goldchainsaw, 'Golden Chainsaw bought with Money 
 let mg = hireManager({ ...newGame(MON), money: 25_000 })!;
 ok(mg.money === 5_000 && mg.manager.hired && mg.manager.on && hireManager({ ...mg, money: 1e6 }) === null, 'manager costs $20,000, only one for the whole empire');
 ok(setManagerOn(mg, false)!.manager.on === false, 'manager has an on/off switch');
-const base: GameState = { ...mg, money: 1e6, selling: false, sellPrice: 0.123 };
+const base: GameState = { ...mg, money: 1e6, selling: false };
 let full = { ...base, wood: 9_500 };
 ok(managerActive(full) && !managerActive({ ...full, wood: 7_000 }), 'manager starts at 80% full');
 let after = full;
 for (let i = 1; i <= 720; i++) after = tick(after, 5, MON + i * 5000);
-ok(after.wood <= 8_000 + 1 && after.wood >= 7_900 && after.manager.soldToday > 0 && after.sellPrice === 0.123, 'manager sells back down to 80% at your price, even with selling paused, never changes price');
+ok(after.wood <= 8_000 + 1 && after.wood >= 7_900 && after.manager.soldToday > 0, 'manager sells back down to 80% at the market price');
 ok(tick({ ...base, wood: 5_000 }, 60, MON).manager.soldToday === 0, 'manager does not sell below 80%');
 ok(Math.abs(after.money - (1e6 + after.manager.moneyToday - 1000)) < 1, 'manager wage is $1,000 per hour, paid automatically');
 let broke2 = tick({ ...full, money: 0 }, 60, MON);
@@ -260,19 +251,28 @@ ok(doPrestige(mm, MON)!.sawmill.level === 0, 'Sawmill built with Money: lost on 
 function helperCountOf(x: GameState) { return Object.values(x.helpers).reduce((a, h) => a + h.count, 0); }
 
 // ---- Section 24: manual selling, Yard Seller, land changes ----
+import * as L24x from '../src/game/logic';
 import * as L24 from '../src/game/logic';
-const mk = (f: number) => ({ ...newGame(MON), wood: 1000, sellPrice: marketPriceOf(newGame(MON).dayKey, 'wood') * f });
-ok(tick({ ...newGame(MON), wood: 1000 }, 60, MON).wood === 1000, 'wood no longer sells by itself');
-const cheap = L24.sellNow(mk(0.6), 'wood', MON, () => 0.5).result.sold;
-const fair24 = L24.sellNow(mk(1), 'wood', MON, () => 0.5).result.sold;
-const dear = L24.sellNow(mk(2.5), 'wood', MON, () => 0.5).result.sold;
-ok(cheap > fair24 && fair24 > dear, `SELL: cheap sells most, high sells least (${cheap} / ${fair24} / ${dear})`);
-ok(L24.sellNow(mk(5), 'wood', MON, () => 0).result.sold < 60, 'SELL at a crazy price sells almost nothing');
-let tap = mk(1);
-const tap1 = L24.sellNow({ ...tap, wood: 50000, storageLevel: 9 }, 'wood', MON, () => 0.5);
-const tap2 = L24.sellNow(tap1.state, 'wood', MON, () => 0.5);
-ok(tap2.result.sold < tap1.result.sold && tap1.state.money > 0, 'tapping SELL again sells less until new buyers come');
+const quote = L24.sellQuote({ ...newGame(MON), wood: 1000 }, 'wood', MON);
+const sa = L24.sellAll({ ...newGame(MON), wood: 1000 }, 'wood', MON);
+ok(sa.sold === 1000 && Math.abs(sa.earned - quote.earned) < 1e-9 && Math.abs(quote.each - marketPriceOf(newGame(MON).dayKey, 'wood')) < 1e-9, `SELL: all 1,000 wood at market price (${quote.each.toFixed(3)} each, $${quote.earned.toFixed(2)})`);
 ok(L24.hireYardSeller({ ...newGame(MON), money: 1499 }) === null, 'Yard Seller costs $1,500 cash');
 const ys = L24.hireYardSeller({ ...newGame(MON), money: 1500, wood: 1000 })!;
 ok(ys.money === 0 && tick(ys, 60, MON).wood < 1000, 'Yard Seller sells wood by itself');
 ok(LAND.length === 9, '9 pieces of land to buy');
+
+// ---- Update 2 ----
+import { prestigePreview } from '../src/game/meta';
+let gl = tick({ ...newGame(MON), helpers: { apprentice: { count: 1, level: 0 } } }, 1, MON);
+const spawn = gl.nextLogAt;
+ok(spawn >= MON + 3 * 60_000 && spawn <= MON + 5 * 60_000, 'Golden Log spawns 3 to 5 minutes from now');
+ok(!L24.goldenLogVisible(gl, spawn - 1000) && L24.goldenLogVisible(gl, spawn + 1000) && !L24.goldenLogVisible(gl, spawn + 61_000), 'Golden Log lasts 60 seconds');
+const fz = L24.tapGoldenLog(gl, spawn + 5000)!;
+ok(Math.abs(L24.passiveWoodPerSec(fz, spawn + 6000) / L24.passiveWoodPerSec(gl, spawn + 6000) - 7) < 1e-9 && L24.passiveWoodPerSec(fz, spawn + 36_000) === L24.passiveWoodPerSec(gl, spawn + 36_000), 'Frenzy: 7x wood/sec for 30 seconds');
+const missed = tick(gl, 1, spawn + 70_000);
+ok(missed.nextLogAt > spawn + 70_000 && missed.money === gl.money, 'missing a Golden Log costs nothing, a new one comes later');
+ok(L24.hireCost({ ...newGame(MON), helpers: { apprentice: { count: 1, level: 0 } } }, 'apprentice') === Math.round(HELPERS[0].cost * 1.1), 'cost growth is 1.10 per copy');
+const pv = prestigePreview({ ...newGame(MON), runMoneyEarned: PRESTIGE_AT * 1.44, moneyToday: 5e6, helpers: { crew: { count: 5, level: 0 } } }, MON);
+ok(pv.pct === 120 && pv.minutes !== null && pv.minutes > 0, `prestige preview: +${pv.pct}% forever, back in ~${pv.minutes} min`);
+const off24 = L24.makeOffer(ensureListings({ ...newGame(MON), money: 100_000 }, MON), 'clearing', 100, MON);
+ok(off24.state.money === 100_000, 'a turned-down offer costs nothing (no penalty on Make an Offer)');

@@ -38,3 +38,8 @@ export function duration(ms: number) {
   if (m > 0) return `${m}m ${s % 60}s`;
   return `${s}s`;
 }
+
+/** Always the full dollar amount, like $1,250,000 (for warnings that must be exact). */
+export function exactMoney(n: number) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}

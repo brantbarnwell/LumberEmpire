@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { feel } from '../services/feel';
+import { showToast } from './Celebrate';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { rushInfo } from '../game/logic';
 import {
   adBoostLeftMs, adFree, canAdBoost, canClaimLogin, canPrestige, claimLogin, claimQuest, dailyQuestMoney, doPrestige,
-  goldVideosLeft, loginRewardText, prestigeGain, prestigeProgress, questLabel, questProgress, rewardAdBoost, rewardGoldVideo,
+  goldVideosLeft, loginRewardText, prestigeGain, prestigePreview, prestigeProgress, questLabel, questProgress, rewardAdBoost, rewardGoldVideo,
 } from '../game/meta';
 import {
   AD_BOOST_MINUTES, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, DAILY_QUEST_GOLD, DAILY_REWARDS, PRESTIGE_AT, PRESTIGE_NAME,
@@ -47,7 +49,6 @@ export function GoalsScreen() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Goals</Text>
 
       {/* Timber Rush */}
       <LinearGradient colors={rush.active ? ['#c2571a', '#e8892c'] : ['#3d5a46', '#4f7a5c']} style={styles.rush}>
@@ -87,6 +88,7 @@ export function GoalsScreen() {
           onPress={() => {
             const text = loginRewardText(s, s.login.index, Date.now());
             if (update((st) => claimLogin(st, Date.now()))) {
+              feel.reward();
               haptic.success();
               showPopup({ icon: '🎁', title: `Day ${s.login.index + 1} reward!`, body: text });
             }
@@ -132,7 +134,7 @@ export function GoalsScreen() {
         <Text style={styles.sub}>Each gives {DAILY_QUEST_GOLD} Gold + {money(dailyQuestMoney(s, now))}. New ones tomorrow.</Text>
         {s.daily.quests.map((q, i) => (
           <QuestRow key={q.id} label={questLabel(q)} progress={questProgress(s, q)} target={q.target} claimed={q.claimed}
-            onClaim={() => update((st) => claimQuest(st, i, Date.now())) && haptic.success()} money={q.id === 'earn'} />
+            onClaim={() => update((st) => claimQuest(st, i, Date.now())) && feel.reward()} money={q.id === 'earn'} />
         ))}
       </Card>
       {s.weekly.quest && (
@@ -140,7 +142,7 @@ export function GoalsScreen() {
           <Text style={styles.h}>Weekly quest</Text>
           <Text style={styles.sub}>Reward: {WEEKLY_QUEST_GOLD} Gold. Resets Monday.</Text>
           <QuestRow label={questLabel(s.weekly.quest)} progress={questProgress(s, s.weekly.quest)} target={s.weekly.quest.target}
-            claimed={s.weekly.quest.claimed} onClaim={() => update((st) => claimQuest(st, 'weekly', Date.now())) && haptic.success()}
+            claimed={s.weekly.quest.claimed} onClaim={() => update((st) => claimQuest(st, 'weekly', Date.now())) && feel.reward()}
             money={s.weekly.quest.id === 'wearn'} />
         </Card>
       )}
@@ -154,6 +156,16 @@ export function GoalsScreen() {
         </Text>
         <View style={{ marginVertical: 8 }}><ProgressBar value={prestigeProgress(s)} color={C.gold} height={10} /></View>
         <Text style={styles.pText}>{money(s.runMoneyEarned)} / {money(PRESTIGE_AT)} earned this run</Text>
+        {canPrestige(s) && (() => {
+          const pv = prestigePreview(s, Date.now());
+          return (
+            <View style={styles.preview}>
+              <Text style={styles.previewBig}>Reset now for +{pv.pct}% forever.</Text>
+              {pv.minutes !== null && <Text style={styles.previewText}>You will re-earn today's progress in about {pv.minutes < 120 ? `${pv.minutes} minutes` : `${Math.round(pv.minutes / 60)} hours`}.</Text>}
+              <Text style={styles.previewKeep}>Kept: Gold, skins, VIP, purchases, Gold-bought Golden Chainsaw, Empire Pack Sawmill level 1.</Text>
+            </View>
+          );
+        })()}
         {canPrestige(s) && (
           !confirmPrestige ? (
             <Button style={{ marginTop: 10 }} variant="gold" label={`Prestige: wood ${small(s.prestige.mult + prestigeGain(s))}x faster`} onPress={() => setConfirmPrestige(true)} />
@@ -163,8 +175,8 @@ export function GoalsScreen() {
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button style={{ flex: 1 }} variant="gold" label="Yes, prestige" onPress={() => {
                   if (update((st) => doPrestige(st, Date.now()))) {
-                    haptic.success();
-                    showPopup({ icon: '👑', title: `You are a ${PRESTIGE_NAME}!`, body: 'Everything grows faster now. Good luck on your next empire.' });
+                    feel.prestige();
+                    showToast({ kind: 'PRESTIGE!', title: `You are a ${PRESTIGE_NAME}!`, sub: 'Wood is faster forever', icon: 'gold' });
                   }
                   setConfirmPrestige(false);
                 }} />
@@ -220,6 +232,10 @@ const styles = StyleSheet.create({
   quest: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   claimed: { color: C.leaf, fontWeight: '900' },
   prestige: { borderRadius: 16, padding: 14 },
+  preview: { backgroundColor: 'rgba(245,197,66,0.15)', borderRadius: 12, padding: 10, marginTop: 8, borderWidth: 1.5, borderColor: 'rgba(245,197,66,0.6)' },
+  previewBig: { color: '#ffe17a', fontSize: 18, fontWeight: '900' },
+  previewText: { color: '#fff6dc', fontSize: 13.5, fontWeight: '800', marginTop: 2 },
+  previewKeep: { color: '#e9d9b6', fontSize: 11.5, fontWeight: '700', marginTop: 6 },
   pTitle: { color: C.gold, fontWeight: '900', fontSize: 18 },
   pText: { color: '#f3e3c3', fontWeight: '700', fontSize: 12.5, marginTop: 3 },
   pWarn: { color: '#ffd9c2', fontWeight: '800', fontSize: 12.5 },

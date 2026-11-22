@@ -1,11 +1,9 @@
-import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
-
-const on = Platform.OS === 'ios' || Platform.OS === 'android';
+// Old name kept so existing screens keep working; everything now goes through feel.ts (settings respected).
+import { feel } from './feel';
 
 export const haptic = {
-  chop: () => on && Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}),
-  crit: () => on && Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {}),
-  success: () => on && Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}),
-  error: () => on && Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {}),
+  chop: () => feel.chop(false),
+  crit: () => feel.chop(true),
+  success: () => feel.purchase(),
+  error: () => feel.error(),
 };

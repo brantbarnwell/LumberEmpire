@@ -7,7 +7,8 @@ import {
 import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, RIVALS } from '../game/data';
 import { canStartAuction, startAuction, toggleWatch } from '../game/rivals';
 import { AuctionPanel } from './AuctionPanel';
-import { duration, money, small } from '../game/format';
+import { LandArt } from './art/Buildings';
+import { duration, exactMoney, money, small } from '../game/format';
 import { haptic } from '../services/haptics';
 import { Button, Card, ProgressBar } from './ui';
 import { showPopup } from './popup';
@@ -48,7 +49,7 @@ export function LandScreen() {
         return (
           <Card key={l.id}>
             <View style={styles.row}>
-              <Text style={styles.icon}>{l.icon}</Text>
+              <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{l.name}</Text>
                 <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]}</Text>
@@ -90,7 +91,7 @@ export function LandScreen() {
           return (
             <Card key={l.id} style={{ opacity: 0.6 }}>
               <View style={styles.row}>
-                <Text style={styles.icon}>{l.icon}</Text>
+                <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{l.name}</Text>
                   <Text style={[styles.sub, { color: C.red }]}>Sold to {L.soldTo} for {money(L.soldFor ?? 0)}. New sellers tomorrow.</Text>
@@ -103,7 +104,7 @@ export function LandScreen() {
           return (
             <Card key={l.id} style={{ opacity: 0.6 }}>
               <View style={styles.row}>
-                <Text style={styles.icon}>{l.icon}</Text>
+                <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{l.name}</Text>
                   <Text style={styles.sub}>
@@ -120,7 +121,7 @@ export function LandScreen() {
         const rivalsIn = L.rivalBuysAt !== null;
         const head = (
           <View style={styles.row}>
-            <Text style={styles.icon}>{l.icon}</Text>
+            <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
             <View style={{ flex: 1 }}>
               <View style={styles.row}>
                 <Text style={[styles.name, { flex: 1 }]}>{l.name}</Text>
@@ -148,7 +149,7 @@ export function LandScreen() {
               {live ? <AuctionPanel /> : (
                 <>
                   <Text style={[styles.sub, { marginTop: 6 }]}>60-second auction against rival companies. Bids start at half the asking price. If a rival outbids you near the end, you get 10 more seconds.</Text>
-                  <View style={styles.risk}><Text style={styles.riskText}>⚠️ If you bid and a rival wins, you lose 20% of your Money ({money(lostBidCost(s))}).</Text></View>
+                  <View style={styles.risk}><Text style={styles.riskText}>If you lose, you pay 5% of your Money, {exactMoney(lostBidCost(s))}.</Text></View>
                   <Button style={{ marginTop: 8 }} variant="gold" label={s.auction ? 'Another auction is running' : 'Join auction now'} disabled={!canStartAuction(s, l.id)}
                     onPress={() => update((st) => startAuction(st, l.id, Date.now())) && haptic.success()} />
                 </>
@@ -192,9 +193,7 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
     if (r.outcome.kind === 'accepted') {
       haptic.success();
       onClose();
-    } else if (r.outcome.kind === 'rejected') {
-      haptic.error();
-      showPopup({ icon: '💸', title: 'They said NO', body: r.outcome.message });
+
     } else if (r.outcome.kind === 'error') {
       haptic.error();
       showPopup({ icon: '💬', title: r.outcome.message });
@@ -243,9 +242,6 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
         </View>
       ) : null}
 
-      <View style={styles.risk}>
-        <Text style={styles.riskText}>⚠️ If the seller says NO, you lose 20% of your Money ({money(lostBidCost(s))}). Don't lowball!</Text>
-      </View>
       <Text style={[styles.small, { marginTop: 8 }]}>{L.status === 'counter' ? 'Or counter with your own offer:' : 'Your offer'}</Text>
       <View style={styles.row}>
         <View style={styles.input}>
@@ -266,6 +262,7 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
 }
 
 const styles = StyleSheet.create({
+  landArt: { width: 88, marginRight: 4 },
   risk: { marginTop: 8, backgroundColor: '#fdecea', borderRadius: 10, borderWidth: 1.5, borderColor: '#f3b3ab', padding: 8 },
   riskText: { fontSize: 12, fontWeight: '900', color: '#b3261e' },
   page: { flex: 1, backgroundColor: C.cream },

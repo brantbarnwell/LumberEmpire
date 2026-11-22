@@ -3,12 +3,14 @@
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
   makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
-  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellNow, hireYardSeller,
+  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellAll, hireYardSeller, tapGoldenLog, goldenLogVisible,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
 
+// tuning aid: LATE=0.5 scales late helpers/land output (veteran and up, hillside and up) for this run only
+if (process.env.LATE) { const k = Number(process.env.LATE); HELPERS.slice(2).forEach((h) => (h.woodPerSec *= k)); LAND.slice(2).forEach((l) => (l.woodPerSec *= k)); }
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).getTime(); // START=days after Monday Nov 23
@@ -16,7 +18,9 @@ const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).get
 let lastSell = 0;
 function upkeep(s: GameState, now = 0) {
   // section 24: until the Yard Seller is hired, the player taps SELL about every 15 seconds
-  if (!s.yardSeller && now - lastSell >= 15_000) { s = sellNow(s, 'wood', now, rand).state; lastSell = now; }
+  if (!s.yardSeller && now - lastSell >= 15_000) { s = sellAll(s, 'wood', now).state; lastSell = now; }
+  // an active player taps the Golden Log when it shows up (TAP_LOGS=0 to model an idle player)
+  if (process.env.TAP_LOGS !== '0' && goldenLogVisible(s, now)) s = tapGoldenLog(s, now + 2000) ?? s;
   if (!s.yardSeller && process.env.NO_SELLER === undefined && s.money >= 1500 && Object.keys(s.helpers).length > 0 && !(globalThis as any).__planMode) s = hireYardSeller(s) ?? s;
   const bp = process.env.FIXED_PRICE ? s.sellPrice : bestPrice(s.dayKey); // a sensible player follows the best-price tip
   if (Math.abs(s.sellPrice - bp) > 0.001) s = { ...s, sellPrice: bp };
@@ -187,6 +191,7 @@ function days(nDays: number) {
         while (marks.length && s.runMoneyEarned >= marks[0]) hits.push(`$${marks.shift()! / 1e6}M after ${((now - T0) / 86400_000).toFixed(1)} days`);
       }
     }
+    if (process.env.DEBUG) { const b = bestBuy(s, now); console.log(`  d${d + 1} money ${Math.round(s.money)} wps ${Math.round(require('../src/game/logic').passiveWoodPerSec(s, now))} helpers ${JSON.stringify(s.helpers)} lands ${Object.keys(s.lands)} tools ${Object.keys(s.tools)} next ${b?.cost}`); }
     log.push(`day ${d + 1}: earned ${Math.round(s.runMoneyEarned).toLocaleString()} this run, ${Object.values(s.helpers).reduce((a, h) => a + h.count, 0)} helpers, ${Object.keys(s.lands).length} lands, ${Object.keys(s.tools).length} tools, storage ${storageCap(s).toLocaleString()}`);
   }
   return { prestigeAt, gain: gainAt, log, hits };
