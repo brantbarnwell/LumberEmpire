@@ -6,10 +6,12 @@ import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../game/store';
-import { frenzyOn, passiveWoodPerSec, storageCap } from '../game/logic';
+import { chopType, frenzyOn, logPrice, passiveWoodPerSec, storageCap } from '../game/logic';
+import { unitText } from './SellButton';
 import { money, small, whole } from '../game/format';
 import { recentWoodPerSec } from '../game/rate';
-import { Icon, IconName } from './art/Icons';
+import { Icon, IconName, LogIcon } from './art/Icons';
+import { WOOD, WoodType } from '../game/data';
 import { lessMotion, onFly, onPop, pop, PopTarget } from '../services/feel';
 import { C } from './theme';
 
@@ -60,6 +62,7 @@ export function TopBar() {
   const cap = storageCap(s);
   const full = s.wood >= cap;
   const frenzy = frenzyOn(s, now);
+  const ct = chopType(s);
 
   // pop Money and Gold when they grow by a real amount
   const last = useRef({ money: s.money, gold: s.gold });
@@ -78,6 +81,11 @@ export function TopBar() {
       <View style={[styles.row, { marginTop: 6 }]}>
         <Counter id="wood" icon="wood" value={whole(s.wood)} color={full ? '#ff8a7a' : '#fff'} warn={full}>
           <View style={styles.cap}><View style={{ width: `${Math.min(100, (s.wood / cap) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: full ? C.red : s.wood / cap > 0.8 ? C.gold : C.leafLight }} /></View>
+          {/* update 4: the tree you chop and what one of its logs sells for */}
+          <View style={styles.typeRow}>
+            <LogIcon type={ct} size={14} />
+            <Text style={styles.typeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{WOOD[ct].name.replace(/ Wood$/, '')} {unitText(logPrice(s, ct, now))}/log</Text>
+          </View>
         </Counter>
         <Counter id="wps" icon={frenzy ? 'frenzy' : 'wps'} value={`${small(wps)}/s`} color={frenzy ? C.gold : '#fff'} />
       </View>
@@ -87,12 +95,12 @@ export function TopBar() {
 
 /** Coins and logs flying into the counters. Sits on top of everything and never blocks touches. */
 export function FlyLayer() {
-  const [items, setItems] = useState<{ id: number; icon: 'coin' | 'log'; from: { x: number; y: number }; to: { x: number; y: number }; target: PopTarget; delay: number }[]>([]);
+  const [items, setItems] = useState<{ id: number; icon: 'coin' | 'log'; wood?: string; from: { x: number; y: number }; to: { x: number; y: number }; target: PopTarget; delay: number }[]>([]);
   const next = useRef(1);
   useEffect(() => onFly((f) => {
     const to = targets[f.to];
     if (!to) { pop(f.to); return; }
-    const add = Array.from({ length: f.n }, (_, i) => ({ id: next.current++, icon: f.icon, from: { x: f.from.x + (Math.random() - 0.5) * 40, y: f.from.y + (Math.random() - 0.5) * 20 }, to, target: f.to, delay: i * 45 }));
+    const add = Array.from({ length: f.n }, (_, i) => ({ id: next.current++, icon: f.icon, wood: f.wood, from: { x: f.from.x + (Math.random() - 0.5) * 40, y: f.from.y + (Math.random() - 0.5) * 20 }, to, target: f.to, delay: i * 45 }));
     setItems((x) => [...x.slice(-24), ...add]);
   }), []);
   return (
@@ -104,7 +112,7 @@ export function FlyLayer() {
   );
 }
 
-function Flyer({ it, onDone }: { it: { icon: 'coin' | 'log'; from: { x: number; y: number }; to: { x: number; y: number }; target: PopTarget; delay: number }; last: boolean; onDone: () => void }) {
+function Flyer({ it, onDone }: { it: { icon: 'coin' | 'log'; wood?: string; from: { x: number; y: number }; to: { x: number; y: number }; target: PopTarget; delay: number }; last: boolean; onDone: () => void }) {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.sequence([
@@ -123,7 +131,7 @@ function Flyer({ it, onDone }: { it: { icon: 'coin' | 'log'; from: { x: number; 
         { scale: t.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.6, 1.2, 0.7] }) },
       ],
     }}>
-      <Icon name={it.icon === 'coin' ? 'money' : 'wood'} size={24} />
+      {it.icon === 'coin' ? <Icon name="money" size={24} /> : <LogIcon type={(it.wood ?? 'pine') as WoodType} size={26} />}
     </Animated.View>
   );
 }
@@ -134,5 +142,7 @@ const styles = StyleSheet.create({
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 2, borderColor: 'rgba(0,0,0,0.35)' },
   warn: { borderColor: C.red },
   num: { fontSize: 22, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  typeText: { color: '#e9d9b6', fontSize: 10, fontWeight: '900', flexShrink: 1 },
   cap: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden', marginTop: 1 },
 });

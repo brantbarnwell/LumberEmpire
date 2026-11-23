@@ -174,3 +174,31 @@ const DRAW: Record<IconName, ReactElement> = {
     </G>
   ),
 };
+
+// Update 4: a log for each tree type (pine brown, oak dark, crystal blue, glass clear, diamond white, golden, rainbow Starwood)
+import { WOOD, WoodType } from '../../game/data';
+export function LogIcon({ type = 'pine', size = 24 }: { type?: WoodType; size?: number }) {
+  const w = WOOD[type] ?? WOOD.pine;
+  const rainbow = type === 'starwood';
+  const clear = type === 'glass';
+  const shine = type === 'crystal' || type === 'diamond' || type === 'golden' || rainbow;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      {shine && <Circle cx="16" cy="17" r="14" fill={type === 'golden' ? '#ffe27a' : type === 'crystal' ? '#8fd8ff' : '#ffffff'} opacity={0.45} />}
+      <Path d="M6 11 h18 a5 6 0 0 1 0 12 h-18 z" fill={w.bark} fillOpacity={clear ? 0.55 : 1} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+      {rainbow && (
+        <G>
+          <Path d="M7 13 h18" stroke="#ff5a7a" strokeWidth={2} />
+          <Path d="M7 16 h19" stroke="#ffb03a" strokeWidth={2} />
+          <Path d="M7 19 h19" stroke="#6fd25a" strokeWidth={2} />
+          <Path d="M7 22 h18" stroke="#5ab0ff" strokeWidth={1.6} />
+        </G>
+      )}
+      {clear && <Path d="M10 13 L20 21" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" />}
+      <Ellipse cx="6" cy="17" rx="4.5" ry="6" fill={w.end} fillOpacity={clear ? 0.7 : 1} stroke={INK} strokeWidth={SW} />
+      <Ellipse cx="6" cy="17" rx="2" ry="3" fill="none" stroke={w.ring} strokeWidth={1.4} />
+      {!rainbow && !clear && <Path d="M13 14 h7 M15 20 h6" stroke={INK} strokeOpacity={0.4} strokeWidth={1.4} strokeLinecap="round" />}
+      {shine && <Path d="M26 3 l1.2 3 l3 1.2 l-3 1.2 l-1.2 3 l-1.2 -3 l-3 -1.2 l3 -1.2 z" fill="#fff" stroke={INK} strokeWidth={0.8} />}
+    </Svg>
+  );
+}

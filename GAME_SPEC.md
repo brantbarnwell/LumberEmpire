@@ -522,3 +522,36 @@ Brant played the finished game on his iPhone and asked for these changes. They r
 - Shows: "Away 8h 0m (8 hour max)", $2,403, "25,000 wood chopped", "Collect sells 25,000 wood for you".
 - Suggests: Yard Seller $1,500 · Steel Axe $1,200 · Another Apprentice Helper $586.
 - With the Yard Seller: $36,521, and suggests Steel Axe · Another Apprentice · Level up Apprentices.
+
+## 27. Update 4: land tree tiers (Nov 22)
+
+Wood types and base prices per log. The market (demand, weather, news) moves every type up and down by the same percent, like wood before.
+
+| # | Wood | Base $/log | Land | Land asking | Wood/sec | Crew slots |
+|---|---|---|---|---|---|---|
+| 1 | Pine | 0.10 | Small Clearing | $3k | 5 | 2 |
+| 2 | Oak | 0.18 | Pine Grove | $15k | 20 | 3 |
+| 3 | Maple | 0.30 | Hillside Forest | $60k | 17.1 | 3 |
+| 4 | Cedar | 0.50 | River Valley Forest | $225k | 31.5 | 3 |
+| 5 | Redwood | 0.85 | Redwood Forest | $750k | 49.5 | 3 |
+| 6 | Walnut | 1.40 | Mountain Timberland | $3M | 81 | 3 |
+| 7 | Cherry Blossom | 2.20 | Cherry Grove (new) | $6M | 76.5 | 2 |
+| 8 | Ebony | 3.50 | Darkwood Forest (new) | $10M | 67.5 | 2 |
+| 9 | Bamboo | 5.00 | Bamboo Valley (new) | $15M | 63 | 2 |
+| 10 | Crystal Wood | 8.00 | Crystal Caves Forest (new) | $22M | 54 | 2 |
+| 11 | Glass Wood | 13.00 | Glasswood Grove (new) | $32M | 45 | 2 |
+| 12 | Diamond Wood | 22.00 | Diamond Peak Forest (new) | $45M | 36 | 1 |
+| 13 | Golden Wood | 35.00 | Golden Valley (new) | $65M | 29.25 | 1 |
+| 14 | Starwood | 55.00 | Coastal Rainforest | $90M | 24.75 | 1 |
+
+Rules:
+- A land grows 60% its own wood. The other 40% is split evenly over the older woods. Old saves move Old Growth to Cherry Grove and Northwoods to Bamboo Valley.
+- Price per log = base price × today's wood market × money boosts.
+- Chopping cuts the best wood you own. Better trees are harder, so you get fewer logs per chop. Each chop is still worth (price ratio)^0.3 more than a pine chop.
+- Helpers fill each land's crew slots, best helpers on the best land first. They cut that land's wood mix with the same hardness rule. Helpers without a slot chop pine at home.
+- The Sawmill keeps the value of the logs it cuts. A plank is worth 1.25 × the value of the 2 logs that went into it.
+- Bulk orders and crafting take your cheapest logs first.
+- Balance: prices per log were never lowered. To keep prestige at 2.5–3.9 days, wood/sec was lowered (× 0.45) for the Veteran, Tree Feller, Master and Elite Crew helpers and for every land from Hillside on.
+- Pacing at 2 taps/sec (`npm run pacing`):
+  - axe 5m, helper 14m, land 49m, workshop 111m;
+  - prestige by start day Mon–Sun: 3.46 / 3.46 / 3.29 / 2.93 / 2.92 / 2.92 / 2.92 days.

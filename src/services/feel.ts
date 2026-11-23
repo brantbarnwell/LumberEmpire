@@ -75,16 +75,16 @@ function buzz(kind: 'light' | 'medium' | 'heavy' | 'success' | 'error') {
 
 // ---------- visual pops (the top bar listens) ----------
 export type PopTarget = 'money' | 'gold' | 'wood' | 'wps';
-type Fly = { icon: 'coin' | 'log'; from: { x: number; y: number }; to: PopTarget; n: number };
+type Fly = { icon: 'coin' | 'log'; from: { x: number; y: number }; to: PopTarget; n: number; wood?: string };
 const popLs = new Set<(t: PopTarget) => void>();
 const flyLs = new Set<(f: Fly) => void>();
 export function onPop(l: (t: PopTarget) => void) { popLs.add(l); return () => { popLs.delete(l); }; }
 export function onFly(l: (f: Fly) => void) { flyLs.add(l); return () => { flyLs.delete(l); }; }
 export function pop(t: PopTarget) { popLs.forEach((l) => l(t)); }
 /** Coins or logs fly from a screen point into a top-bar counter. */
-export function fly(icon: Fly['icon'], from: { x: number; y: number }, to: PopTarget, n = 4) {
+export function fly(icon: Fly['icon'], from: { x: number; y: number }, to: PopTarget, n = 4, wood?: string) {
   if (lessMotion()) { pop(to); return; }
-  flyLs.forEach((l) => l({ icon, from, to, n }));
+  flyLs.forEach((l) => l({ icon, from, to, n, wood }));
 }
 
 // ---------- the moments ----------

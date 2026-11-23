@@ -19,7 +19,8 @@ function tier(cx: number, top: number, base: number, half: number) {
   return d;
 }
 
-type Pal = { dark: string; mid: string; light: string; tips: string; trunk: [string, string, string]; balls?: string; snow?: boolean };
+type Pal = { dark: string; mid: string; light: string; tips: string; trunk: [string, string, string]; balls?: string; snow?: boolean;
+  glow?: string; sparkle?: string; alpha?: number; rainbow?: string[]; streaks?: boolean; rings?: boolean };
 const BARK: [string, string, string] = ['#5a3519', '#8a5a2e', '#4a2e17'];
 // Update 3: tree skins (looks only)
 export const TREE_SKINS: Record<string, Pal> = {
@@ -31,9 +32,28 @@ export const TREE_SKINS: Record<string, Pal> = {
   'tree-cherry': { dark: '#b5507a', mid: '#e47ea6', light: '#f6b6cf', tips: '#ffe1ee', trunk: ['#4a2e2a', '#7a4a40', '#3a221e'] },
 };
 
-export function TreeArt({ golden, cut, skin = 'tree-pine' }: { golden?: boolean; cut: number /* 0..1 */; skin?: string }) {
+// Update 4: one look per tree type (14), used when no cosmetic tree skin is on.
+export const WOOD_TREES: Record<string, Pal> = {
+  pine: TREE_SKINS['tree-pine'],
+  oak: { dark: '#2e4a1e', mid: '#4a6e2a', light: '#6f9a3a', tips: '#a7c867', trunk: ['#3e2614', '#5a3a1e', '#2e1c0e'] },
+  maple: TREE_SKINS['tree-autumn'],
+  cedar: { dark: '#1f4a44', mid: '#2f6e63', light: '#4f9a88', tips: '#8fd0bd', trunk: ['#7a3420', '#a0462a', '#5e2614'] },
+  redwood: TREE_SKINS['tree-redwood'],
+  walnut: { dark: '#3e4a1e', mid: '#5e6e2a', light: '#82944a', tips: '#b8c878', trunk: ['#2e1c0e', '#3e2614', '#1e1208'] },
+  cherry: TREE_SKINS['tree-cherry'],
+  ebony: { dark: '#141218', mid: '#2a2632', light: '#43404e', tips: '#8a84a0', trunk: ['#0c0a10', '#1c1a22', '#08060a'] },
+  bamboo: { dark: '#3e7a2a', mid: '#5ea83e', light: '#8ccc5a', tips: '#c8ee8a', trunk: ['#5e8a2e', '#9cc85a', '#4a7020'], rings: true },
+  crystal: { dark: '#1e6fb5', mid: '#3aa0e8', light: '#8fd8ff', tips: '#e6f8ff', trunk: ['#1e5f9a', '#3a8fd0', '#164a7a'], glow: '#8fd8ff', sparkle: '#e6f8ff' },
+  glass: { dark: '#6fb8c4', mid: '#bfeef3', light: '#e8fcff', tips: '#ffffff', trunk: ['#a9dce3', '#e0f8fb', '#8cc5cc'], alpha: 0.72, streaks: true },
+  diamond: { dark: '#8fa3b4', mid: '#dbe6ef', light: '#ffffff', tips: '#ffffff', trunk: ['#b8c6d2', '#f0f5f9', '#9fb0be'], sparkle: '#ffffff', glow: '#f4fbff' },
+  golden: { ...TREE_SKINS['tree-golden'], glow: '#ffe27a', sparkle: '#fffbe6' },
+  starwood: { dark: '#5a2e8a', mid: '#8a4fc0', light: '#c08af0', tips: '#ffffff', trunk: ['#5a2e8a', '#8a4fc0', '#3e1e60'], rainbow: ['#ff5a7a', '#ffb03a', '#6fd25a', '#5ab0ff'], sparkle: '#ffffff', glow: '#ffd6ff' },
+};
+
+export function TreeArt({ golden, cut, skin = 'tree-pine', wood }: { golden?: boolean; cut: number /* 0..1 */; skin?: string; wood?: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const P = golden ? TREE_SKINS['tree-golden'] : TREE_SKINS[skin] ?? TREE_SKINS['tree-pine'];
+  // the default skin shows your real tree type; a bought skin changes the look only
+  const P = golden ? TREE_SKINS['tree-golden'] : skin === 'tree-pine' && wood ? WOOD_TREES[wood] ?? TREE_SKINS['tree-pine'] : TREE_SKINS[skin] ?? TREE_SKINS['tree-pine'];
   const { dark, mid, light, tips } = P;
   const tiers = [
     { top: 118, base: 236, half: 118 },
@@ -55,10 +75,12 @@ export function TreeArt({ golden, cut, skin = 'tree-pine' }: { golden?: boolean;
           <Stop offset="1" stopColor={mid} />
         </LinearGradient>
       </Defs>
+      {P.glow && <Ellipse cx="130" cy="140" rx="128" ry="140" fill={P.glow} opacity={0.35} />}
       {/* trunk with roots */}
       <Path d="M108 300 Q114 270 112 222 L148 222 Q146 270 152 300 Q140 292 130 298 Q120 292 108 300 Z" fill={`url(#t${id})`} stroke="#3a2210" strokeWidth="2" />
       <Path d="M100 300 Q108 292 114 284 L112 300 Z M160 300 Q152 292 146 284 L148 300 Z" fill={golden ? '#8a5f1c' : '#5a3519'} />
       <Path d="M122 232 Q120 256 123 284 M136 236 Q138 260 135 290" stroke="#3a2210" strokeOpacity="0.55" strokeWidth="2" fill="none" />
+      {P.rings && <Path d="M112 240 h36 M112 262 h36 M110 284 h40" stroke="#3a2210" strokeWidth="2.4" />}
       {/* the cut from your axe: pale wood with rings */}
       <Path d={`M150 ${252 - notch / 2} L${150 - notch} 256 L150 ${260 + notch / 2} Z`} fill="#f1d49c" stroke="#b98a5a" strokeWidth="1.2" />
       {cut > 0.4 && <Path d={`M150 ${254 - notch / 4} L${150 - notch * 0.6} 256 L150 ${258 + notch / 4}`} stroke="#d9b27a" strokeWidth="1" fill="none" />}
@@ -66,7 +88,8 @@ export function TreeArt({ golden, cut, skin = 'tree-pine' }: { golden?: boolean;
       {tiers.map((t, i) => (
         <G key={i}>
           <Path d={tier(130, t.top + 6, t.base + 6, t.half)} fill={dark} opacity="0.55" />
-          <Path d={tier(130, t.top, t.base, t.half)} fill={`url(#f${id})`} stroke={dark} strokeWidth="2" />
+          <Path d={tier(130, t.top, t.base, t.half)} fill={P.rainbow ? P.rainbow[i % P.rainbow.length] : `url(#f${id})`} fillOpacity={P.alpha ?? 1} stroke={P.rainbow ? '#3a2210' : dark} strokeWidth="2" />
+          {P.streaks && <Path d={`M${130 - t.half * 0.5} ${t.base - 10} L${130 - t.half * 0.1} ${t.top + 14}`} stroke="#ffffff" strokeWidth="4" strokeLinecap="round" opacity={0.85} />}
           {/* shadow on the right half */}
           <Path d={`M130 ${t.top + 4} C${130 + t.half * 0.3} ${t.top + (t.base - t.top) * 0.4} ${130 + t.half * 0.75} ${t.base - 16} ${130 + t.half - 4} ${t.base - 6} L130 ${t.base} Z`} fill={dark} opacity="0.22" />
           {/* needle highlights */}
@@ -80,6 +103,13 @@ export function TreeArt({ golden, cut, skin = 'tree-pine' }: { golden?: boolean;
         <G>
           {[[90, 90], [170, 140], [110, 200], [150, 40], [70, 190]].map(([x, y], i) => (
             <Circle key={i} cx={x} cy={y} r={i % 2 ? 3 : 4.5} fill="#fffbe6" />
+          ))}
+        </G>
+      )}
+      {!golden && P.sparkle && (
+        <G>
+          {[[86, 96], [176, 150], [104, 206], [150, 46], [64, 196], [190, 214], [128, 120]].map(([x, y], i) => (
+            <Path key={i} d={`M${x} ${y - 7} L${x + 2} ${y - 2} L${x + 7} ${y} L${x + 2} ${y + 2} L${x} ${y + 7} L${x - 2} ${y + 2} L${x - 7} ${y} L${x - 2} ${y - 2} Z`} fill={P.sparkle} stroke="#3a2210" strokeWidth="1" strokeOpacity={0.4} />
           ))}
         </G>
       )}

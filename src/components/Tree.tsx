@@ -3,7 +3,7 @@
 // a log flying into the wood counter, sound and a light haptic.
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, GestureResponderEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { CHOPS_PER_TREE } from '../game/data';
+import { CHOPS_PER_TREE, WOOD, WoodType } from '../game/data';
 import { ChopResult } from '../game/logic';
 import { small } from '../game/format';
 import { C } from './theme';
@@ -68,7 +68,8 @@ function ChunkView({ c, onDone }: { c: Chunk; onDone: () => void }) {
   );
 }
 
-function makeChunks(n: number, golden: boolean, idBase: number): Chunk[] {
+function makeChunks(n: number, golden: boolean, idBase: number, wood: WoodType = 'pine'): Chunk[] {
+  const W = WOOD[wood];
   const out: Chunk[] = [];
   for (let i = 0; i < n; i++) {
     const vx = 50 + Math.random() * 120;
@@ -91,7 +92,7 @@ function makeChunks(n: number, golden: boolean, idBase: number): Chunk[] {
       spin: (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540),
       w: 6 + Math.random() * 9,
       h: 4 + Math.random() * 5,
-      color: golden ? (bark ? '#c8941b' : '#ffe27a') : bark ? '#6b4423' : i % 2 ? '#f1d49c' : '#d9b27a',
+      color: golden ? (bark ? '#c8941b' : '#ffe27a') : bark ? W.bark : i % 2 ? W.end : W.ring,
       dur,
     });
   }
@@ -99,9 +100,10 @@ function makeChunks(n: number, golden: boolean, idBase: number): Chunk[] {
 }
 
 export function Tree({
-  chops, golden, look, skin, onChop, onDevLongPress, areaW, areaH,
+  chops, golden, look, skin, wood = 'pine', onChop, onDevLongPress, areaW, areaH,
 }: {
   skin?: string;
+  wood?: WoodType;
   chops: number;
   golden: boolean;
   look: AxeLook;
@@ -204,7 +206,7 @@ export function Tree({
       // 3 to 5 chips, more when the tree falls
       const id0 = nextId.current;
       nextId.current += 100;
-      setChunks((c) => [...c.slice(-20), ...makeChunks(r.felled ? 10 : r.crit ? 5 : 3 + Math.floor(Math.random() * 2), golden, id0)]);
+      setChunks((c) => [...c.slice(-20), ...makeChunks(r.felled ? 10 : r.crit ? 5 : 3 + Math.floor(Math.random() * 2), golden, id0, r.woodType)]);
     }
 
     const id = nextId.current++;
@@ -217,7 +219,7 @@ export function Tree({
     ];
     if (r.felled) add.push({ id: id + 50, text: `TIMBER! +${small(r.fellBonus)}`, color: C.gold, size: 32, x: cx, y: Math.max(60, top + 80) });
     setFloaters((f) => [...f.slice(-8), ...add]);
-    if (!r.storageFull) fly('log', { x: pageX, y: pageY }, 'wood', r.felled ? 4 : 1);
+    if (!r.storageFull) fly('log', { x: pageX, y: pageY }, 'wood', r.felled ? 4 : 1, r.woodType);
 
     if (r.felled) {
       feel.milestone();
@@ -271,7 +273,7 @@ export function Tree({
             ],
           } as any}
         >
-          <TreeArt golden={golden} cut={chops / CHOPS_PER_TREE} skin={skin} />
+          <TreeArt golden={golden} cut={chops / CHOPS_PER_TREE} skin={skin} wood={wood} />
         </Animated.View>
 
         <Animated.View

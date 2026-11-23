@@ -98,6 +98,11 @@ Built:
     - 7-day calendar with a grace day.
     - 3 daily quests and 1 weekly quest.
     - The Timber Rush order board.
+- Update 4 (section 27): land tree tiers.
+  - 14 wood types from Pine ($0.10/log) to Starwood ($55/log), each sold at its own market price.
+  - 14 lands; each grows mostly its own wood plus the older woods.
+  - Helpers and the Sawmill work the wood of the land they're on.
+  - Logs fly into the counter in the right colour.
     - New systems unlocking on a schedule.
     - Local notifications.
     - A weekly leaderboard against the AI rivals.

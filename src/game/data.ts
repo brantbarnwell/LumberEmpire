@@ -143,18 +143,42 @@ export function productById(id: string) {
 
 export const PACING_TARGETS = { firstAxeMinutes: 5, firstHelperMinutes: 20, firstLandMinutes: 60, firstWorkshopMinutes: 120 };
 
-export type WoodType = 'pine' | 'oak' | 'maple' | 'redwood' | 'spruce';
-export const WOOD_NAMES: Record<WoodType, string> = { pine: 'Pine', oak: 'Oak', maple: 'Maple', redwood: 'Redwood', spruce: 'Spruce' };
+// Update 4: 14 tree types, each land grows a better one. Price is per log at the base market price;
+// demand, weather and news move all of them up and down together, same as wood before.
+export type WoodType =
+  | 'pine' | 'oak' | 'maple' | 'cedar' | 'redwood' | 'walnut' | 'cherry'
+  | 'ebony' | 'bamboo' | 'crystal' | 'glass' | 'diamond' | 'golden' | 'starwood';
+export interface WoodDef { id: WoodType; name: string; price: number; bark: string; end: string; ring: string }
+export const WOODS: WoodDef[] = [
+  { id: 'pine', name: 'Pine', price: 0.10, bark: '#8a5a2e', end: '#f1d49c', ring: '#c99a5b' },
+  { id: 'oak', name: 'Oak', price: 0.18, bark: '#5a3a1e', end: '#c89a62', ring: '#8a6236' },
+  { id: 'maple', name: 'Maple', price: 0.30, bark: '#9a5a2a', end: '#f3d8a8', ring: '#d9a066' },
+  { id: 'cedar', name: 'Cedar', price: 0.50, bark: '#a0462a', end: '#e7a77e', ring: '#c06a4a' },
+  { id: 'redwood', name: 'Redwood', price: 0.85, bark: '#7a2e18', end: '#d9775a', ring: '#a84a30' },
+  { id: 'walnut', name: 'Walnut', price: 1.40, bark: '#3e2614', end: '#8a5a36', ring: '#5e3a1e' },
+  { id: 'cherry', name: 'Cherry Blossom', price: 2.20, bark: '#6b3a3a', end: '#f2b6c6', ring: '#d27a92' },
+  { id: 'ebony', name: 'Ebony', price: 3.50, bark: '#1c1a22', end: '#4a4452', ring: '#2c2834' },
+  { id: 'bamboo', name: 'Bamboo', price: 5.00, bark: '#7fae3e', end: '#e6f0b0', ring: '#a9c860' },
+  { id: 'crystal', name: 'Crystal Wood', price: 8.00, bark: '#2f8fd8', end: '#bfe8ff', ring: '#6cc4f5' },
+  { id: 'glass', name: 'Glass Wood', price: 13.0, bark: '#bfe9ee', end: '#f4feff', ring: '#d6f4f8' },
+  { id: 'diamond', name: 'Diamond Wood', price: 22.0, bark: '#e9f1f7', end: '#ffffff', ring: '#c9d8e4' },
+  { id: 'golden', name: 'Golden Wood', price: 35.0, bark: '#d99a1e', end: '#fff1b0', ring: '#f5c542' },
+  { id: 'starwood', name: 'Starwood', price: 55.0, bark: '#7a3fb0', end: '#ffe6ff', ring: '#ff7ad1' },
+];
+export const WOOD: Record<WoodType, WoodDef> = Object.fromEntries(WOODS.map((w) => [w.id, w])) as Record<WoodType, WoodDef>;
+export const WOOD_NAMES: Record<WoodType, string> = Object.fromEntries(WOODS.map((w) => [w.id, w.name])) as Record<WoodType, string>;
+export const LAND_OWN_SHARE = 0.6; // a land grows 60% its own tree, 40% spread over the older types below it
+export const CHOP_VALUE_EXP = 0.3; // better trees are harder: fewer logs per chop, but each chop is worth (price ratio)^0.3 more
 export const HOME_WOOD: WoodType = 'pine'; // your own trees and your helpers chop pine
 
 export interface HelperDef { id: string; name: string; cost: number; woodPerSec: number; icon: string }
 export const HELPERS: HelperDef[] = [
   { id: 'apprentice', name: 'Apprentice Helper', cost: 400, woodPerSec: 2, icon: '🧒' },
   { id: 'lumberjack', name: 'Lumberjack Helper', cost: 1_500, woodPerSec: 5, icon: '🧔' },
-  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 7.5, icon: '👷' },
-  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 15, icon: '🦺' },
-  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 38, icon: '🧙' },
-  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 94, icon: '🚜' },
+  { id: 'veteran', name: 'Veteran Logger', cost: 6_000, woodPerSec: 3.375, icon: '👷' },
+  { id: 'feller', name: 'Tree Feller Pro', cost: 30_000, woodPerSec: 6.75, icon: '🦺' },
+  { id: 'master', name: 'Master Lumberjack', cost: 150_000, woodPerSec: 17.1, icon: '🧙' },
+  { id: 'crew', name: 'Elite Logging Crew', cost: 750_000, woodPerSec: 42.3, icon: '🚜' },
 ];
 export const HELPER_COPY_SCALE = 1.1; // update 2 (Playbook 1): each extra copy costs 10% more. BALANCE
 export const HELPER_MAX_LEVEL = 10; // spec
@@ -176,20 +200,26 @@ export const SELLER_NAMES = [
 
 export interface LandDef {
   id: string; name: string; asking: number; acres: number; trees: number; woodPerSec: number; wood: WoodType; icon: string;
+  crew: number; // update 4: how many of your best helpers can work this land (the rest chop pine at home)
   goldOnly?: boolean;
 }
 // Asking prices are 3x the first draft (section 16). Seller secret minimums scale with the asking price.
 export const LAND: LandDef[] = [
-  { id: 'clearing', name: 'Small Clearing', asking: 3_000, acres: 2, trees: 10, woodPerSec: 5, wood: 'pine', icon: '🌱' },
-  { id: 'pine', name: 'Pine Grove', asking: 15_000, acres: 6, trees: 25, woodPerSec: 20, wood: 'pine', icon: '🌲' },
-  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 38, wood: 'oak', icon: '⛰️' },
-  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 107, wood: 'maple', icon: '🏞️' },
-  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 268, wood: 'redwood', icon: '🌳' },
-  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 765, wood: 'spruce', icon: '🏔️' },
-  // Section 24: bigger late-game forests (more land to buy)
-  { id: 'oldgrowth', name: 'Old Growth Ridge', asking: 10_000_000, acres: 1_200, trees: 1_200, woodPerSec: 1_912, wood: 'oak', icon: '🌄' },
-  { id: 'northwoods', name: 'Great Northwoods', asking: 30_000_000, acres: 4_000, trees: 3_000, woodPerSec: 4_590, wood: 'maple', icon: '🍁' },
-  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 8_000, woodPerSec: 11_475, wood: 'redwood', icon: '🌴' },
+  { id: 'clearing', name: 'Small Clearing', asking: 3_000, acres: 2, trees: 10, woodPerSec: 5, wood: 'pine', crew: 2, icon: '🌱' },
+  { id: 'pine', name: 'Pine Grove', asking: 15_000, acres: 6, trees: 25, woodPerSec: 20, wood: 'oak', crew: 3, icon: '🌲' },
+  { id: 'hillside', name: 'Hillside Forest', asking: 60_000, acres: 15, trees: 50, woodPerSec: 17.1, wood: 'maple', crew: 3, icon: '⛰️' },
+  { id: 'river', name: 'River Valley Forest', asking: 225_000, acres: 40, trees: 100, woodPerSec: 31.5, wood: 'cedar', crew: 3, icon: '🏞️' },
+  { id: 'redwood', name: 'Redwood Forest', asking: 750_000, acres: 120, trees: 250, woodPerSec: 49.5, wood: 'redwood', crew: 3, icon: '🌳' },
+  { id: 'mountain', name: 'Mountain Timberland', asking: 3_000_000, acres: 400, trees: 500, woodPerSec: 81, wood: 'walnut', crew: 3, icon: '🏔️' },
+  // Update 4: new lands for the rare woods
+  { id: 'cherrygrove', name: 'Cherry Grove', asking: 6_000_000, acres: 600, trees: 600, woodPerSec: 76.5, wood: 'cherry', crew: 2, icon: '🌸' },
+  { id: 'darkwood', name: 'Darkwood Forest', asking: 10_000_000, acres: 900, trees: 700, woodPerSec: 67.5, wood: 'ebony', crew: 2, icon: '🌑' },
+  { id: 'bamboo', name: 'Bamboo Valley', asking: 15_000_000, acres: 1_200, trees: 900, woodPerSec: 63, wood: 'bamboo', crew: 2, icon: '🎋' },
+  { id: 'crystal', name: 'Crystal Caves Forest', asking: 22_000_000, acres: 1_500, trees: 800, woodPerSec: 54, wood: 'crystal', crew: 2, icon: '💎' },
+  { id: 'glass', name: 'Glasswood Grove', asking: 32_000_000, acres: 2_000, trees: 800, woodPerSec: 45, wood: 'glass', crew: 2, icon: '🔷' },
+  { id: 'diamond', name: 'Diamond Peak Forest', asking: 45_000_000, acres: 3_000, trees: 700, woodPerSec: 36, wood: 'diamond', crew: 1, icon: '💠' },
+  { id: 'goldenvalley', name: 'Golden Valley', asking: 65_000_000, acres: 5_000, trees: 600, woodPerSec: 29.25, wood: 'golden', crew: 1, icon: '✨' },
+  { id: 'rainforest', name: 'Coastal Rainforest', asking: 90_000_000, acres: 12_000, trees: 500, woodPerSec: 24.75, wood: 'starwood', crew: 1, icon: '🌈' },
 ];
 export const LAND_UPGRADES = [
   { id: 'plant', name: 'Plant Trees', costFrac: 0.25, bonus: 0.2 },

@@ -24,7 +24,7 @@ export function PriceTag({ p, each, size = 14 }: { p: 'wood' | 'planks' | 'furni
   const t = priceTrend(s.dayKey, p);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <Text style={{ fontSize: size, fontWeight: '900', color: C.ink }}>{unitText(each)} per {p === 'wood' ? 'wood' : p === 'planks' ? 'plank' : 'item'}</Text>
+      <Text style={{ fontSize: size, fontWeight: '900', color: C.ink }}>{p === 'wood' ? 'avg ' : ''}{unitText(each)} per {p === 'wood' ? 'log' : p === 'planks' ? 'plank' : 'item'}</Text>
       <Icon name={t > 0 ? 'up' : t < 0 ? 'down' : 'flat'} size={size + 2} />
     </View>
   );

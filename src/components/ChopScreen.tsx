@@ -5,7 +5,7 @@ import { Animated, Easing, LayoutChangeEvent, Platform, Pressable, StyleSheet, T
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { getState, update, useGame } from '../game/store';
-import { chop, devSpawnGolden, frenzyOn, goldenLogVisible, tapGoldenLog } from '../game/logic';
+import { chop, chopType, devSpawnGolden, frenzyOn, goldenLogVisible, tapGoldenLog } from '../game/logic';
 import { AXES } from '../game/data';
 import { money } from '../game/format';
 import { recordWood } from '../game/rate';
@@ -119,6 +119,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
           golden={golden}
           look={axeLookOf(s)}
           skin={s.cosmetics.tree}
+          wood={chopType(s)}
           onChop={doChop}
           onDevLongPress={__DEV__ ? () => update((st) => devSpawnGolden(st, Date.now())) : undefined}
           areaW={area.w}

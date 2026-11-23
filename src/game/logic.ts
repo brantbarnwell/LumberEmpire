@@ -5,7 +5,7 @@ import {
   RANKS, VIP_DAILY_GOLD, VIP_MONEY_MULT, Grant, productById,
   HELPERS, HELPER_COPY_SCALE, HELPER_LEVEL_BONUS, HELPER_LEVEL_COST_BASE, HELPER_LEVEL_COST_GROWTH, HELPER_MAX_LEVEL,
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
-  WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
+  WORKSHOPS, ITEMS, GOLD_PER_MINUTE_SKIP, WoodType, HOME_WOOD, WOODS, WOOD, LAND_OWN_SHARE, CHOP_VALUE_EXP, RUSH_DAYS, RUSH_BONUS, Metric, PRODUCTS,
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
   YARD_SELLER_COST, LOST_BID_PENALTY, HELPER_MILESTONE_EVERY, HELPER_MILESTONE_GOLD, SYSTEMS, SystemId, RUSH_ORDERS, RUSH_ORDER_PRICE, GOLDEN_LOG_EVERY_MIN, GOLDEN_LOG_LASTS_SEC, FRENZY_SEC, FRENZY_MULT,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, Product,
@@ -72,6 +72,8 @@ export interface GameState {
   sellPrice: number;
   selling: boolean; // auto-selling switch, only works once you hired the Yard Seller
   yardSeller: boolean; // section 24: $1,500 helper that sells for you
+  woodMix: Partial<Record<WoodType, number>>; // update 4: logs in the yard by tree type (adds up to `wood`)
+  plankVal: number; // update 4: base value of all planks (better wood makes better planks)
   nextLogAt: number; // update 2: when the next Golden Log appears (it stays for 60 seconds)
   frenzyUntil: number; // update 2: 7x wood/sec until this time
   settings: { sound: boolean; haptics: boolean; reduceMotion: boolean };
@@ -243,6 +245,8 @@ export function freshRun(now: number) {
     manager: { hired: false, on: true, carry: 0, plankCarry: 0, owed: 0, day: '', soldToday: 0, planksToday: 0, moneyToday: 0, collectedToday: 0, soldTotal: 0, moneyTotal: 0 } as Manager,
     sawmill: { level: 0, on: true },
     yardSeller: false,
+    woodMix: {},
+    plankVal: 0,
     nextLogAt: 0,
     frenzyUntil: 0,
   };
@@ -376,7 +380,122 @@ export function woodPerChop(s: GameState, now: number) {
   const p = durabilityPower(s.axeDurability);
   const base = p === 0 ? AXES[0].power : axe.power * p;
   const fx = toolFx(s);
-  return (base + fx.chopFlat) * (1 + fx.chopPct) * woodMultFor(s, now, HOME_WOOD);
+  const t = chopType(s);
+  const ratio = WOOD[t].price / MARKET_BASE_PRICE;
+  // better trees are harder: fewer logs per chop, but each chop is worth more (ratio^0.3)
+  return ((base + fx.chopFlat) * (1 + fx.chopPct) * woodMultFor(s, now, HOME_WOOD) * Math.pow(ratio, CHOP_VALUE_EXP)) / ratio;
+}
+
+// ---------- tree types (update 4) ----------
+
+/** The best tree you own: it is the one on the Home screen and the one you chop. */
+export function chopType(s: GameState): WoodType {
+  let best: WoodType = 'pine';
+  for (const l of LAND) if (s.lands[l.id] && WOODS.findIndex((w) => w.id === l.wood) > WOODS.findIndex((w) => w.id === best)) best = l.wood;
+  return best;
+}
+
+/** What a land grows: 60% its own tree, 40% spread over the older types below it. */
+export function landMix(landId: string): Partial<Record<WoodType, number>> {
+  const def = LAND.find((x) => x.id === landId)!;
+  const idx = WOODS.findIndex((w) => w.id === def.wood);
+  if (idx <= 0) return { [def.wood]: 1 };
+  const mix: Partial<Record<WoodType, number>> = { [def.wood]: LAND_OWN_SHARE };
+  for (let i = 0; i < idx; i++) mix[WOODS[i].id] = (1 - LAND_OWN_SHARE) / idx;
+  return mix;
+}
+
+/** Base price of a tree type with today's demand, weather and news (no boosts). */
+export function woodMarketPrice(dayKey: string, t: WoodType) {
+  return WOOD[t].price * (marketPriceOf(dayKey, 'wood') / MARKET_BASE_PRICE);
+}
+
+/** What one log of this type brings you right now (with Money boosts and tools). */
+export function logPrice(s: GameState, t: WoodType, now: number) {
+  const fx = toolFx(s);
+  return woodMarketPrice(s.dayKey, t) * moneyMult(s, now) * (1 + fx.woodSalePct);
+}
+
+/** The yard by tree type, always adding up to `wood` (older code that only changes `wood` is scaled in). */
+export function mixOf(s: GameState): Partial<Record<WoodType, number>> {
+  const m = s.woodMix ?? {};
+  let sum = 0;
+  for (const k in m) sum += m[k as WoodType] ?? 0;
+  if (s.wood <= 1e-9) return {};
+  if (Math.abs(sum - s.wood) < 1e-6) return m;
+  if (sum <= 1e-9) return { pine: s.wood };
+  if (s.wood < sum) {
+    const k = s.wood / sum;
+    const out: Partial<Record<WoodType, number>> = {};
+    for (const t in m) out[t as WoodType] = (m[t as WoodType] ?? 0) * k;
+    return out;
+  }
+  return { ...m, pine: (m.pine ?? 0) + (s.wood - sum) };
+}
+
+/** Base $ value of the yard's logs (base prices, before demand). */
+function mixBaseValue(m: Partial<Record<WoodType, number>>) {
+  let v = 0;
+  for (const t in m) v += (m[t as WoodType] ?? 0) * WOOD[t as WoodType].price;
+  return v;
+}
+
+/** Average base price per log in the yard. */
+export function avgLogBase(s: GameState) {
+  return s.wood > 0 ? mixBaseValue(mixOf(s)) / s.wood : WOOD.pine.price;
+}
+
+/** Adds logs of a given mix (shares add up to 1). */
+function addMix(m: Partial<Record<WoodType, number>>, amount: number, shares: Partial<Record<WoodType, number>>) {
+  const out = { ...m };
+  for (const t in shares) out[t as WoodType] = (out[t as WoodType] ?? 0) + amount * (shares[t as WoodType] ?? 0);
+  return out;
+}
+
+/** Removes the cheapest logs first (bulk orders and crafting). */
+function takeCheapest(s: GameState, n: number): GameState {
+  const m = { ...mixOf(s) };
+  let left = n;
+  for (const w of WOODS) {
+    if (left <= 0) break;
+    const have = m[w.id] ?? 0;
+    const take = Math.min(have, left);
+    m[w.id] = have - take;
+    left -= take;
+  }
+  return { ...s, wood: Math.max(0, s.wood - n), woodMix: m };
+}
+
+/** Plank value per plank (base $), scaled in when other code changes `planks`. */
+function plankValOf(s: GameState) {
+  if (s.planks <= 1e-9) return 0;
+  const v = s.plankVal ?? 0;
+  if (v <= 0) return s.planks * PLANK_BASE_PRICE;
+  return v;
+}
+export function avgPlankBase(s: GameState) {
+  return s.planks > 0 ? plankValOf(s) / s.planks : PLANK_BASE_PRICE;
+}
+
+/** Crew: your strongest helpers work your best lands (each land has room for a few); the rest chop pine at home. */
+export function crewByLand(s: GameState): { landId: string; helpers: { id: string; out: number }[] }[] {
+  const copies: { id: string; out: number }[] = [];
+  for (const h of HELPERS) {
+    const st = s.helpers[h.id];
+    if (!st || st.count <= 0) continue;
+    const per = helperOutputBase(h.id, st) / st.count;
+    for (let i = 0; i < st.count; i++) copies.push({ id: h.id, out: per });
+  }
+  copies.sort((a, b) => b.out - a.out);
+  const out: { landId: string; helpers: { id: string; out: number }[] }[] = [];
+  let k = 0;
+  for (const l of [...LAND].reverse()) {
+    if (!s.lands[l.id]) continue;
+    const take = copies.slice(k, k + l.crew);
+    k += take.length;
+    out.push({ landId: l.id, helpers: take });
+  }
+  return out;
 }
 
 // ---------- tools ----------
@@ -499,11 +618,24 @@ export function storageUsed(s: GameState) {
   return s.wood + s.planks * PLANK_WOOD;
 }
 
-function addWood(s: GameState, amount: number): { state: GameState; added: number } {
+function addWood(s: GameState, amount: number, shares: Partial<Record<WoodType, number>> = { pine: 1 }): { state: GameState; added: number } {
   const room = Math.max(0, storageCap(s) - storageUsed(s));
   const added = Math.max(0, Math.min(amount, room));
   if (added === 0) return { state: s, added };
-  return { state: { ...s, wood: s.wood + added, totalWoodChopped: s.totalWoodChopped + added }, added };
+  return { state: { ...s, woodMix: addMix(mixOf(s), added, shares), wood: s.wood + added, totalWoodChopped: s.totalWoodChopped + added }, added };
+}
+
+/** Adds a by-type amount map (capped by the yard). */
+function addWoodByType(s: GameState, by: Partial<Record<WoodType, number>>, capped: boolean): GameState {
+  let total = 0;
+  for (const t in by) total += by[t as WoodType] ?? 0;
+  if (total <= 0) return s;
+  const room = capped ? Math.max(0, storageCap(s) - storageUsed(s)) : Infinity;
+  const added = Math.min(total, room);
+  if (added <= 0) return s;
+  const shares: Partial<Record<WoodType, number>> = {};
+  for (const t in by) shares[t as WoodType] = (by[t as WoodType] ?? 0) / total;
+  return { ...s, woodMix: addMix(mixOf(s), added, shares), wood: s.wood + added, totalWoodChopped: s.totalWoodChopped + added };
 }
 
 // ---------- wages ----------
@@ -588,15 +720,45 @@ export function landOutputBase(id: string, s: GameState) {
 
 /** Wood per second from helpers and land, with boosts, Timber Rush and prestige. */
 export function passiveWoodPerSec(s: GameState, now: number) {
+  const by = passiveByType(s, now);
   let total = 0;
-  const home = woodMultFor(s, now, HOME_WOOD);
+  for (const t in by) total += by[t as WoodType] ?? 0;
+  return total;
+}
+
+/** Update 4: the same wood per second, split by tree type. Helpers on a land cut that land's mix. */
+export function passiveByType(s: GameState, now: number): Partial<Record<WoodType, number>> {
+  let out: Partial<Record<WoodType, number>> = {};
   const fx = toolFx(s);
-  let helpers = 0;
-  for (const h of HELPERS) helpers += helperOutputBase(h.id, s.helpers[h.id]);
-  total += helpers * (1 + fx.helperPct) * helperWageSpeed(s) * home;
-  total += fx.passiveFlat * home;
-  for (const l of LAND) if (s.lands[l.id]) total += landOutputBase(l.id, s) * woodMultFor(s, now, l.wood, true);
-  return total * (frenzyOn(s, now) ? FRENZY_MULT : 1);
+  const helperMult = (1 + fx.helperPct) * helperWageSpeed(s);
+  const fz = frenzyOn(s, now) ? FRENZY_MULT : 1;
+  let helpersTotal = 0;
+  for (const h of HELPERS) helpersTotal += helperOutputBase(h.id, s.helpers[h.id]);
+  let onLand = 0;
+  for (const c of crewByLand(s)) {
+    const def = LAND.find((x) => x.id === c.landId)!;
+    const crew = c.helpers.reduce((a, x) => a + x.out, 0);
+    onLand += crew;
+    // better wood is harder: a helper cuts fewer logs there, but each is worth more (same rule as your axe)
+    const mix = landMix(def.id);
+    let avg = 0;
+    for (const t in mix) avg += (mix[t as WoodType] ?? 0) * WOOD[t as WoodType].price;
+    const hard = Math.pow(avg / MARKET_BASE_PRICE, CHOP_VALUE_EXP - 1);
+    const rate = (crew * helperMult * woodMultFor(s, now, def.wood) * hard + landOutputBase(def.id, s) * woodMultFor(s, now, def.wood, true)) * fz;
+    out = addMix(out, rate, mix);
+  }
+  const home = woodMultFor(s, now, HOME_WOOD);
+  const homeRate = ((helpersTotal - onLand) * helperMult * home + fx.passiveFlat * home) * fz;
+  if (homeRate > 0) out = addMix(out, homeRate, { pine: 1 });
+  return out;
+}
+
+/** Update 4: Money per second the passive wood is worth at today's prices (for welcome back, rewards). */
+export function passiveValuePerSec(s: GameState, now: number) {
+  const by = passiveByType(s, now);
+  let v = 0;
+  for (const t in by) v += (by[t as WoodType] ?? 0) * woodMarketPrice(s.dayKey, t as WoodType);
+  return v;
 }
 
 // ---------- new systems on a schedule (update 3) ----------
@@ -826,8 +988,7 @@ export function startCraft(s: GameState, itemId: string, now: number): GameState
   if (!it || w.level < 0 || it.tier > w.level) return null;
   if (w.queue.length >= WORKSHOPS[w.level].slots || s.wood < it.wood) return null;
   return {
-    ...s,
-    wood: s.wood - it.wood,
+    ...takeCheapest(s, it.wood),
     workshop: { ...w, queue: [...w.queue, { itemId, startedAt: now, doneAt: now + craftTimeMs(s, itemId) }] },
   };
 }
@@ -863,6 +1024,7 @@ function tickWorkshop(s: GameState, now: number): GameState {
 
 export interface ChopResult {
   wood: number;
+  woodType: WoodType; // update 4: the tree you chopped
   crit: boolean;
   felled: boolean;
   fellBonus: number;
@@ -916,7 +1078,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     }
   }
 
-  const added = addWood(st, wood + fellBonus);
+  const added = addWood(st, wood + fellBonus, { [chopType(s)]: 1 });
   st = { ...added.state, chopAcc: added.state.chopAcc + added.added };
   const storageFull = added.added < wood + fellBonus - 1e-9;
   st = {
@@ -929,7 +1091,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     treesFelled: st.treesFelled + (felled ? 1 : 0),
     stats: { ...st.stats, chops: st.stats.chops + 1, felled: st.stats.felled + (felled ? 1 : 0) },
   };
-  return { state: st, result: { wood: storageFull ? added.added : wood, crit, felled, fellBonus: storageFull ? 0 : fellBonus, golden, newGoldenTree, axeBroke, axeLow, storageFull } };
+  return { state: st, result: { wood: storageFull ? added.added : wood, crit, felled, fellBonus: storageFull ? 0 : fellBonus, golden, newGoldenTree, axeBroke, axeLow, storageFull, woodType: chopType(s) } };
 }
 
 export function devSpawnGolden(s: GameState, now: number): GameState {
@@ -966,7 +1128,9 @@ export function hireYardSeller(s: GameState): GameState | null {
 /** Update 2: what one wood or plank brings you right now (market price with your Money boosts and tools). */
 export function unitPrice(s: GameState, p: 'wood' | 'planks', now: number) {
   const fx = toolFx(s);
-  return marketPriceOf(s.dayKey, p) * moneyMult(s, now) * (1 + (p === 'wood' ? fx.woodSalePct : fx.plankSalePct));
+  // update 4: the average of the logs (or planks) you have, each at its own tree type's price
+  const quality = p === 'wood' ? avgLogBase(s) / MARKET_BASE_PRICE : avgPlankBase(s) / PLANK_BASE_PRICE;
+  return marketPriceOf(s.dayKey, p) * quality * moneyMult(s, now) * (1 + (p === 'wood' ? fx.woodSalePct : fx.plankSalePct));
 }
 
 /** "Sell 1,000 wood for $120": how much a SELL tap would sell and earn right now. */
@@ -981,9 +1145,18 @@ export function sellAll(s: GameState, p: 'wood' | 'planks', now: number, max = I
   const sold = Math.floor(Math.min(max, p === 'wood' ? s.wood : s.planks));
   if (sold < 1) return { state: s, sold: 0, earned: 0 };
   const earned = sold * unitPrice(s, p, now);
-  let st: GameState = p === 'wood'
-    ? bump({ ...s, wood: s.wood - sold, soldToday: s.soldToday + sold }, 'woodSold', sold)
-    : { ...s, planks: s.planks - sold };
+  // sells an even slice of every tree type (or plank quality)
+  const have = p === 'wood' ? s.wood : s.planks;
+  const keep = Math.max(0, (have - sold) / have);
+  let st: GameState;
+  if (p === 'wood') {
+    const m = mixOf(s);
+    const m2: Partial<Record<WoodType, number>> = {};
+    for (const t in m) m2[t as WoodType] = (m[t as WoodType] ?? 0) * keep;
+    st = bump({ ...s, wood: s.wood - sold, woodMix: m2, soldToday: s.soldToday + sold }, 'woodSold', sold);
+  } else {
+    st = { ...s, planks: s.planks - sold, plankVal: plankValOf(s) * keep };
+  }
   st = recordSale(addMoney(st, earned), p, sold, earned, now);
   return { state: st, sold, earned };
 }
@@ -1009,8 +1182,8 @@ export function sellItems(s: GameState, itemId: string, now: number): { state: G
 
 /** Rough Money per minute right now (helpers, land and steady chopping). Used to size rewards. */
 export function incomePerMin(s: GameState, now: number) {
-  const chopWoodPerMin = 60 * woodPerChop(s, now);
-  return (passiveWoodPerSec(s, now) * 60 + chopWoodPerMin) * marketPriceFor(s.dayKey);
+  const chopValuePerMin = 60 * woodPerChop(s, now) * woodMarketPrice(s.dayKey, chopType(s));
+  return passiveValuePerSec(s, now) * 60 + chopValuePerMin;
 }
 
 export function bestPrice(dayKey: string) {
@@ -1038,17 +1211,28 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     void made;
     next = { ...next, chopRate, chopAcc: 0 };
   }
-  if (passive > 0) {
-    // with the Yard Seller on, wood goes straight from the forest to the buyers, so a small yard never wastes it
-    if (autoSelling(next)) next = { ...next, wood: next.wood + passive * dtSec, totalWoodChopped: next.totalWoodChopped + passive * dtSec };
-    else next = addWood(next, passive * dtSec).state;
+  if (passive > 0 && dtSec > 0) {
+    // update 4: each tree type comes in from its own land.
+    // With the Yard Seller on, wood goes straight from the forest to the buyers, so a small yard never wastes it.
+    const by = passiveByType(next, now);
+    const k = dtSec * (offline ? OFFLINE_RATE : 1);
+    const amounts: Partial<Record<WoodType, number>> = {};
+    for (const t in by) amounts[t as WoodType] = (by[t as WoodType] ?? 0) * k;
+    next = addWoodByType(next, amounts, !autoSelling(next));
   }
   if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
 
   const cutRate = plankCutRate(next);
   if (cutRate > 0 && next.wood >= PLANK_WOOD && dtSec > 0) {
     const n = Math.min(cutRate * dtSec, next.wood / PLANK_WOOD);
-    next = { ...next, wood: next.wood - n * PLANK_WOOD, planks: next.planks + n };
+    // update 4: planks keep the value of the wood they were cut from (a pine plank is $0.25 at base)
+    const logBase = avgLogBase(next);
+    const m = mixOf(next);
+    const k = Math.max(0, (next.wood - n * PLANK_WOOD) / next.wood);
+    const m2: Partial<Record<WoodType, number>> = {};
+    for (const t in m) m2[t as WoodType] = (m[t as WoodType] ?? 0) * k;
+    const plankAdd = n * PLANK_WOOD * logBase * (PLANK_BASE_PRICE / (PLANK_WOOD * MARKET_BASE_PRICE));
+    next = { ...next, wood: next.wood - n * PLANK_WOOD, woodMix: m2, plankVal: plankValOf(next) + plankAdd, planks: next.planks + n };
   }
 
   // Yard Seller: everything sells at the market price as it comes in
@@ -1226,6 +1410,15 @@ export function migrate(s: GameState): GameState {
   if (st.runMoneyEarned === 0 && st.prestige.count === 0 && st.totalMoneyEarned > 0) st = { ...st, runMoneyEarned: st.totalMoneyEarned };
   if (Object.values(st.listings).some((l) => !l.saleType || !l.rivalPlan)) st = { ...st, listings: {}, listingsDay: '' }; // pre-rivals saves
   if (typeof st.yardSeller !== 'boolean') st = { ...st, yardSeller: false };
+  // update 4: Old Growth Ridge and Great Northwoods became Cherry Grove and Bamboo Valley
+  const renamed: Record<string, string> = { oldgrowth: 'cherrygrove', northwoods: 'bamboo' };
+  if (Object.keys(st.lands).some((k) => renamed[k]) || Object.keys(st.listings).some((k) => renamed[k] || !LAND.find((l) => l.id === k))) {
+    const lands: GameState['lands'] = {};
+    for (const [k, v] of Object.entries(st.lands)) lands[renamed[k] ?? k] = v;
+    st = { ...st, lands, listings: {}, listingsDay: '', auction: null };
+  }
+  if (!st.woodMix) st = { ...st, woodMix: { pine: st.wood } };
+  if (typeof st.plankVal !== 'number') st = { ...st, plankVal: st.planks * PLANK_BASE_PRICE };
   st = { ...st, stats: { ...emptyStats(), ...st.stats } };
   if (!st.cosmetics) st = { ...st, cosmetics: { owned: ['tree-pine', 'axe-rusty', 'bg-forest'], tree: 'tree-pine', axe: null, bg: 'bg-forest' } };
   st = packCosmetics(st);
@@ -1309,7 +1502,8 @@ export function acceptOrder(s: GameState, id: string, now: number): GameState | 
   const fx = toolFx(s);
   const bonus = o.product === 'wood' ? fx.woodSalePct : fx.plankSalePct;
   const money = o.amount * o.price * moneyMult(s, now) * (1 + bonus);
-  let st: GameState = o.product === 'wood' ? { ...s, wood: s.wood - o.amount } : { ...s, planks: s.planks - o.amount };
+  // bulk buyers take your cheapest logs first
+  let st: GameState = o.product === 'wood' ? takeCheapest(s, o.amount) : { ...s, planks: s.planks - o.amount, plankVal: plankValOf(s) * Math.max(0, (s.planks - o.amount) / s.planks) };
   if (o.product === 'wood') st = bump(st, 'woodSold', o.amount);
   st = addMoney(st, money);
   st = recordSale(st, o.product, o.amount, money, now, { what: `Bulk order: ${o.product} for ${o.buyer}`, price: money, minutes: null });

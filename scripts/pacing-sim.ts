@@ -3,15 +3,18 @@
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
   makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
-  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellAll, hireYardSeller, tapGoldenLog, goldenLogVisible,
+  buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellAll, hireYardSeller, passiveValuePerSec, passiveWoodPerSec, woodMarketPrice, chopType, tapGoldenLog, goldenLogVisible,
 } from '../src/game/logic';
 import { canPrestige, prestigeGain } from '../src/game/meta';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
-import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS } from '../src/game/data';
+import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS, WOOD } from '../src/game/data';
 
 // tuning aid: LATE=0.5 scales late helpers/land output (veteran and up, hillside and up) for this run only
 if (process.env.NORUSH) (require('../src/game/data') as any).RUSH_BONUS = 0;
-if (process.env.LATE) { const k = Number(process.env.LATE); HELPERS.slice(2).forEach((h) => (h.woodPerSec *= k)); LAND.slice(2).forEach((l) => (l.woodPerSec *= k)); }
+if (process.env.LANDK) { const k = Number(process.env.LANDK); LAND.slice(Number(process.env.LANDFROM ?? 5)).forEach((l) => (l.woodPerSec *= k)); }
+if (process.env.CREW) { const c = Number(process.env.CREW); LAND.forEach((l, i) => { if (i >= Number(process.env.CREWFROM ?? 0)) l.crew = Math.min(l.crew, c); }); }
+if (process.env.COSTK) { const k = Number(process.env.COSTK); HELPERS.slice(3).forEach((h) => (h.cost *= k)); }
+if (process.env.LATE) { const k = Number(process.env.LATE); HELPERS.slice(Number(process.env.LATEH ?? 2)).forEach((h) => (h.woodPerSec *= k)); LAND.slice(2).forEach((l) => (l.woodPerSec *= k)); }
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).getTime(); // START=days after Monday Nov 23
@@ -124,35 +127,39 @@ lastSell = 0;
 // ---------- 2. a few days of normal play, smart buying ----------
 // 4 sessions a day of 30 minutes at 1 tap/sec, offline in between (50% rate, 8h cap).
 function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameState | null } | null {
+  // update 4: every gain is measured in Money per second, so better tree types are valued by their price
   const opts: { cost: number; gain: number; buy: () => GameState | null }[] = [];
+  const v0 = passiveValuePerSec(s, now);
+  const dv = (x: GameState | null) => (x ? passiveValuePerSec(x, now) - v0 : 0);
+  const pine = 0.1;
   const nextAxe = AXES[s.axeIndex + 1];
-  if (nextAxe) opts.push({ cost: nextAxe.cost, gain: (nextAxe.power - AXES[s.axeIndex].power) * 1.6 * 0.08, buy: () => buyAxe(s, s.axeIndex + 1) });
+  if (nextAxe) opts.push({ cost: nextAxe.cost, gain: (nextAxe.power - AXES[s.axeIndex].power) * 1.6 * 0.8 * woodMarketPrice(s.dayKey, chopType(s)) * Math.pow(WOOD[chopType(s)].price / pine, 0.3) / (WOOD[chopType(s)].price / pine), buy: () => buyAxe(s, s.axeIndex + 1) });
   for (const h of HELPERS) {
-    const lvl = s.helpers[h.id]?.level ?? 0;
-    opts.push({ cost: hireCost(s, h.id), gain: h.woodPerSec * (1 + 0.25 * lvl), buy: () => hireHelper(s, h.id) });
+    opts.push({ cost: hireCost(s, h.id), gain: dv(hireHelper({ ...s, money: 1e18 }, h.id)), buy: () => hireHelper(s, h.id) });
     const lc = levelCost(s, h.id);
-    if (lc !== null && (s.helpers[h.id]?.count ?? 0) > 0) opts.push({ cost: lc, gain: h.woodPerSec * s.helpers[h.id].count * 0.25, buy: () => levelHelper(s, h.id) });
+    if (lc !== null && (s.helpers[h.id]?.count ?? 0) > 0) opts.push({ cost: lc, gain: dv(levelHelper({ ...s, money: 1e18 }, h.id)), buy: () => levelHelper(s, h.id) });
   }
   for (const l of LAND) {
     if (!s.lands[l.id]) {
       const L = ensureListings(s, now).listings[l.id];
       const open = L && (L.status === 'open' || L.status === 'counter');
-      if (open) opts.push({ cost: l.asking * (L.saleType === 'auction' ? 1.15 : 1), gain: l.woodPerSec, buy: () => buyLandAtAsking(s, l.id, now) });
+      if (open) opts.push({ cost: l.asking * (L.saleType === 'auction' ? 1.15 : 1), gain: dv({ ...s, lands: { ...s.lands, [l.id]: { upgrades: [], paid: 0 } } }), buy: () => buyLandAtAsking(s, l.id, now) });
     }
-    else for (const u of LAND_UPGRADES) if (!s.lands[l.id].upgrades.includes(u.id)) opts.push({ cost: landUpgradeCost(l.id, u.id), gain: l.woodPerSec * u.bonus, buy: () => buyLandUpgrade(s, l.id, u.id) });
+    else for (const u of LAND_UPGRADES) if (!s.lands[l.id].upgrades.includes(u.id)) opts.push({ cost: landUpgradeCost(l.id, u.id), gain: dv(buyLandUpgrade({ ...s, money: 1e18 }, l.id, u.id)), buy: () => buyLandUpgrade(s, l.id, u.id) });
   }
   const helperWps = HELPERS.reduce((a, h) => a + h.woodPerSec * (s.helpers[h.id]?.count ?? 0) * (1 + 0.25 * (s.helpers[h.id]?.level ?? 0)), 0);
   const nHelpers = Object.values(s.helpers).reduce((a, h) => a + h.count, 0);
+  const avg = v0 > 0 ? v0 / Math.max(1e-9, passiveWoodPerSec(s, now)) : pine;
   for (const t of TOOLS) {
     if (s.tools[t.id]) continue;
-    const gain = (t.chopFlat ?? 0) * 0.15 + (t.chopPct ?? 0) * 0.2 + (t.helperPct ?? 0) * helperWps
-      + (t.needsHelpers && !nHelpers ? 0 : t.passiveFlat ?? 0) + (t.woodSalePct ?? 0) * helperWps + (t.plankSalePct ? 0.01 : 0);
+    const gain = ((t.chopFlat ?? 0) * 0.15 + (t.chopPct ?? 0) * 0.2 + (t.helperPct ?? 0) * helperWps
+      + (t.needsHelpers && !nHelpers ? 0 : t.passiveFlat ?? 0) + (t.woodSalePct ?? 0) * helperWps + (t.plankSalePct ? 0.01 : 0)) * avg;
     if (gain > 0) opts.push({ cost: t.cost, gain, buy: () => buyTool(s, t.id) });
   }
   // a full yard means more output is wasted: storage first
   const sc = storageUpgradeCost(s);
   if (s.wood > storageCap(s) * 0.85 && sc !== null) return { cost: sc, buy: () => buyStorage(s) };
-  opts.sort((a, b) => a.cost / a.gain - b.cost / b.gain);
+  opts.sort((a, b) => a.cost / Math.max(1e-12, a.gain) - b.cost / Math.max(1e-12, b.gain));
   return opts[0] ?? null;
 }
 
@@ -191,7 +198,7 @@ function days(nDays: number) {
         while (marks.length && s.runMoneyEarned >= marks[0]) hits.push(`$${marks.shift()! / 1e6}M after ${((now - T0) / 86400_000).toFixed(1)} days`);
       }
     }
-    if (process.env.DEBUG) { const b = bestBuy(s, now); console.log(`  d${d + 1} money ${Math.round(s.money)} wps ${Math.round(require('../src/game/logic').passiveWoodPerSec(s, now))} helpers ${JSON.stringify(s.helpers)} lands ${Object.keys(s.lands)} tools ${Object.keys(s.tools)} next ${b?.cost}`); }
+    if (process.env.DEBUG) { const b = bestBuy(s, now); const L = require('../src/game/logic'); const noLand = { ...s, lands: {} }; console.log(`  d${d + 1} value/s ${Math.round(L.passiveValuePerSec(s, now))} (no land ${Math.round(L.passiveValuePerSec(noLand, now))}) chop$ ${(L.woodPerChop(s, now) * L.woodMarketPrice(s.dayKey, L.chopType(s))).toFixed(1)} prestige ${s.prestige.mult} boosts ${JSON.stringify(s.boosts)} money ${Math.round(s.money)} wps ${Math.round(require('../src/game/logic').passiveWoodPerSec(s, now))} helpers ${JSON.stringify(s.helpers)} lands ${Object.keys(s.lands)} tools ${Object.keys(s.tools)} next ${b?.cost}`); }
     log.push(`day ${d + 1}: earned ${Math.round(s.runMoneyEarned).toLocaleString()} this run, ${Object.values(s.helpers).reduce((a, h) => a + h.count, 0)} helpers, ${Object.keys(s.lands).length} lands, ${Object.keys(s.tools).length} tools, storage ${storageCap(s).toLocaleString()}`);
   }
   return { prestigeAt, gain: gainAt, log, hits };

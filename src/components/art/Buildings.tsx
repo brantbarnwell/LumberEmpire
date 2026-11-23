@@ -4,6 +4,8 @@ import { ReactElement, useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Polygon, Rect } from 'react-native-svg';
 import { INK, PAL } from './Icons';
+import { WOOD_TREES } from './TreeArt';
+import { LAND, WOODS } from '../../game/data';
 import { lessMotion } from '../../services/feel';
 
 const ND = Platform.OS !== 'web';
@@ -162,69 +164,53 @@ export function SawmillArt({ level, running, width = 150 }: { level: number; run
 
 // ---------- land plots ----------
 
-const pine = (x: number, y: number, s: number, c = PAL.pine) => (
-  <G key={`p${x}${y}`}>
-    <Rect x={x - 1.5 * s} y={y - 4 * s} width={3 * s} height={4 * s} fill={PAL.bark} />
-    <Polygon points={`${x},${y - 22 * s} ${x + 8 * s},${y - 4 * s} ${x - 8 * s},${y - 4 * s}`} fill={c} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
-  </G>
-);
-const round = (x: number, y: number, s: number, c: string) => (
-  <G key={`r${x}${y}`}>
-    <Rect x={x - 1.5 * s} y={y - 8 * s} width={3 * s} height={8 * s} fill={PAL.bark} stroke={INK} strokeWidth={1} />
-    <Circle cx={x} cy={y - 13 * s} r={8 * s} fill={c} stroke={INK} strokeWidth={1.6} />
-  </G>
-);
-const tall = (x: number, y: number, s: number) => (
-  <G key={`t${x}${y}`}>
-    <Rect x={x - 2 * s} y={y - 14 * s} width={4 * s} height={14 * s} fill="#a0462a" stroke={INK} strokeWidth={1} />
-    <Path d={`M${x} ${y - 34 * s} q${7 * s} ${10 * s} ${5 * s} ${20 * s} h${-10 * s} q${-2 * s} ${-10 * s} ${5 * s} ${-20 * s} z`} fill={PAL.pine} stroke={INK} strokeWidth={1.6} />
-  </G>
-);
-const palm = (x: number, y: number, s: number) => (
-  <G key={`m${x}${y}`}>
-    <Path d={`M${x} ${y} q${2 * s} ${-12 * s} ${-1 * s} ${-22 * s}`} stroke={PAL.bark} strokeWidth={3 * s} fill="none" />
-    <Path d={`M${x - 1 * s} ${y - 22 * s} q${-10 * s} ${-4 * s} ${-14 * s} ${4 * s} M${x - 1 * s} ${y - 22 * s} q${10 * s} ${-5 * s} ${14 * s} ${3 * s} M${x - 1 * s} ${y - 22 * s} q${-2 * s} ${-10 * s} ${6 * s} ${-10 * s}`} stroke={PAL.pineLight} strokeWidth={3.2 * s} fill="none" strokeLinecap="round" />
-  </G>
-);
+/** Update 4: a small tree in the house style, coloured like its tree type. */
+function typeTree(x: number, y: number, sc: number, type: string, key: string) {
+  const P = WOOD_TREES[type] ?? WOOD_TREES.pine;
+  const c1 = P.rainbow ? P.rainbow[0] : P.light;
+  const c2 = P.rainbow ? P.rainbow[2] : P.mid;
+  const a = P.alpha ?? 1;
+  return (
+    <G key={key}>
+      <Rect x={x - 1.8 * sc} y={y - 6 * sc} width={3.6 * sc} height={6 * sc} fill={P.trunk[1]} stroke={INK} strokeWidth={1} />
+      <Polygon points={`${x},${y - 18 * sc} ${x + 9 * sc},${y - 5 * sc} ${x - 9 * sc},${y - 5 * sc}`} fill={c2} fillOpacity={a} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
+      <Polygon points={`${x},${y - 26 * sc} ${x + 6.5 * sc},${y - 14 * sc} ${x - 6.5 * sc},${y - 14 * sc}`} fill={c1} fillOpacity={a} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
+      {P.sparkle && <Path d={`M${x + 4 * sc} ${y - 24 * sc} l1.2 2.4 l2.4 1.2 l-2.4 1.2 l-1.2 2.4 l-1.2 -2.4 l-2.4 -1.2 l2.4 -1.2 z`} fill={P.sparkle} stroke={INK} strokeWidth={0.6} />}
+    </G>
+  );
+}
 
-/** A small landscape for each piece of land (9 plots). */
+/** A small landscape for each piece of land (14 plots), with that land's own trees. */
 export function LandArt({ id, width = 120, owned }: { id: string; width?: number; owned?: boolean }) {
   const h = (width * 70) / 120;
-  const trees: ReactElement[] = [];
-  let ground = <Path d="M0 54 Q60 44 120 54 L120 70 L0 70 Z" fill={PAL.pineLight} stroke={INK} strokeWidth={1.8} />;
-  let back: ReactElement | null = null;
-  if (id === 'clearing') {
-    trees.push(pine(40, 56, 0.6), pine(84, 55, 0.7));
-    trees.push(<G key="st"><Ellipse cx="62" cy="58" rx="6" ry="2.5" fill={PAL.woodLight} stroke={INK} strokeWidth={1.2} /><Rect x="56" y="58" width="12" height="4" fill={PAL.bark} /></G>);
-  } else if (id === 'pine') {
-    [18, 36, 54, 72, 90, 106].forEach((x, i) => trees.push(pine(x, 56 + (i % 2) * 3, 0.9 + (i % 3) * 0.1)));
-  } else if (id === 'hillside') {
-    back = <Path d="M0 56 Q40 14 90 40 Q110 48 120 56 Z" fill="#7cb66a" stroke={INK} strokeWidth={1.8} />;
-    [20, 44, 68, 92].forEach((x, i) => trees.push(round(x, 50 - (i === 1 ? 14 : i === 2 ? 10 : 0), 0.9, i % 2 ? PAL.pine : PAL.pineLight)));
-  } else if (id === 'river') {
-    ground = <G><Path d="M0 54 Q60 44 120 54 L120 70 L0 70 Z" fill={PAL.pineLight} stroke={INK} strokeWidth={1.8} /><Path d="M48 70 Q58 58 52 50 L64 50 Q70 60 62 70 Z" fill={PAL.sky} stroke={INK} strokeWidth={1.6} /></G>;
-    [16, 34, 82, 102].forEach((x, i) => trees.push(round(x, 54, 0.9, i % 2 ? '#e07b26' : PAL.red)));
-  } else if (id === 'redwood') {
-    [14, 34, 56, 78, 100].forEach((x, i) => trees.push(tall(x, 58, 1 + (i % 2) * 0.2)));
-  } else if (id === 'mountain') {
-    back = <G><Polygon points="0,56 34,10 64,56" fill="#9cb8c9" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" /><Polygon points="40,56 82,4 120,56" fill="#8aa7ba" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" /><Polygon points="82,4 92,18 72,18" fill="#fff" /></G>;
-    [20, 40, 70, 96].forEach((x) => trees.push(pine(x, 60, 0.8, '#1f5b33')));
-  } else if (id === 'oldgrowth') {
-    back = <Path d="M0 50 Q60 20 120 50 Z" fill="#6fa25e" stroke={INK} strokeWidth={1.8} />;
-    [22, 60, 98].forEach((x) => trees.push(round(x, 56, 1.4, PAL.pine)));
-  } else if (id === 'northwoods') {
-    [12, 28, 44, 60, 76, 92, 108].forEach((x, i) => trees.push(i % 2 ? round(x, 58, 0.85, i % 4 === 1 ? '#e07b26' : PAL.red) : pine(x, 58, 0.85)));
-  } else {
-    back = <G><Rect x="86" y="12" width="10" height="44" fill={PAL.sky} stroke={INK} strokeWidth={1.4} /><Path d="M80 12 h22" stroke={INK} strokeWidth={2} /></G>;
-    [14, 36, 58].forEach((x) => trees.push(palm(x, 58, 1.1)));
-    trees.push(round(108, 58, 0.9, PAL.pineLight));
-  }
+  const def = LAND.find((l) => l.id === id);
+  const type = def?.wood ?? 'pine';
+  const idx = WOODS.findIndex((w) => w.id === type);
+  const older = idx > 0 ? WOODS[idx - 1].id : type;
+  const scene: Record<string, { sky: string; ground: string; back?: ReactElement }> = {
+    clearing: { sky: PAL.sky, ground: PAL.pineLight },
+    pine: { sky: PAL.sky, ground: PAL.pineLight },
+    hillside: { sky: PAL.sky, ground: '#7cb66a', back: <Path d="M0 56 Q40 16 90 40 Q110 48 120 56 Z" fill="#8fc27a" stroke={INK} strokeWidth={1.6} /> },
+    river: { sky: PAL.sky, ground: PAL.pineLight, back: <Path d="M48 70 Q58 58 52 50 L64 50 Q70 60 62 70 Z" fill={PAL.sky} stroke={INK} strokeWidth={1.4} /> },
+    redwood: { sky: '#bfe3f0', ground: '#5e9a52' },
+    mountain: { sky: '#bcd7e6', ground: '#6f9a5e', back: <G><Polygon points="0,56 34,12 64,56" fill="#9cb8c9" stroke={INK} strokeWidth={1.6} strokeLinejoin="round" /><Polygon points="44,56 84,6 120,56" fill="#8aa7ba" stroke={INK} strokeWidth={1.6} strokeLinejoin="round" /><Polygon points="84,6 93,18 75,18" fill="#fff" /></G> },
+    cherrygrove: { sky: '#fde4ee', ground: '#9fd08a', back: <G>{[20, 50, 80, 104].map((x) => <Circle key={x} cx={x} cy={14 + (x % 3) * 4} r={1.8} fill="#f6b6cf" />)}</G> },
+    darkwood: { sky: '#4a4a66', ground: '#2e3a2a', back: <Circle cx={100} cy={14} r={7} fill="#e8e6f0" stroke={INK} strokeWidth={1.2} /> },
+    bamboo: { sky: '#dff3c8', ground: '#8fc26a', back: <Path d="M0 52 Q60 36 120 52 Z" fill="#b6dc8a" stroke={INK} strokeWidth={1.4} /> },
+    crystal: { sky: '#1e2e4a', ground: '#3a5a7a', back: <G><Path d="M0 56 Q20 10 60 14 Q100 10 120 56 Z" fill="#2a3e5e" stroke={INK} strokeWidth={1.6} />{[[24, 46], [96, 44], [60, 26]].map(([x, y]) => <Polygon key={x} points={`${x},${y - 8} ${x + 4},${y} ${x},${y + 4} ${x - 4},${y}`} fill="#8fd8ff" stroke={INK} strokeWidth={1} />)}</G> },
+    glass: { sky: '#e8fbff', ground: '#bfe9ee', back: <Path d="M10 20 L30 10 M80 18 L104 8" stroke="#ffffff" strokeWidth={3} strokeLinecap="round" /> },
+    diamond: { sky: '#cfe3f2', ground: '#e9f1f7', back: <G><Polygon points="20,56 60,6 100,56" fill="#dbe6ef" stroke={INK} strokeWidth={1.6} strokeLinejoin="round" /><Polygon points="60,6 70,20 50,20" fill="#ffffff" /></G> },
+    goldenvalley: { sky: '#fff1c8', ground: '#e8c25a', back: <Circle cx={96} cy={16} r={9} fill={PAL.gold} stroke={INK} strokeWidth={1.4} /> },
+    rainforest: { sky: '#cfeefc', ground: '#5ea84e', back: <G>{['#ff5a7a', '#ffb03a', '#6fd25a', '#5ab0ff'].map((c, i) => <Path key={c} d={`M8 ${56 - i * 0} A52 ${44 - i * 5} 0 0 1 112 56`} transform={`translate(0 ${-6 - i * 4})`} fill="none" stroke={c} strokeWidth={3} />)}</G> },
+  };
+  const sc = scene[id] ?? scene.clearing;
+  const xs = [16, 38, 60, 82, 104];
   return (
     <Svg width={width} height={h} viewBox="0 0 120 70">
-      <Rect x="0" y="0" width="120" height="70" rx="10" fill={PAL.sky} />
-      {back}
-      {ground}
-      {trees}
+      <Rect x="0" y="0" width="120" height="70" rx="10" fill={sc.sky} />
+      {sc.back}
+      <Path d="M0 54 Q60 44 120 54 L120 70 L0 70 Z" fill={sc.ground} stroke={INK} strokeWidth={1.8} />
+      {xs.map((x, i) => typeTree(x, 58 + (i % 2) * 3, i % 2 ? 0.95 : 1.15, i === 1 || i === 4 ? older : type, `${id}${i}`))}
       {owned && <G><Path d="M108 30 v24" stroke={INK} strokeWidth={2} /><Path d="M108 30 l10 4 l-10 4 z" fill={PAL.gold} stroke={INK} strokeWidth={1.4} /></G>}
       <Rect x="1" y="1" width="118" height="68" rx="10" fill="none" stroke={INK} strokeWidth={2.4} />
     </Svg>

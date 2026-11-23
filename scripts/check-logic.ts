@@ -268,7 +268,7 @@ ok(sa.sold === 1000 && Math.abs(sa.earned - quote.earned) < 1e-9 && Math.abs(quo
 ok(L24.hireYardSeller({ ...newGame(MON), money: 1499 }) === null, 'Yard Seller costs $1,500 cash');
 const ys = L24.hireYardSeller({ ...newGame(MON), money: 1500, wood: 1000 })!;
 ok(ys.money === 0 && tick(ys, 60, MON).wood < 1000, 'Yard Seller sells wood by itself');
-ok(LAND.length === 9, '9 pieces of land to buy');
+ok(LAND.length === 14, '14 pieces of land to buy (update 4)');
 
 // ---- Update 2 ----
 import { prestigePreview } from '../src/game/meta';
@@ -318,3 +318,25 @@ const ideas = M3.buyIdeas({ ...newGame(MON), money: 0 }, 2000, MON);
 ok(ideas.length > 0 && ideas.every((x) => x.cost <= 2000), `welcome-back ideas fit the budget (${ideas.map((x) => x.label).join(', ')})`);
 const wb = M3.weeklyBoard({ ...newGame(MON), board: { weekKey: L24.weekKeyOf(MON), startTotal: 0, lastWeek: 0 }, totalMoneyEarned: 50_000 }, MON + 3 * 86400_000);
 ok(wb.length === 5 && wb.some((r) => r.you && r.earned === 50_000) && wb.every((r, i) => i === 0 || wb[i - 1].earned >= r.earned), 'weekly leaderboard: you and 4 AI rivals, sorted');
+
+// ---- Update 4: tree types ----
+import * as D4 from '../src/game/data';
+ok(D4.WOODS.length === 14 && D4.WOODS.every((w, i) => i === 0 || w.price > D4.WOODS[i - 1].price) && D4.WOOD.starwood.price === 55, '14 tree types, each pricier than the last, Starwood $55');
+ok(D4.LAND.every((l, i) => l.wood === D4.WOODS[i].id) && D4.LAND[13].id === 'rainforest' && D4.LAND[13].asking === 90_000_000, 'each land grows the next tree type, Coastal Rainforest = Starwood at $90M');
+const mx = L24.landMix('crystal');
+ok(Math.abs(Object.values(mx).reduce((a, b) => a! + b!, 0)! - 1) < 1e-9 && mx.crystal === 0.6 && (mx.pine ?? 0) > 0 && !mx.glass, 'Crystal Caves grows mostly Crystal Wood plus the older woods, nothing better');
+const tw = { ...newGame(MON), wood: 300, woodMix: { pine: 100, oak: 100, crystal: 100 } } as GameState;
+const twq = L24.sellQuote(tw, 'wood', MON);
+const fac = marketPriceOf(tw.dayKey, 'wood') / 0.1;
+ok(Math.abs(twq.earned - 100 * (0.1 + 0.18 + 8) * fac) < 1e-6, 'each log sells at its own tree price, moved by the market');
+const half = L24.sellAll(tw, 'wood', MON, 150);
+ok(Math.abs((half.state.woodMix.crystal ?? 0) - 50) < 1e-6 && Math.abs(half.state.wood - 150) < 1e-6, 'selling part of the yard sells an even slice of every type');
+const ownC = { ...newGame(MON), lands: { clearing: { upgrades: [], paid: 0 }, crystal: { upgrades: [], paid: 0 } } } as GameState;
+ok(L24.chopType(ownC) === 'crystal' && L24.chop(ownC, MON, () => 0.5).state.woodMix.crystal! > 0, 'you chop your best tree');
+const crewS = { ...ownC, helpers: { apprentice: { count: 5, level: 0 }, crew: { count: 2, level: 0 } } } as GameState;
+const cb = L24.crewByLand(crewS);
+ok(cb.find((c) => c.landId === 'crystal')!.helpers.every((h) => h.id === 'crew') && cb.find((c) => c.landId === 'crystal')!.helpers.length === 2, 'your best helpers work your best land');
+const by = L24.passiveByType(crewS, MON);
+ok((by.crystal ?? 0) > 0 && (by.pine ?? 0) > 0, 'helpers on Crystal Caves cut crystal; the rest chop pine at home');
+const cut = tick({ ...newGame(MON), wood: 1000, woodMix: { crystal: 1000 }, sawmill: { level: 1, on: true }, cutting: false } as GameState, 1, MON);
+ok(cut.planks > 0 && L24.avgPlankBase(cut) > 10, `the Sawmill cuts the wood you have: crystal planks are worth more (${L24.avgPlankBase(cut).toFixed(2)} each at base)`);

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import {
-  acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, lostBidCost, makeOffer, rejectCounter, woodMultFor,
+  GameState, crewByLand, logPrice, acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, lostBidCost, makeOffer, rejectCounter, woodMultFor,
 } from '../game/logic';
-import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, RIVALS } from '../game/data';
+import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, WOODS, RIVALS } from '../game/data';
+import { LogIcon } from './art/Icons';
+import { unitText } from './SellButton';
 import { canStartAuction, startAuction, toggleWatch } from '../game/rivals';
 import { AuctionPanel } from './AuctionPanel';
 import { LandArt } from './art/Buildings';
@@ -13,6 +15,23 @@ import { haptic } from '../services/haptics';
 import { Button, Card, ProgressBar } from './ui';
 import { showPopup } from './popup';
 import { C } from './theme';
+
+/** Update 4: the tree type a land grows and what one of its logs sells for today. */
+function WoodLine({ s, l, now }: { s: GameState; l: (typeof LAND)[number]; now: number }) {
+  const idx = WOODS.findIndex((w) => w.id === l.wood);
+  const crew = crewByLand(s).find((c) => c.landId === l.id)?.helpers.length ?? 0;
+  return (
+    <View style={{ marginTop: 2 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <LogIcon type={l.wood} size={22} />
+        <Text style={[styles.woodName, { flex: 1 }]}>
+          {WOOD_NAMES[l.wood]}  <Text style={styles.woodPrice}>{unitText(logPrice(s, l.wood, now))}/log</Text>
+        </Text>
+      </View>
+      <Text style={styles.sub}>{idx > 0 ? `Mostly ${WOOD_NAMES[l.wood]}, plus ${idx === 1 ? 'Pine' : `${idx} older woods`}` : 'Pine, the starting wood'}{s.lands[l.id] ? ` · crew ${crew}/${l.crew}` : ''}</Text>
+    </View>
+  );
+}
 
 export function LandScreen() {
   const s = useGame();
@@ -52,7 +71,7 @@ export function LandScreen() {
               <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{l.name}</Text>
-                <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]}</Text>
+                <WoodLine s={s} l={l} now={now} />
                 <Text style={styles.owned}>+{small(landOutputBase(l.id, s) * woodMultFor(s, now, l.wood))} wood/sec</Text>
                 <View style={[styles.row, { marginTop: 4, gap: 3 }]}>
                   {LAND_UPGRADES.map((u) => <Text key={u.id} style={{ fontSize: 14, opacity: mine.upgrades.includes(u.id) ? 1 : 0.25 }}>🌲</Text>)}
@@ -128,7 +147,8 @@ export function LandScreen() {
                 <Text style={[styles.badge, L.saleType === 'auction' && styles.badgeAuction]}>{L.saleType === 'auction' ? 'AUCTION' : 'MAKE AN OFFER'}</Text>
                 <Text style={styles.star} onPress={() => update((st) => toggleWatch(st, l.id))} accessibilityLabel="Watch this land">{watched ? '⭐' : '☆'}</Text>
               </View>
-              <Text style={styles.sub}>{l.acres} acres · {l.trees} trees · {WOOD_NAMES[l.wood]} · +{small(l.woodPerSec)} wood/sec</Text>
+              <WoodLine s={s} l={l} now={now} />
+              <Text style={styles.sub}>{l.acres} acres · +{small(l.woodPerSec)} logs/sec · crew {l.crew}</Text>
               <Text style={styles.asking}>Asking {money(l.asking)}</Text>
               {L.saleType === 'negotiate' && <Text style={styles.sub}>Seller: {L.seller} · {P.label}</Text>}
               {L.rivalOffer && L.saleType === 'negotiate' && <Text style={[styles.sub, { color: C.red }]}>Best rival offer: {L.rivalOffer.rival} {money(L.rivalOffer.amount)}</Text>}
@@ -263,6 +283,8 @@ function Negotiation({ landId, onClose }: { landId: string; onClose: () => void 
 
 const styles = StyleSheet.create({
   landArt: { width: 88, marginRight: 4 },
+  woodName: { fontSize: 14, fontWeight: '900', color: C.ink },
+  woodPrice: { fontSize: 14, fontWeight: '900', color: C.money },
   risk: { marginTop: 8, backgroundColor: '#fdecea', borderRadius: 10, borderWidth: 1.5, borderColor: '#f3b3ab', padding: 8 },
   riskText: { fontSize: 12, fontWeight: '900', color: '#b3261e' },
   page: { flex: 1, backgroundColor: C.cream },

@@ -1,15 +1,15 @@
 // Update 2: no price slider. Everything sells at the market price with one tap.
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { acceptOrder, counterOrder, itemPrice, rejectOrder, rushInfo, sellItems, unitPrice } from '../game/logic';
+import { mixOf, logPrice, ownedWoodTypes, acceptOrder, counterOrder, itemPrice, rejectOrder, rushInfo, sellItems, unitPrice } from '../game/logic';
 import { itemPriceOf, marketEvent, marketPriceOf, priceTrend, weatherOf } from '../game/market';
-import { ITEMS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
+import { WOOD, WOODS, ITEMS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
 import { duration, money, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { feel } from '../services/feel';
 import { showPopup } from './popup';
 import { SellButton, unitText } from './SellButton';
-import { Icon, IconName } from './art/Icons';
+import { Icon, IconName, LogIcon } from './art/Icons';
 import { FurnitureArt } from './art/Furniture';
 import { Button, Card } from './ui';
 import { C } from './theme';
@@ -25,6 +25,7 @@ export function MarketScreen() {
   const wx = weatherOf(s.dayKey);
   const w = s.workshop;
   const items = ITEMS.filter((it) => (w.inventory[it.id] ?? 0) > 0);
+  const mix = mixOf(s);
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -38,7 +39,14 @@ export function MarketScreen() {
             {ev && <Text style={styles.news} numberOfLines={1}>{ev.name}</Text>}
           </View>
         </View>
-        <PriceRow icon="wood" name="Wood" text={`${unitText(unitPrice(s, 'wood', now))} per wood`} t={priceTrend(s.dayKey, 'wood')} />
+        {ownedWoodTypes(s).map((t) => (
+          <View key={t} style={styles.priceRow}>
+            <LogIcon type={t} size={26} />
+            <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>{WOOD[t].name}</Text>
+            <Text style={styles.price}>{unitText(logPrice(s, t, now))} per log</Text>
+            <Trend t={priceTrend(s.dayKey, 'wood')} />
+          </View>
+        ))}
         <PriceRow icon="planks" name="Planks" text={`${unitText(unitPrice(s, 'planks', now))} per plank`} t={priceTrend(s.dayKey, 'planks')} />
         <PriceRow icon="buildings" name="Furniture" text={`${Math.round(itemPriceOf(s.dayKey, 100))}% of value`} t={priceTrend(s.dayKey, 'furniture')} />
       </Card>
@@ -53,6 +61,14 @@ export function MarketScreen() {
             </View>
           )}
         </View>
+        {/* update 4: what is in your yard, by tree type */}
+        {WOODS.filter((w) => (mix[w.id] ?? 0) >= 1).map((w) => (
+          <View key={w.id} style={styles.typeRow}>
+            <LogIcon type={w.id} size={22} />
+            <Text style={[styles.name, { flex: 1 }]}>{WOOD[w.id].name}</Text>
+            <Text style={styles.sub}>{whole(mix[w.id] ?? 0)} × {unitText(logPrice(s, w.id, now))}</Text>
+          </View>
+        ))}
         <SellButton p="wood" compact />
       </Card>
 
@@ -194,6 +210,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: C.cream },
   today: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   news: { fontSize: 12, fontWeight: '900', color: C.bark, flexShrink: 1 },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   price: { fontSize: 16, fontWeight: '900', color: C.ink },
   auto: { flexDirection: 'row', alignItems: 'center', gap: 4 },
