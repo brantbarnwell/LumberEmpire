@@ -409,12 +409,12 @@ export const RARE_EXTRA_GOLD = 25; // Day 7 when you already own every rare cosm
 // Update 3: a new system every 1 to 3 hours of early play (minutes of active play). Each one adds a new decision.
 export type SystemId = 'land' | 'workshop' | 'market' | 'sawmill' | 'auctions' | 'manager';
 export const SYSTEMS: { id: SystemId; name: string; minutes: number; why: string }[] = [
-  { id: 'land', name: 'Land deals', minutes: 45, why: 'Haggle with sellers: offer low and risk a no, or pay up.' },
-  { id: 'workshop', name: 'Workshop', minutes: 45, why: 'Turn wood into furniture, or sell it raw?' },
-  { id: 'market', name: 'Market and Yard Seller', minutes: 120, why: 'Planks or wood, bulk orders, and automatic selling.' },
+  { id: 'land', name: 'Land deals', minutes: 5, why: 'Make an offer and spin: offer low and risk a no, or pay up.' },
+  { id: 'workshop', name: 'Workshop', minutes: 10, why: 'Turn wood into furniture, or sell it raw?' },
+  { id: 'market', name: 'Market and Yard Seller', minutes: 15, why: 'Planks or wood, bulk orders, and automatic selling.' },
   { id: 'sawmill', name: 'Sawmill', minutes: 210, why: 'Cut planks at scale: wood now or planks later?' },
   { id: 'auctions', name: 'Land auctions', minutes: 300, why: 'Bid against rivals. Lose and you pay 5%.' },
-  { id: 'manager', name: 'Manager', minutes: 420, why: 'Pay a wage to sell for you when the yard fills.' },
+  { id: 'manager', name: 'Manager', minutes: 420, why: 'Pay a wage to sell 80% of your wood every 5 seconds.' },
 ];
 
 // Push notifications

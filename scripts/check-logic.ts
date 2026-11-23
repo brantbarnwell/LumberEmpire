@@ -307,7 +307,7 @@ ok(dz.gold === 50 && dz.cosmetics.owned.includes('tree-cherry'), 'Day 7: 50 Gold
 const qz = ensureQuests(newGame(MON), MON);
 ok([...qz.daily.quests.map((x) => x.id)].sort().join() === 'chop,offline,upgrade' && qz.daily.quests.find((x) => x.id === 'chop')!.target === 500, 'daily quests: chop 500, upgrade 3 machines, collect 2 offline payouts');
 const lock = newGame0(MON);
-ok(!L24.systemUnlocked(lock, 'land') && L24.systemUnlocked({ ...lock, playSec: 45 * 60 }, 'land') && !L24.systemUnlocked({ ...lock, playSec: 45 * 60 }, 'market'), 'new systems unlock with play time');
+ok(!L24.systemUnlocked(lock, 'land') && L24.systemUnlocked({ ...lock, playSec: 5 * 60 }, 'land') && !L24.systemUnlocked({ ...lock, playSec: 5 * 60 }, 'workshop') && L24.systemUnlocked({ ...lock, playSec: 10 * 60 }, 'workshop') && !L24.systemUnlocked({ ...lock, playSec: 10 * 60 }, 'market') && L24.systemUnlocked({ ...lock, playSec: 15 * 60 }, 'market'), 'Land opens at 5 min, Buildings at 10, Market at 15');
 ok(L24.hireYardSeller({ ...lock, money: 5000 }) === null, 'Yard Seller waits for the Market unlock');
 const sat = new Date(2026, 10, 28, 12).getTime();
 const fri = new Date(2026, 10, 27, 12).getTime();
