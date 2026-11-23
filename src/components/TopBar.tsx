@@ -35,16 +35,18 @@ function Counter({ id, icon, value, color = '#fff', warn, children }: { id: PopT
   }), []);
   const measure = () => ref.current?.measureInWindow?.((x: number, y: number, w: number, h: number) => { targets[id] = { x: x + 22, y: y + h / 2 }; });
   return (
-    <Animated.View
-      ref={ref as any}
-      onLayout={measure}
-      style={[styles.pill, warn && styles.warn, { transform: [{ scale: sc }], backgroundColor: flash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0.32)', 'rgba(79,170,79,0.95)'] }) as any }]}
-    >
-      <Icon name={icon} size={26} />
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.num, { color }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-        {children}
-      </View>
+    // scale runs on the native driver, the green flash on JS: they must be on two different views
+    // (mixing them on one view froze the iPhone app on every purchase)
+    <Animated.View ref={ref as any} onLayout={measure} style={{ flex: 1, transform: [{ scale: sc }] }}>
+      <Animated.View
+        style={[styles.pill, warn && styles.warn, { backgroundColor: flash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0.32)', 'rgba(79,170,79,0.95)'] }) as any }]}
+      >
+        <Icon name={icon} size={26} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.num, { color }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+          {children}
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }
