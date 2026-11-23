@@ -15,7 +15,7 @@ import {
   questProgress, goldRepair,
 } from '../src/game/meta';
 import { outOfQuietHours, planNotification } from '../src/services/notify-plan';
-import { HELPERS, LAND, PRESTIGE_AT, PRODUCTS, WORKSHOPS } from '../src/game/data';
+import { AXES, HELPERS, LAND, PRESTIGE_AT, PRODUCTS, WORKSHOPS } from '../src/game/data';
 
 const ok = (c: boolean, m: string) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
 const MON = new Date(2026, 10, 23, 12).getTime(); // Monday noon, no Timber Rush
@@ -155,11 +155,11 @@ let days14 = Array.from({ length: 14 }, (_, i) => demandOf(`2026-12-${i + 1}`, '
 ok(Math.max(...days14) - Math.min(...days14) > 0.2, 'demand really changes day to day');
 let pl = tick({ ...newGame(MON), wood: 100, cutting: true, selling: false, plankSelling: false }, 10, MON);
 ok(Math.abs(pl.planks - 20) < 1e-9 && Math.abs(pl.wood - 60) < 1e-9 && storageUsed(pl) === 100, 'cutting: 2 wood -> 1 plank, 2 a second, planks take 2 yard spaces');
-let spl = { ...newGame(MON), yardSeller: true, planks: 5000, plankSelling: true, tools: { splitter: { durability: 100, chopWear: 0, minuteWear: 0 } } };
-ok(tick(spl, 60, MON).money > tick({ ...spl, tools: {} }, 60, MON).money * 1.9, 'Log Splitter doubles plank Money');
+let spl = { ...newGame(MON), planks: 5000, tools: { splitter: { durability: 100, chopWear: 0, minuteWear: 0 } } } as GameState;
+ok(L24.sellAll(spl, 'planks', MON).earned > L24.sellAll({ ...spl, tools: {} }, 'planks', MON).earned * 1.9, 'Log Splitter doubles plank Money');
 let ord = ensureOrders({ ...newGame(MON), wood: 0 }, MON);
 const o = ord.market.orders[0];
-ok(ord.market.orders.length === 2 && acceptOrder(ord, o.id, MON) === null, '2 bulk orders a day, need the stock to deliver');
+ok(ord.market.orders.filter((x) => x.status === 'open').length === 1 && acceptOrder(ord, o.id, MON) === null, 'one bulk order at a time, need the stock to deliver');
 let del = acceptOrder({ ...ord, wood: 1e6, planks: 1e6 }, o.id, MON)!;
 ok(del.money > 0 && del.market.orders[0].status === 'done' && del.market.log.length === 1 && del.market.days.length === 1, 'bulk order pays, logs and shows in the 7-day graph');
 const co = counterOrder(ord, o.id)!;
@@ -219,18 +219,18 @@ ok(mg.money === 5_000 && mg.manager.hired && mg.manager.on && hireManager({ ...m
 ok(setManagerOn(mg, false)!.manager.on === false, 'manager has an on/off switch');
 const base: GameState = { ...mg, money: 1e6, selling: false };
 let full = { ...base, wood: 9_500 };
-ok(managerActive(full) && !managerActive({ ...full, wood: 7_000 }), 'manager starts at 80% full');
-let after = full;
-for (let i = 1; i <= 720; i++) after = tick(after, 5, MON + i * 5000);
-ok(after.wood <= 8_000 + 1 && after.wood >= 7_900 && after.manager.soldToday > 0, 'manager sells back down to 80% at the market price');
-ok(tick({ ...base, wood: 5_000 }, 60, MON).manager.soldToday === 0, 'manager does not sell below 80%');
+ok(managerActive(full) && managerActive({ ...full, wood: 1_000 }), 'manager sells whenever he is on and paid (bug fix batch 1)');
+let after = tick(full, 5, MON + 5000);
+ok(Math.abs(after.wood - 9_500 * 0.2) < 2 && after.manager.soldToday > 0, 'manager: every 5 seconds sells 80% of the wood, keeps 20%');
+ok(tick({ ...base, wood: 5_000 }, 4, MON).manager.soldToday === 0, 'manager: nothing sold before 5 seconds pass');
+for (let i = 2; i <= 720; i++) after = tick(after, 5, MON + i * 5000);
 ok(Math.abs(after.money - (1e6 + after.manager.moneyToday - 1000)) < 1, 'manager wage is $1,000 per hour, paid automatically');
 let broke2 = tick({ ...full, money: 0 }, 60, MON);
 ok((broke2.manager.owed ?? 0) > 0 && !managerActive(broke2) && broke2.manager.soldToday === 0, "can't pay him: he pauses selling and the amount owed adds up");
 ok(managerCollect(broke2, { away: 3600, earned: 500, gross: 500, sold: 1, produced: 1 }).state.money === broke2.money, "can't pay him: he does not collect either");
 let pk = { ...base, wood: 0, planks: 4_900, plankSelling: false };
-for (let i = 1; i <= 720; i++) pk = tick(pk, 5, MON + i * 5000);
-ok((pk.manager.planksToday ?? 0) > 0 && pk.planks * 2 <= 8_001, 'manager sells planks too, back down to 80% of the yard');
+for (let i = 1; i <= 20; i++) pk = tick(pk, 5, MON + i * 5000);
+ok(pk.planks === 4_900, 'manager never sells planks (bug fix batch 1)');
 let fu: GameState = { ...base, wood: 9_500, workshop: { ...base.workshop, level: 0, inventory: { stool: 3 } } };
 fu = tick(fu, 60, MON);
 ok(fu.workshop.inventory.stool === 3 && fu.market.orders.every((o) => o.status !== 'done'), 'manager does not sell furniture or take bulk orders');
@@ -486,4 +486,66 @@ import * as PD from '../src/game/data';
   const old = { ...newGame(MON), daily: { dayKey: L24.dayKeyOf(MON), quests: [{ id: 'sell', target: 10, baseline: 0, claimed: false }] } } as GameState;
   const fixed = ensureQuests(old, MON);
   ok(fixed.daily.quests.length === 3 && fixed.daily.quests.every((q) => q.id !== 'sell'), 'old quests from an older version are replaced, no crash');
+}
+
+// ---- Bug fix batch 1 ----
+{
+  const R = (s: GameState) => s;
+  // 1. axe breaks at 0%: drop one tier, buy it again
+  let ax = { ...newGame(MON), axeIndex: 3, axeDurability: 1, chopsSinceWear: AXES[3].wearEvery - 1 } as GameState;
+  const br = chop(ax, MON, () => 0.5);
+  ok(br.result.axeBroke && br.state.axeIndex === 2 && br.state.axeDurability === 100, `Steel Axe breaks at 0%: back to the ${AXES[2].name} at 100%`);
+  const rebuy = L24.buyAxe({ ...br.state, money: 5000 }, 3)!;
+  ok(!!rebuy && rebuy.money === 5000 - 1200 && rebuy.axeIndex === 3, 'buy the Steel Axe again for $1,200');
+  const rusty = chop({ ...newGame(MON), axeIndex: 0, axeDurability: 1, chopsSinceWear: AXES[0].wearEvery - 1 } as GameState, MON, () => 0.5).state;
+  ok(rusty.axeIndex === 0 && rusty.axeDurability === 0, 'the Rusty Axe never drops below itself: stays at 0% until repaired');
+  // Golden Chainsaw
+  const gcG = { ...newGame(MON), tools: { goldchainsaw: { durability: 1, chopWear: 7, minuteWear: 0, keep: true } } } as GameState;
+  const gcB = chop(gcG, MON, () => 0.5).state;
+  ok(!gcB.tools.goldchainsaw && gcB.owned.goldChainsawBroken === true, 'Gold-bought Golden Chainsaw breaks at 0% and stays yours');
+  const gcR = L24.reequipGoldChainsaw(gcB)!;
+  ok(!!gcR && gcR.tools.goldchainsaw.durability === 100 && gcR.tools.goldchainsaw.keep === true && R(gcR).owned.goldChainsawBroken === false, 'Gold-bought: re-equip it for free at 100%');
+  const gcM = chop({ ...gcG, tools: { goldchainsaw: { durability: 1, chopWear: 7, minuteWear: 0 } } } as GameState, MON, () => 0.5).state;
+  ok(!gcM.tools.goldchainsaw && !gcM.owned.goldChainsawBroken && L24.reequipGoldChainsaw(gcM) === null, 'Money-bought: gone, buy it again for $500,000');
+  // 2. wood bar
+  const half = { ...newGame(MON), wood: 5000 } as GameState;
+  ok(storageUsed(half) / storageCap(half) === 0.5 && storageCap(half) === 10_000, 'yard bar: 5,000 / 10,000 wood = 50%');
+  ok(storageUsed({ ...half, wood: 6000, planks: 2000 } as GameState) === 10_000, 'planks take 2 spaces each in the yard bar');
+  // 3 + 5. spin wheel and Small Clearing retry
+  ok(Math.abs(L24.offerChance(1, 3000) - 0.01) < 0.001 && Math.abs(L24.offerChance(3000, 3000) - 0.8) < 1e-9 && Math.abs(L24.offerChance(6000, 3000) - 0.95) < 1e-9, 'wheel chance: $1 = 1%, asking = 80%, 2x asking = 95%');
+  ok(L24.offerChance(1000, 3000) > 0.04 && L24.offerChance(1000, 3000) < 0.06, `wheel chance: $1,000 on a $3,000 land is about 5% (${(L24.offerChance(1000, 3000) * 100).toFixed(1)}%)`);
+  let sp = L24.ensureListings({ ...newGame(MON), money: 100_000 } as GameState, MON);
+  ok(L24.offerMax(sp, 'clearing') === 6000 && L24.offerMax({ ...sp, money: 2500 }, 'clearing') === 2500, 'slider max: 2x asking, or your Money if lower');
+  const lost = L24.spinOffer(sp, 'clearing', 3000, MON, () => 0.99);
+  ok(!lost.won && lost.state.listings.clearing.status === 'gone' && lost.state.landGoneUntil.clearing === MON + 3600_000 && lost.state.money === 100_000, 'lose the spin: Small Clearing is gone for 1 hour, no money lost');
+  const back = L24.ensureListings(lost.state, MON + 3600_000 + 1000);
+  ok(back.listings.clearing?.status === 'open', 'Small Clearing is back after 1 hour');
+  const lostPine = L24.spinOffer(sp, 'pine', 15000, MON, () => 0.99).state;
+  ok(lostPine.landGoneUntil.pine === MON + 24 * 3600_000, 'other lands keep their 24-hour wait');
+  const won = L24.spinOffer(sp, 'clearing', 1, MON, () => 0.001);
+  ok(won.won && !!won.state.lands.clearing && won.state.money === 100_000 - 1, 'green on a $1 offer: the land is yours for $1 (1% chance)');
+  let seed = 11; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  let greens = 0;
+  for (let i = 0; i < 20; i++) if (L24.spinOffer(sp, 'clearing', 3000, MON, rnd).won) greens++;
+  console.log(`INFO 20 spins at asking: ${greens} green`);
+  // 6. bulk orders
+  let bo = L24.ensureOrders({ ...newGame(MON) } as GameState, MON);
+  const o1 = bo.market.orders.find((x) => x.status === 'open')!;
+  ok(!!o1 && bo.market.nextOrderAt === MON + 5 * 60_000, 'a bulk order now, the next one in 5 minutes');
+  ok(L24.ensureOrders(bo, MON + 2 * 60_000).market.orders.filter((x) => x.status === 'open').length === 1, 'only 1 order at a time');
+  const bo2 = L24.ensureOrders(bo, MON + 5 * 60_000 + 1000);
+  const open2 = bo2.market.orders.filter((x) => x.status === 'open');
+  ok(open2.length === 1 && open2[0].id !== o1.id, 'ignored for 5 minutes: it expires and a new one comes in');
+  // 7. plank speed
+  const ps0 = { ...newGame(MON), money: 1e6 } as GameState;
+  ok(L24.secPerPlank(ps0) === 0.5 && L24.plankCutRate({ ...ps0, cutting: true }) === 2, 'hand-cut planks start at 0.5 s a plank (2 a second, unchanged)');
+  const ps1 = L24.buyPlankSpeed(ps0)!;
+  ok(ps1.money === 1e6 - 2000 && L24.secPerPlank(ps1) === 0.35, 'plank speed 1 upgrade: $2,000 -> 0.35 s a plank');
+  const ps3 = L24.buyPlankSpeed(L24.buyPlankSpeed(ps1)!)!;
+  ok(ps3.money === 1e6 - 28_000 && L24.secPerPlank(ps3) === 0.15, 'plank speed 3 upgrades: $28,000 total -> 0.15 s a plank');
+  // 9. auto-sell
+  const as0 = { ...newGame(MON), wood: 1000, woodMix: { pine: 1000 }, yardSeller: true, selling: true } as GameState;
+  const as1 = tick(as0, 5, MON);
+  ok(Math.abs(as1.wood - 200) < 1 && as1.money > 0, `Yard Seller: after 5 seconds sold 800, kept 200 (${Math.round(1000 - as1.wood)} sold, ${Math.round(as1.wood)} kept)`);
+  ok(tick({ ...as0, planks: 500 } as GameState, 5, MON).planks === 500, 'Yard Seller never sells planks');
 }

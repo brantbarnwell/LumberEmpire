@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { update, useGame } from '../game/store';
 import {
   buyAxe, buyStorage, buyTool, buyToolWithGold, durabilityPower, equipSkin, repair, repairAll, repairAllCost, repairCost, repairTool, storageCap,
-  storageUpgradeCost, toolPower, toolRepairCost,
+  storageUpgradeCost, toolPower, toolRepairCost, reequipGoldChainsaw,
 } from '../game/logic';
 import { AXES, AXE_SKINS, CRIT_CHANCE, CRIT_MULT, STORAGE_LEVELS, TOOLS } from '../game/data';
 import { money, small, whole } from '../game/format';
@@ -100,10 +100,10 @@ function ToolsList() {
             </View>
             <Text style={[styles.sub, { marginTop: 4 }, dur < 25 && { color: C.red }]}>
               {dur === 0
-                ? 'Broken: chops like a rusty axe until repaired.'
+                ? 'At 0%: the starter axe never breaks, but repair it for full power.'
                 : durabilityPower(dur) < 1
                   ? `Worn: working at ${durabilityPower(dur) * 100}% power.`
-                  : `Loses 1% every ${cur.wearEvery} chops.`}
+                  : `Loses 1% every ${cur.wearEvery} chops.${s.axeIndex > 0 ? ` At 0% it breaks: you drop to the ${AXES[s.axeIndex - 1].name} and buy it again. Repair first!` : ''}`}
             </Text>
           </View>
         </View>
@@ -179,8 +179,10 @@ function ToolsList() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{t.name}{owned?.durability === 0 ? '  🔧' : ''}</Text>
                 <Text style={styles.sub}>{t.effect}</Text>
-                {t.goldCost && !owned ? (
-                  <Text style={styles.keepNote}>Gold purchase: kept forever, even after prestige. Money purchase: lost on prestige.</Text>
+                {t.goldCost && !owned && s.owned.goldChainsawBroken ? (
+                  <Text style={styles.keepNote}>It broke at 0%. You bought it with Gold, so re-equip it for free at 100%.</Text>
+                ) : t.goldCost && !owned ? (
+                  <Text style={styles.keepNote}>Gold purchase: kept forever, even after prestige, and free to re-equip if it breaks. Money purchase: lost on prestige or when it breaks.</Text>
                 ) : null}
                 {owned && t.goldCost ? (
                   <Text style={[styles.keepNote, { color: owned.keep ? C.leaf : C.bark }]}>{owned.keep ? 'Bought with Gold: kept forever, even after prestige.' : 'Bought with Money: lost when you prestige.'}</Text>
@@ -194,7 +196,9 @@ function ToolsList() {
                   </View>
                 )}
               </View>
-              {!owned && (
+              {!owned && t.id === 'goldchainsaw' && s.owned.goldChainsawBroken ? (
+                <Button small variant="gold" label="Re-equip free" onPress={() => update((st) => reequipGoldChainsaw(st)) && haptic.success()} />
+              ) : !owned && (
                 <View style={{ gap: 4 }}>
                   <Button small variant={s.money >= t.cost ? 'green' : 'ghost'} label={money(t.cost)} disabled={s.money < t.cost}
                     onPress={() => update((st) => buyTool(st, t.id)) && haptic.success()} />

@@ -256,7 +256,15 @@ export const FRENZY_SEC = 30;
 export const FRENZY_MULT = 7; // 7x wood/sec from helpers and land while it lasts
 export const YARD_SELLER_COST = 1_500; // cash helper that sells wood and planks for you at your price
 export const LOST_BID_PENALTY = 0.05; // update 2: lose 5% of your Money only when you bid in an auction and a rival wins
-export const SELLER_WALKAWAY_HOURS = 24; // spec
+export const SELLER_WALKAWAY_HOURS = 24; // spec: wait after you lose a land (other lands)
+export const CLEARING_RETRY_HOURS = 1; // bug fix batch 1: Small Clearing only, try again in 1 hour
+// Bug fix batch 1: make-an-offer is a spin wheel. Chance of green (seller accepts) by offer / asking price.
+// $1 = 1%, asking = 80%, 2x asking = 95%. Never 0%, never 100%.
+export const OFFER_CHANCE_MIN = 0.01;
+export const OFFER_CHANCE_AT_ASKING = 0.8;
+export const OFFER_CHANCE_MAX = 0.95;
+export const OFFER_CURVE = 2.7; // below asking: 1% + 79% x (offer/asking)^2.7, so 1/3 of asking is about 5%
+export const OFFER_MAX_X = 2; // slider goes up to 2x asking (or your Money)
 export const MAX_REJECTIONS = 3; // spec
 
 export interface WorkshopDef { id: string; name: string; cost: number; slots: number; speed: number; buildMinutes: number; icon: string }
@@ -329,13 +337,13 @@ export const GOLD_REPAIR_ALL = 10; // spec: repairs the axe and every tool
 // Update 3: escalating 7-day calendar. Day 7 is the big anchor: 50 Gold plus a rare cosmetic.
 // money = minutes of income, boostMin = minutes of 2x wood.
 export const DAILY_REWARDS: { money?: number; gold?: number; boostMin?: number; big?: boolean; cosmetic?: boolean }[] = [
-  { money: 10 },
+  { money: 2 }, // bug fix batch 1: money days lowered (were 10 / 30 / 60 / 120 minutes)
   { gold: 5 },
-  { money: 30 },
+  { money: 5 },
   { boostMin: 30, gold: 5 },
-  { money: 60 },
+  { money: 10 },
   { gold: 10, boostMin: 60 },
-  { gold: 50, money: 120, cosmetic: true, big: true },
+  { gold: 50, money: 20, cosmetic: true, big: true },
 ];
 
 export type Metric = 'chops' | 'felled' | 'woodSold' | 'moneyEarned' | 'helpersHired' | 'itemsCrafted' | 'landOffers' | 'upgrades' | 'offlineCollects';
@@ -352,10 +360,10 @@ export const WEEKLY_QUESTS: QuestDef[] = [
   { id: 'wfell', metric: 'felled', label: (n) => `Cut down ${n} trees this week`, base: 150 },
 ];
 export const DAILY_QUEST_GOLD = 5; // update 3
-export const DAILY_QUEST_MONEY_MIN = 15; // minutes of income. BALANCE
+export const DAILY_QUEST_MONEY_MIN = 2; // minutes of income (bug fix batch 1: was 15, gave too much cash early)
 export const WEEKLY_QUEST_GOLD = 25; // update 3: plus a bigger reward (2 hours of 2x wood and 1 hour of income)
 export const WEEKLY_QUEST_BOOST_HOURS = 2;
-export const WEEKLY_QUEST_MONEY_MIN = 60;
+export const WEEKLY_QUEST_MONEY_MIN = 10; // bug fix batch 1: was 60
 
 // Timber Rush (update 3): the 48-hour weekend event, 1.5x output on one wood type plus a limited order board
 export const RUSH_DAYS = [6, 0]; // Sat, Sun
@@ -477,7 +485,16 @@ export const STORAGE_LEVELS = [
 export type Product = 'wood' | 'planks' | 'furniture';
 export const PLANK_BASE_PRICE = 0.25; // $ per plank at normal demand. BALANCE
 export const PLANK_WOOD = 2; // wood per plank (a plank also takes 2 spaces in storage). BALANCE
-export const PLANK_CUT_PER_SEC = 2; // planks you cut per second while cutting is on. BALANCE
+export const PLANK_CUT_PER_SEC = 2; // hand-cut start: 2 planks a second (0.5 s a plank), approved rate
+// Bug fix batch 1: plank speed upgrades for cutting planks by hand, faster from the approved 0.5 s a plank.
+// The Sawmill levels and plank prices are separate and unchanged.
+export const PLANK_SPEED_LEVELS: { secPerPlank: number; cost: number }[] = [
+  { secPerPlank: 0.5, cost: 0 },
+  { secPerPlank: 0.35, cost: 2_000 },
+  { secPerPlank: 0.25, cost: 6_000 },
+  { secPerPlank: 0.15, cost: 20_000 },
+  { secPerPlank: 0.1, cost: 60_000 },
+];
 
 // News events, one per day at most (seeded by date). Multiplies demand.
 export const MARKET_EVENTS = [
@@ -489,14 +506,15 @@ export const MARKET_EVENTS = [
 ] as const;
 export const MARKET_EVENT_CHANCE = 0.35; // chance a day has a news event. BALANCE
 
-// Bulk orders: 2 a day, a buyer wants a big batch at a fixed price. You can accept, reject or ask for 10% more once.
+// Bulk orders (bug fix batch 1): a new one about every 5 minutes, 1 at a time. Unanswered, it expires after 5 minutes.
+// You can accept, say no, or ask for 10% more once.
 export const BULK_BUYERS = ['BuildRight Homes', 'Cabin Co.', 'Fireside Fuel', 'Maple Street Builders', 'Northwoods Decking', 'Big Sky Framing'];
-export const BULK_ORDERS_PER_DAY = 2;
+export const BULK_ORDER_EVERY_MIN = 5;
+export const BULK_ORDER_LASTS_MIN = 5;
 export const BULK_COUNTER_BONUS = 0.1;
 export const BULK_COUNTER_CHANCE = 0.5;
 
 // ======================= PART 6: AI rivals and land auctions (section 8) =======================
-// Rivals are bots, never real people.
 export type RivalStyle = 'fast' | 'sniper' | 'steady' | 'cautious';
 export const RIVALS: { name: string; style: RivalStyle; budget: number; blurb: string }[] = [
   { name: 'Timber Titans Inc', style: 'fast', budget: 1.25, blurb: 'Rich and bids fast' },
@@ -518,7 +536,11 @@ export const GOLDEN_CHAINSAW_ID = 'goldchainsaw';
 
 // ======================= PART 7: manager helper =======================
 export const MANAGER_COST = 20_000; // Money, one manager for the whole empire
-export const MANAGER_SELL_AT = 0.8; // starts selling when the yard is 80% full, sells back down to 80%
+export const MANAGER_SELL_AT = 0.8; // old rule (unused): replaced by AUTO_SELL_SHARE
+// Bug fix batch 1: the Yard Seller and the Manager both sell 80% of your wood every 5 seconds, at the market price.
+// 20% is always kept for planks and crafting. Wood only, never planks.
+export const AUTO_SELL_EVERY_SEC = 5;
+export const AUTO_SELL_SHARE = 0.8;
 export const MANAGER_WAGE = 1_000; // Part 8: $ per hour while he is switched on. Unpaid = he pauses selling and collecting.
 
 // ======================= PART 8: Sawmill (building from section 10, comes with the Empire Pack) =======================

@@ -1,9 +1,9 @@
 // Update 2: no price slider. Everything sells at the market price with one tap.
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { mixOf, logPrice, ownedWoodTypes, acceptOrder, counterOrder, itemPrice, rejectOrder, rushInfo, sellItems, unitPrice } from '../game/logic';
+import { mixOf, logPrice, ownedWoodTypes, acceptOrder, counterOrder, itemPrice, rejectOrder, rushInfo, sellItems, unitPrice, secPerPlank } from '../game/logic';
 import { itemPriceOf, marketEvent, marketPriceOf, priceTrend, weatherOf } from '../game/market';
-import { WOOD, WOODS, ITEMS, PLANK_CUT_PER_SEC, PLANK_WOOD } from '../game/data';
+import { WOOD, WOODS, ITEMS, PLANK_WOOD } from '../game/data';
 import { duration, money, whole } from '../game/format';
 import { haptic } from '../services/haptics';
 import { feel } from '../services/feel';
@@ -75,16 +75,10 @@ export function MarketScreen() {
       <Card style={{ gap: 8 }}>
         <View style={styles.headRow}>
           <Text style={styles.h}>Planks · {whole(s.planks)}</Text>
-          {s.yardSeller && (
-            <View style={styles.auto}>
-              <Icon name="seller" size={20} />
-              <Switch value={s.plankSelling} trackColor={{ true: C.leafLight, false: '#bbb' }} onValueChange={(v) => { update((x) => ({ ...x, plankSelling: v })); }} accessibilityLabel="Yard Seller sells planks" />
-            </View>
-          )}
         </View>
         <View style={styles.cutRow}>
           <Icon name="planks" size={24} />
-          <Text style={[styles.name, { flex: 1 }]}>Cut planks ({PLANK_WOOD} wood → 1, {PLANK_CUT_PER_SEC}/s)</Text>
+          <Text style={[styles.name, { flex: 1 }]}>Cut planks ({PLANK_WOOD} wood → 1, {secPerPlank(s)} s a plank)</Text>
           <Switch value={s.cutting} trackColor={{ true: C.gold, false: '#bbb' }} onValueChange={(v) => { update((x) => ({ ...x, cutting: v })); }} accessibilityLabel="Cut planks" />
         </View>
         <SellButton p="planks" compact />
@@ -134,12 +128,15 @@ function PriceRow({ icon, name, text, t }: { icon: IconName; name: string; text:
 function Orders({ rush }: { rush?: boolean }) {
   const s = useGame();
   const open = s.market.orders.filter((o) => o.id.startsWith('rush-') === !!rush);
-  if (!open.length) return null;
+  const now = Date.now();
+  const nextIn = Math.max(0, (s.market.nextOrderAt ?? now) - now);
+  if (!open.length && rush) return null;
   const r = rushInfo(s, Date.now());
   return (
     <Card style={rush ? { borderColor: '#d9661f', borderWidth: 2.5 } : undefined}>
       <Text style={styles.h}>{rush ? `Timber Rush order board · ${duration(r.endsAt - Date.now())} left` : 'Bulk orders'}</Text>
-      <Text style={styles.sub}>{rush ? 'Weekend only: better prices, a different mix every week.' : 'Buyers want a big batch at a fixed price, today only. Accept, say no, or ask for 10% more (they may walk).'}</Text>
+      <Text style={styles.sub}>{rush ? 'Weekend only: better prices, a different mix every week.' : 'A buyer wants a big batch at a fixed price. Accept, say no, or ask for 10% more once (they may walk). A new order comes about every 5 minutes.'}</Text>
+      {!rush && <Text style={styles.small}>{open.some((o) => o.status === 'open') ? 'One order at a time.' : 'No order right now.'} Next order in {duration(nextIn)}.</Text>}
       {open.map((o) => {
         const have = o.product === 'wood' ? s.wood : s.planks;
         const fair = o.price / marketPriceOf(s.dayKey, o.product);
@@ -167,6 +164,7 @@ function Orders({ rush }: { rush?: boolean }) {
                 <Button small style={{ flex: 1 }} variant="ghost" label="No" onPress={() => update((x) => rejectOrder(x, o.id))} />
               </View>
             )}
+            {o.status === 'open' && o.expiresAt && <Text style={styles.small}>Expires in {duration(Math.max(0, o.expiresAt - now))} if you don't answer.</Text>}
             {o.status === 'open' && have < o.amount && <Text style={styles.small}>You have {whole(have)}. Keep chopping{o.product === 'planks' ? ' and cutting' : ''}.</Text>}
           </View>
         );

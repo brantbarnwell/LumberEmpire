@@ -109,6 +109,10 @@ Built:
   - The pill pays +5 Gold a video, has a 7 min cooldown and is capped at 5 a day.
   - Remove Ads: 1 instant ad reward a day in total.
   - Store: Starter Pack $2.99, the 6 Gold packs from section 3, Remove Ads + Gold, 2x Forever, 24 h offline. Old packs are retired. VIP is hidden for now.
+- Bug fix batch 1 (GAME_SPEC.md, "Bug fix batch 1"):
+  - Axes break and drop a tier; the Golden Chainsaw has its own break rule.
+  - True yard bar, Small Clearing back in 1 hour, make-an-offer spin wheel, a bulk order every 5 minutes.
+  - Plank speed upgrades, smaller goal cash, auto-sell 80% every 5 seconds.
     - New systems unlocking on a schedule.
     - Local notifications.
     - A weekly leaderboard against the AI rivals.

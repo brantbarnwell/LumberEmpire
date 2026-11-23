@@ -6,7 +6,7 @@ import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '../game/store';
-import { chopType, frenzyOn, logPrice, passiveWoodPerSec, storageCap } from '../game/logic';
+import { chopType, frenzyOn, logPrice, passiveWoodPerSec, storageCap, storageUsed } from '../game/logic';
 import { unitText } from './SellButton';
 import { money, small, whole } from '../game/format';
 import { recentWoodPerSec } from '../game/rate';
@@ -62,7 +62,10 @@ export function TopBar() {
   const now = Date.now();
   const wps = Math.max(passiveWoodPerSec(s, now), recentWoodPerSec());
   const cap = storageCap(s);
-  const full = s.wood >= cap;
+  // bug fix batch 1: the bar shows how full the yard really is (planks take 2 spaces each), red when full
+  const used = storageUsed(s);
+  const full = used >= cap - 0.5;
+  const fill = Math.min(1, used / cap);
   const frenzy = frenzyOn(s, now);
   const ct = chopType(s);
 
@@ -82,7 +85,8 @@ export function TopBar() {
       </View>
       <View style={[styles.row, { marginTop: 6 }]}>
         <Counter id="wood" icon="wood" value={whole(s.wood)} color={full ? '#ff8a7a' : '#fff'} warn={full}>
-          <View style={styles.cap}><View style={{ width: `${Math.min(100, (s.wood / cap) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: full ? C.red : s.wood / cap > 0.8 ? C.gold : C.leafLight }} /></View>
+          <View style={styles.cap}><View style={{ width: `${fill * 100}%`, height: '100%', borderRadius: 2, backgroundColor: full ? C.red : fill > 0.8 ? C.gold : C.leafLight }} /></View>
+          <Text style={[styles.capText, full && { color: '#ff8a7a' }]} numberOfLines={1}>{whole(used)} / {whole(cap)} wood{full ? ' (full)' : ''}</Text>
           {/* update 4: the tree you chop and what one of its logs sells for */}
           <View style={styles.typeRow}>
             <LogIcon type={ct} size={14} />
@@ -145,6 +149,7 @@ const styles = StyleSheet.create({
   warn: { borderColor: C.red },
   num: { fontSize: 22, fontWeight: '900', fontVariant: ['tabular-nums'] },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  capText: { color: '#cfe3c8', fontSize: 10, fontWeight: '800', marginTop: 1 },
   typeText: { color: '#e9d9b6', fontSize: 10, fontWeight: '900', flexShrink: 1 },
   cap: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden', marginTop: 1 },
 });

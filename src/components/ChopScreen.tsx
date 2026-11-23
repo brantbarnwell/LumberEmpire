@@ -110,7 +110,13 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
           : { kind: 'GOLDEN TREE!', title: `+${result.golden.gold} Gold`, sub: `+${money(result.golden.money)}`, icon: 'gold' },
       );
     }
-    if (result.axeBroke) showToast({ kind: 'AXE BROKE', title: `Repair your ${axe.name}`, icon: 'tools' });
+    if (result.axeBroke) {
+      // bug fix batch 1: a broken axe drops you to the one below; buy it again at full price (the Rusty Axe just stays at 0%)
+      const idx = AXES.indexOf(axe);
+      showToast(idx > 0
+        ? { kind: 'AXE BROKE', title: `${axe.name} broke`, sub: `Back to your ${AXES[idx - 1].name}. Buy the ${axe.name} again for ${money(axe.cost)}.`, icon: 'tools' }
+        : { kind: 'AXE BROKE', title: `Repair your ${axe.name}`, icon: 'tools' });
+    }
     else if (result.axeLow) showToast({ kind: 'AXE AT 25%', title: 'Repair it soon', icon: 'tools' });
     return result;
   };

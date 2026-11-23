@@ -616,3 +616,35 @@ Known issue, not fixed here (no other changes allowed in this update):
 - Starts from Thursday to Sunday get the Timber Rush weekend. With no ads at all, those runs are already 94–95% of the way to prestige at the 2.46-day session, so almost any extra help tips them under 2.5 days. That's why even 5 Gold videos a day drops Sat and Sun to 2.47.
 - The fix has to come from the base game, for example a slightly higher prestige target or a smaller Rush. More ad caps can't fix it.
 - The simulator's random seed alone can move a result by up to 0.6 days.
+
+## Bug fix batch 1 (Nov 22)
+
+Approved readings: the axe-break rule is for axes only (other tools keep section 7). The Golden Chainsaw is a tool, not an axe tier. The wheel replaces section 8 make-an-offer only. Bulk orders are 1 at a time, about every 5 minutes. Auto-sell is wood only. Plank speed starts at the approved 2 planks a second.
+
+1. **Axe break:** at 0% an axe breaks.
+   - You drop to the axe below it at 100%, and buy the broken axe again at full price (Steel breaks → Iron, Steel again $1,200).
+   - Repairing before 0% works as before.
+   - The Rusty Axe has nothing below it, so it stays at 0% until repaired.
+   - **Golden Chainsaw** at 0% breaks. Bought with Gold: it stays yours, "Re-equip free" puts it back at 100%. Bought with Money: it's gone, buy it again for $500,000. Your axe isn't affected.
+2. **Wood bar:** shows the true yard fill, wood plus planks (each plank takes 2 spaces), divided by the yard size. It turns red at 100%. Text like "5,095 / 25,000 wood".
+3. **Small Clearing retry:** 1 hour after losing it (spin, rival or auction). Other lands keep 24 hours. Shown as "Try again in 59 minutes".
+4. **No "bots" / "not real people" wording** anywhere in the game.
+5. **Make-an-offer spin wheel:**
+   - A slider from $1 to 2x asking (or your Money), with quick buttons $1, Half, Asking, 2x.
+   - Chance of green: $1 = 1%. Below asking: 1% + 79% × (offer/asking)^2.7, so a third of asking is about 5%. Asking = 80%. 2x asking = 95%. Never 0% or 100%.
+   - Shown as "Offer $15,000, about 80% chance".
+   - Green: the land is yours at your offer. Red: the land is gone for the retry time. No money lost.
+   - Seller personalities, secret minimums and counteroffers are gone. Auctions are unchanged.
+6. **Bulk orders:** a new one about every 5 minutes, only 1 open at a time. Ignored, it expires after 5 minutes and the next one comes. Market shows "Next order in …" and "Expires in …". Accept / No / Ask +10% once as before. Timber Rush order board unchanged.
+7. **Plank speed (cut by hand):**
+   - Starts at 0.5 s a plank (2 a second, unchanged).
+   - Upgrades in Buildings: 0.35 s ($2,000), 0.25 s ($6,000), 0.15 s ($20,000), 0.1 s ($60,000).
+   - Reset on prestige like other Money upgrades. Sawmill levels and plank prices unchanged.
+8. **Goal rewards:**
+   - Daily quest Money 15 → 2 minutes of income. Weekly quest Money 60 → 10 minutes.
+   - Login Money days 10 / 30 / 60 / 120 → 2 / 5 / 10 / 20 minutes. Gold, boosts and cosmetics unchanged.
+9. **Auto-sell (Yard Seller and Manager, same rule):**
+   - Every 5 seconds, sell 80% of the wood you hold at the market price.
+   - 20% stays for planks and crafting, up to the yard size.
+   - Wood only, never planks.
+   - Replaces the Manager "80% of the yard" rule and his plank selling.

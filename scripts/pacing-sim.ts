@@ -4,10 +4,10 @@ import { grantProduct } from '../src/game/logic';
 // Plays the real game rules with a simple pretend player and prints how long things take.
 import {
   newGame, chop, tick, buyAxe, repair, repairCost, hireHelper, hireCost, levelHelper, levelCost, ensureListings,
-  makeOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
+  spinOffer, startBuild, computeOffline, collectOffline, buyLandUpgrade, landUpgradeCost, GameState,
   buyTool, repairAll, repairAllCost, buyStorage, storageCap, storageUpgradeCost, toolPower, bestPrice, sellAll, hireYardSeller, passiveValuePerSec, passiveWoodPerSec, woodMarketPrice, chopType, tapGoldenLog, goldenLogVisible,
 } from '../src/game/logic';
-import { canPrestige, prestigeGain } from '../src/game/meta';
+import { canPrestige, prestigeGain, ensureQuests, canClaimLogin, claimLogin, questProgress, claimQuest } from '../src/game/meta';
 import { startAuction, placeBid, minNextBid } from '../src/game/rivals';
 import { AXES, HELPERS, LAND, LAND_UPGRADES, WORKSHOPS, PRESTIGE_AT, PACING_TARGETS, TOOLS, WOOD } from '../src/game/data';
 
@@ -58,15 +58,11 @@ function buyLandAtAsking(s: GameState, id: string, now: number) {
     }
     return st.lands[id] ? st : ({ ...st, __lostAuction: true } as GameState);
   }
-  const offer = Math.max(def.asking, (L.rivalOffer?.amount ?? 0) * 1.05);
+  // bug fix batch 1: make-an-offer is a spin wheel. The bot offers the asking price (80% chance).
+  const offer = def.asking * Number(process.env.OFFER_X ?? 1);
   if (s.money < offer) return null;
-  const r = makeOffer(s, id, offer, now);
-  if (r.outcome.kind === 'accepted') return r.state;
-  const c = r.state.listings[id]?.counter;
-  if (r.outcome.kind === 'countered' && c && r.state.money >= c) {
-    return { ...r.state, money: r.state.money - c, lands: { ...r.state.lands, [id]: { upgrades: [], paid: c } } } as GameState;
-  }
-  return null;
+  const r = spinOffer(s, id, offer, now, rand);
+  return r.state; // lost = the land is gone for a while (Small Clearing 1 hour)
 }
 
 // ---------- 1. first hours, fixed buying order (same style as Part 1) ----------
@@ -79,7 +75,17 @@ const plan: Step[] = [
   { label: 'Backyard Shed (workshop)', key: 'workshop', buy: (s, now) => startBuild(s, now), cost: () => WORKSHOPS[0].cost },
 ];
 
+// QUESTS=1: a player who also claims the day-1 login reward and the daily quests as soon as they are done
+function claimGoals(s: GameState, now: number) {
+  s = ensureQuests(ensureListings(s, now), now);
+  const log = (what: string, n: GameState) => { if (process.env.QUESTLOG) console.log(`   ${((now - (globalThis as any).__t0) / 60000).toFixed(0)}m ${what}: +$${Math.round(n.money - s.money)}`); };
+  if (canClaimLogin(s, now)) { const n = claimLogin(s, now); if (n) { log('login day 1', n); s = n; } }
+  s.daily.quests.forEach((q, i) => { if (!q.claimed && questProgress(s, q) >= q.target) { const n = claimQuest(s, i, now); if (n) { log(`quest ${q.id}`, n); s = n; } } });
+  return s;
+}
+
 function early(tps: number, t0 = T0) {
+  (globalThis as any).__t0 = t0;
   (globalThis as any).__planMode = true;
   lastSell = 0;
   let s = newGame(t0);
@@ -92,10 +98,12 @@ function early(tps: number, t0 = T0) {
     carry += tps * 0.25;
     while (carry >= 1) { carry--; s = chop(s, now, rand).state; }
     s = upkeep(tick(s, 0.25, now), now);
+    if (process.env.QUESTS) s = claimGoals(s, now);
     const st = plan[i];
     if (s.money >= st.cost(s)) {
       const n = st.buy(s, now);
-      if (n) {
+      if (n && st.key === 'land' && !n.lands.clearing) s = n; // lost the spin: wait for the land to come back
+      else if (n) {
         s = n;
         let m = t / 60;
         if (st.key === 'workshop') m += WORKSHOPS[0].buildMinutes;

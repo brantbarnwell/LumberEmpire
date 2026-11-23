@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import {
-  GameState, crewByLand, logPrice, acceptCounter, buyLandUpgrade, landOutputBase, landUpgradeCost, lostBidCost, makeOffer, rejectCounter, woodMultFor,
+  GameState, crewByLand, logPrice, buyLandUpgrade, landOutputBase, landUpgradeCost, lostBidCost, woodMultFor,
 } from '../game/logic';
-import { LAND, LAND_UPGRADES, PERSONALITY, WOOD_NAMES, WOODS, RIVALS } from '../game/data';
+import { LAND, LAND_UPGRADES, WOOD_NAMES, WOODS, RIVALS } from '../game/data';
+import { OfferWheel } from './OfferWheel';
 import { LogIcon } from './art/Icons';
 import { unitText } from './SellButton';
 import { canStartAuction, startAuction, toggleWatch } from '../game/rivals';
@@ -53,7 +54,7 @@ export function LandScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.label}>RIVAL ACTIVITY (BOTS, NOT REAL PEOPLE)</Text>
+        <Text style={styles.label}>RIVAL ACTIVITY</Text>
         {s.feed.length === 0 && <Text style={styles.sub}>{RIVALS.map((r) => r.name).join(', ')} also want land. Their moves show up here.</Text>}
         {s.feed.slice(0, 8).map((f, i) => (
           <Text key={i} style={[styles.feed, f.kind === 'lose' && { color: C.red }, f.kind === 'win' && { color: C.leaf }, f.kind === 'you' && { color: C.inkSoft }]}>
@@ -102,7 +103,7 @@ export function LandScreen() {
       })}
 
       <Text style={styles.section}>For sale</Text>
-      <Text style={styles.sub}>Every piece of land has an owner. Make an offer in Money. They can accept, say no, or counter. New sellers every day.</Text>
+      <Text style={styles.sub}>Make an offer in Money and spin the wheel: the more you offer, the more green on the wheel. Lose the spin and the land is gone for a while (Small Clearing: 1 hour).</Text>
       {forSale.map((l) => {
         const L = s.listings[l.id];
         const goneUntil = s.landGoneUntil[l.id] ?? 0;
@@ -113,7 +114,7 @@ export function LandScreen() {
                 <View style={styles.landArt}><LandArt id={l.id} width={88} owned={!!s.lands[l.id]} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{l.name}</Text>
-                  <Text style={[styles.sub, { color: C.red }]}>Sold to {L.soldTo} for {money(L.soldFor ?? 0)}. New sellers tomorrow.</Text>
+                  <Text style={[styles.sub, { color: C.red }]}>Sold to {L.soldTo} for {money(L.soldFor ?? 0)}. {goneUntil > now ? `Try again in ${tryAgain(goneUntil - now)}.` : 'New sellers tomorrow.'}</Text>
                 </View>
               </View>
             </Card>
@@ -127,14 +128,13 @@ export function LandScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{l.name}</Text>
                   <Text style={styles.sub}>
-                    {goneUntil > now ? `The seller walked away. Back in ${duration(goneUntil - now)}.` : 'A new seller lists it tomorrow.'}
+                    {goneUntil > now ? `The seller said no. Try again in ${tryAgain(goneUntil - now)}.` : 'A new seller lists it tomorrow.'}
                   </Text>
                 </View>
               </View>
             </Card>
           );
         }
-        const P = PERSONALITY[L.personality];
         const isOpen = open === l.id;
         const watched = s.watched.includes(l.id);
         const rivalsIn = L.rivalBuysAt !== null;
@@ -150,8 +150,7 @@ export function LandScreen() {
               <WoodLine s={s} l={l} now={now} />
               <Text style={styles.sub}>{l.acres} acres · +{small(l.woodPerSec)} logs/sec · crew {l.crew}</Text>
               <Text style={styles.asking}>Asking {money(l.asking)}</Text>
-              {L.saleType === 'negotiate' && <Text style={styles.sub}>Seller: {L.seller} · {P.label}</Text>}
-              {L.rivalOffer && L.saleType === 'negotiate' && <Text style={[styles.sub, { color: C.red }]}>Best rival offer: {L.rivalOffer.rival} {money(L.rivalOffer.amount)}</Text>}
+              {L.saleType === 'negotiate' && <Text style={styles.sub}>Seller: {L.seller}</Text>}
               {rivalsIn && L.rivalBuysAt! > now && (
                 <Text style={[styles.sub, { color: C.bark }]}>
                   {L.saleType === 'auction' ? `Rivals will run this auction without you in about ${duration(L.rivalBuysAt! - now)}.` : `Rivals are interested. One may buy it in about ${duration(L.rivalBuysAt! - now)}.`}
@@ -181,9 +180,9 @@ export function LandScreen() {
           <Card key={l.id}>
             {head}
             {!isOpen ? (
-              <Button style={{ marginTop: 8 }} variant="brown" label={L.history.length ? 'Keep negotiating' : 'Make an offer'} onPress={() => setOpen(l.id)} />
+              <Button style={{ marginTop: 8 }} variant="brown" label="Make an offer" onPress={() => setOpen(l.id)} />
             ) : (
-              <Negotiation landId={l.id} onClose={() => setOpen(null)} />
+              <OfferWheel landId={l.id} onClose={() => setOpen(null)} />
             )}
           </Card>
         );
@@ -193,92 +192,17 @@ export function LandScreen() {
   );
 }
 
+/** "59 minutes", "3 hours" in plain words. */
+function tryAgain(ms: number) {
+  const m = Math.ceil(ms / 60000);
+  if (m <= 1) return '1 minute';
+  if (m < 90) return `${m} minutes`;
+  return `${Math.round(m / 60)} hours`;
+}
+
 function ago(ms: number) {
   if (ms < 60000) return 'now';
   return duration(ms).split(' ')[0] + ' ago';
-}
-
-function Negotiation({ landId, onClose }: { landId: string; onClose: () => void }) {
-  const s = useGame();
-  const L = s.listings[landId];
-  const def = LAND.find((x) => x.id === landId)!;
-  const [text, setText] = useState(String(Math.round(def.asking * 0.9)));
-  if (!L) return null;
-  const P = PERSONALITY[L.personality];
-  const amount = Math.round(parseFloat(text.replace(/[^0-9.]/g, '')) || 0);
-
-  const offer = () => {
-    const r = makeOffer(getState(), landId, amount, Date.now());
-    update(() => r.state);
-    if (r.outcome.kind === 'accepted') {
-      haptic.success();
-      onClose();
-
-    } else if (r.outcome.kind === 'error') {
-      haptic.error();
-      showPopup({ icon: '💬', title: r.outcome.message });
-    } else if (r.outcome.kind === 'walked') {
-      haptic.error();
-      showPopup({ icon: '🚶', title: 'Seller walked away', body: r.outcome.message });
-      onClose();
-    }
-  };
-
-  return (
-    <View style={styles.neg}>
-      <Text style={styles.sub}>{P.blurb}. Their lowest price is secret.</Text>
-      <View style={[styles.row, { marginTop: 6 }]}>
-        <Text style={styles.small}>Seller mood</Text>
-        <View style={{ flex: 1 }}>
-          <ProgressBar value={L.mood / 100} color={L.mood > 50 ? C.leafLight : L.mood > 25 ? C.gold : C.red} height={8} />
-        </View>
-        <Text style={styles.small}>No {L.rejections}/3</Text>
-      </View>
-
-      {L.history.length > 0 && (
-        <View style={styles.history}>
-          {L.history.slice(-6).map((h, i) => (
-            <Text key={i} style={[styles.hist, h.who === 'seller' && { color: C.bark }]}>
-              {h.who === 'seller' ? `${L.seller}: ` : ''}{h.text}
-            </Text>
-          ))}
-        </View>
-      )}
-
-      {L.status === 'counter' && L.counter !== null ? (
-        <View style={[styles.row, { marginTop: 8 }]}>
-          <Button
-            style={{ flex: 1 }}
-            label={`Accept ${money(L.counter)}`}
-            disabled={s.money < L.counter}
-            onPress={() => {
-              if (update((st) => acceptCounter(st, landId))) {
-                haptic.success();
-                onClose();
-              }
-            }}
-          />
-          <Button style={{ flex: 1 }} variant="ghost" label="Say no" onPress={() => update((st) => rejectCounter(st, landId))} />
-        </View>
-      ) : null}
-
-      <Text style={[styles.small, { marginTop: 8 }]}>{L.status === 'counter' ? 'Or counter with your own offer:' : 'Your offer'}</Text>
-      <View style={styles.row}>
-        <View style={styles.input}>
-          <Text style={styles.dollar}>$</Text>
-          <TextInput value={text} onChangeText={setText} keyboardType="number-pad" style={styles.inputText} maxLength={10} />
-        </View>
-        <Button label="Make Offer" disabled={amount <= 0 || amount > s.money} onPress={offer} />
-      </View>
-      <View style={[styles.row, { marginTop: 6 }]}>
-        {[0.7, 0.85, 1].map((f) => (
-          <Button key={f} small variant="ghost" style={{ flex: 1 }} label={`${Math.round(f * 100)}%`} sub={money(def.asking * f)} onPress={() => setText(String(Math.round(def.asking * f)))} />
-        ))}
-      </View>
-      {amount > s.money && <Text style={[styles.small, { color: C.red }]}>You only have {money(s.money)}.</Text>}
-      <Button small variant="ghost" style={{ marginTop: 6 }} label="Close" onPress={onClose} />
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({

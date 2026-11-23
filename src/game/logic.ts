@@ -9,7 +9,8 @@ import {
   TOOLS, HELPER_WAGES, WAGE_LEVEL_GROWTH, UNPAID_HELPER_SPEED, STORAGE_LEVELS, AXE_SKINS,
   YARD_SELLER_COST, LOST_BID_PENALTY, HELPER_MILESTONE_EVERY, HELPER_MILESTONE_GOLD, SYSTEMS, SystemId, RUSH_ORDERS, RUSH_ORDER_PRICE, GOLDEN_LOG_EVERY_MIN, GOLDEN_LOG_LASTS_SEC, FRENZY_SEC, FRENZY_MULT,
   PLANK_BASE_PRICE, PLANK_WOOD, PLANK_CUT_PER_SEC, Product,
-  MANAGER_COST, MANAGER_SELL_AT, MANAGER_WAGE, SAWMILL_LEVELS, BULK_BUYERS, BULK_ORDERS_PER_DAY, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
+  MANAGER_COST, MANAGER_WAGE, SAWMILL_LEVELS, BULK_BUYERS, BULK_ORDER_EVERY_MIN, BULK_ORDER_LASTS_MIN, BULK_COUNTER_BONUS, BULK_COUNTER_CHANCE,
+  GOLDEN_CHAINSAW_ID, SELLER_WALKAWAY_HOURS as WALKAWAY_H, PLANK_SPEED_LEVELS, AUTO_SELL_EVERY_SEC, AUTO_SELL_SHARE, CLEARING_RETRY_HOURS, OFFER_CHANCE_MIN, OFFER_CHANCE_AT_ASKING, OFFER_CHANCE_MAX, OFFER_CURVE, OFFER_MAX_X,
 } from './data';
 import { planRivals, rivalTick } from './rivals';
 import { demandOf, hash, itemPriceOf, marketPriceOf, demandLabel as demandLabelM } from './market';
@@ -97,6 +98,7 @@ export interface GameState {
     skins: string[];
     exclusiveAxes: string[];
     noAds: boolean;
+    goldChainsawBroken?: boolean; // bug fix batch 1: a Gold-bought Golden Chainsaw broke; re-equip it for free
     pendingHelpers: number; // old saves only; moved into helpers on load
     pendingBuildings: string[]; // Sawmill etc, handed out when Buildings are built
     pendingLand: string[]; // old saves only
@@ -148,6 +150,8 @@ export interface GameState {
   plankSelling: boolean;
   plankCarry: number;
   cutting: boolean;
+  plankSpeedLevel: number; // bug fix batch 1: hand-cut plank speed upgrades (index into PLANK_SPEED_LEVELS)
+  autoSellAcc: number; // seconds since the last 5-second auto-sell
   // Part 7
   manager: Manager;
   // Part 8
@@ -164,6 +168,7 @@ export interface GameState {
     days: DayStats[]; // last 7 days
     orders: BulkOrder[];
     ordersDay: string;
+    nextOrderAt?: number; // bug fix batch 1: when the next bulk order comes in
     log: SaleLog[]; // bulk orders and furniture sales, newest first
   };
 }
@@ -195,7 +200,7 @@ export interface Manager {
 }
 export interface FeedItem { at: number; text: string; kind: 'rival' | 'you' | 'win' | 'lose'; landId?: string }
 export interface DayStats { day: string; wood: number; planks: number; furniture: number; money: number; woodMoney: number }
-export interface BulkOrder { id: string; buyer: string; product: 'wood' | 'planks'; amount: number; price: number; status: 'open' | 'done' | 'gone'; countered: boolean }
+export interface BulkOrder { id: string; buyer: string; product: 'wood' | 'planks'; amount: number; price: number; status: 'open' | 'done' | 'gone'; countered: boolean; expiresAt?: number }
 export interface SaleLog { what: string; units: number; price: number; at: number; minutes: number | null }
 
 /** Today's caps (they reset at midnight). */
@@ -248,6 +253,8 @@ export function freshRun(now: number) {
     plankSelling: true,
     plankCarry: 0,
     cutting: false,
+    plankSpeedLevel: 0,
+    autoSellAcc: 0,
     chopRate: 0,
     chopAcc: 0,
     buyers: { wood: 0, planks: 0 }, // not used since update 2 (kept so old saves load)
@@ -601,6 +608,13 @@ function wearTools(s: GameState, chops: number, minutes: number): GameState {
       minuteWear += minutes;
       while (minuteWear >= d.wearMinutes && durability > 0) { minuteWear -= d.wearMinutes; durability -= 1; }
     }
+    if (d.id === GOLDEN_CHAINSAW_ID && durability <= 0) {
+      // bug fix batch 1: the Golden Chainsaw breaks at 0%. Bought with Gold: re-equip it for free. Bought with Money: buy it again.
+      delete tools[d.id];
+      changed = true;
+      if (t.keep) s = { ...s, owned: { ...s.owned, goldChainsawBroken: true } };
+      continue;
+    }
     if (durability !== t.durability || chopWear !== t.chopWear || minuteWear !== t.minuteWear) {
       tools[d.id] = { ...t, durability: Math.max(0, durability), chopWear, minuteWear };
       changed = true;
@@ -819,11 +833,19 @@ function repFactor(rep: number) {
 /** New sellers every day for every piece of land you don't own. */
 export function ensureListings(s: GameState, now: number): GameState {
   const dk = dayKeyOf(now);
-  if (s.listingsDay === dk || s.auction) return s;
-  const listings: Record<string, Listing> = {};
+  if (s.auction) return s;
+  // bug fix batch 1: a land you lost comes back when its wait is over (Small Clearing: 1 hour), even on the same day
+  const back = s.listingsDay === dk
+    ? LAND.filter((l) => !s.lands[l.id] && (s.landGoneUntil[l.id] ?? 0) > 0 && (s.landGoneUntil[l.id] ?? 0) <= now && (!s.listings[l.id] || s.listings[l.id].status === 'gone' || s.listings[l.id].status === 'sold')).map((l) => l.id)
+    : [];
+  if (s.listingsDay === dk && !back.length) return s;
+  const listings: Record<string, Listing> = s.listingsDay === dk ? { ...s.listings } : {};
+  const gone = { ...s.landGoneUntil };
   LAND.forEach((l, i) => {
+    if (s.listingsDay === dk && !back.includes(l.id)) return;
     if (s.lands[l.id]) return;
     if ((s.landGoneUntil[l.id] ?? 0) > now) return;
+    delete gone[l.id];
     const r = (k: string) => hash(`${dk}:${l.id}:${k}:${s.prestige.count}`);
     const kinds = Object.keys(PERSONALITY) as Personality[];
     const personality = kinds[Math.floor(r('p') * kinds.length)];
@@ -837,7 +859,50 @@ export function ensureListings(s: GameState, now: number): GameState {
     };
     if (!systemUnlocked(s, 'auctions')) listings[l.id].saleType = 'negotiate'; // update 3: auctions unlock later
   });
-  return { ...s, listings, listingsDay: dk };
+  return { ...s, listings, listingsDay: dk, landGoneUntil: gone };
+}
+
+/** Bug fix batch 1: hours before you can try a land again after losing it (Small Clearing: 1 hour). */
+export function retryHours(id: string) {
+  return id === 'clearing' ? CLEARING_RETRY_HOURS : WALKAWAY_H;
+}
+
+/** Spin-wheel chance that the seller accepts: $1 = 1%, asking = 80%, 2x asking = 95%. Never 0%, never 100%. */
+export function offerChance(amount: number, asking: number) {
+  if (!(amount > 0)) return 0;
+  const x = amount / asking;
+  if (x <= 1) return Math.max(OFFER_CHANCE_MIN, OFFER_CHANCE_MIN + (OFFER_CHANCE_AT_ASKING - OFFER_CHANCE_MIN) * Math.pow(x, OFFER_CURVE));
+  const k = Math.min(1, (x - 1) / (OFFER_MAX_X - 1));
+  return OFFER_CHANCE_AT_ASKING + (OFFER_CHANCE_MAX - OFFER_CHANCE_AT_ASKING) * k;
+}
+
+/** Highest offer the slider allows: 2x asking, or your Money if that is lower. */
+export function offerMax(s: GameState, id: string) {
+  const def = LAND.find((x) => x.id === id)!;
+  return Math.max(1, Math.floor(Math.min(def.asking * OFFER_MAX_X, s.money)));
+}
+
+/**
+ * Make an offer = spin the wheel. Green: the land is yours at your offer. Red: the seller says no and the land
+ * is gone for a while (Small Clearing 1 hour, other lands 24 hours). Replaces counteroffers and secret minimums.
+ */
+export function spinOffer(s: GameState, id: string, amount: number, now: number, rand: () => number = Math.random): { state: GameState; won: boolean; chance: number; error?: string } {
+  const L = s.listings[id];
+  const def = LAND.find((x) => x.id === id);
+  amount = Math.round(amount);
+  if (!L || !def || L.status === 'gone' || L.status === 'sold' || L.saleType === 'auction') return { state: s, won: false, chance: 0, error: 'This land is not for sale right now.' };
+  if (!systemUnlocked(s, 'land')) return { state: s, won: false, chance: 0, error: 'Land deals unlock soon.' };
+  if (!(amount >= 1)) return { state: s, won: false, chance: 0, error: 'Pick an offer first.' };
+  if (amount > s.money) return { state: s, won: false, chance: 0, error: "You don't have that much Money." };
+  const chance = offerChance(amount, def.asking);
+  const st = bump(s, 'landOffers');
+  if (rand() < chance) return { state: buyLand(st, id, amount), won: true, chance };
+  const until = now + retryHours(id) * 3600_000;
+  return {
+    state: { ...st, listings: { ...st.listings, [id]: { ...L, status: 'gone' } }, landGoneUntil: { ...st.landGoneUntil, [id]: until } },
+    won: false,
+    chance,
+  };
 }
 
 export type OfferOutcome = { kind: 'accepted' | 'countered' | 'rejected' | 'walked' | 'error'; message: string; lost?: number };
@@ -1063,6 +1128,14 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     if (dur === 0) axeBroke = true;
     if (dur === 25) axeLow = true;
   }
+  // bug fix batch 1: an axe that hits 0% breaks. You drop to the axe below it (at 100%) and buy the broken one again.
+  // The Rusty Axe is the starter: nothing below it, so it stays at 0% until you repair it.
+  let axeIndex = s.axeIndex;
+  if (axeBroke && axeIndex > 0) {
+    axeIndex -= 1;
+    dur = 100;
+    since = 0;
+  }
 
   let treeChops = s.treeChops + 1;
   let felled = false;
@@ -1099,6 +1172,7 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     ...wearTools(st, 1, 0),
     totalChops: st.totalChops + 1,
     axeDurability: dur,
+    axeIndex,
     chopsSinceWear: since,
     treeChops,
     treeGoldenUntil,
@@ -1232,7 +1306,7 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     const k = dtSec * (offline ? OFFLINE_RATE : 1);
     const amounts: Partial<Record<WoodType, number>> = {};
     for (const t in by) amounts[t as WoodType] = (by[t as WoodType] ?? 0) * k;
-    next = addWoodByType(next, amounts, !autoSelling(next));
+    next = addWoodByType(next, amounts, !autoSellOn(next));
   }
   if (dtSec > 0) next = wearTools(next, 0, dtSec / 60);
 
@@ -1249,10 +1323,9 @@ export function tick(s: GameState, dtSec: number, now: number, offline = false):
     next = { ...next, wood: next.wood - n * PLANK_WOOD, woodMix: m2, plankVal: plankValOf(next) + plankAdd, planks: next.planks + n };
   }
 
-  // Yard Seller: everything sells at the market price as it comes in
-  if (autoSelling(next) && next.wood >= 1) next = sellAll(next, 'wood', now).state;
+  // Yard Seller / Manager (bug fix batch 1): every 5 seconds, 80% of your wood at the market price. Planks are never auto-sold.
   next = managerTick(next, dtSec, now);
-  if (autoSellingPlanks(next) && next.planks >= 1) next = sellAll(next, 'planks', now).state;
+  next = autoSellTick(next, dtSec, now);
   if (!offline) next = logTick({ ...next, playSec: (next.playSec ?? 0) + dtSec }, now);
   // weekly leaderboard: a new week starts on Monday
   const wkb = weekKeyOf(now);
@@ -1462,6 +1535,14 @@ export function migrate(s: GameState): GameState {
   if (!st.woodMix) st = { ...st, woodMix: { pine: st.wood } };
   // Playbook 3
   if (typeof st.ads.lastVideoAt !== 'number' || typeof st.ads.instantUsed !== 'number') st = { ...st, ads: { dayKey: st.ads.dayKey, goldVideos: st.ads.goldVideos ?? 0, lastVideoAt: 0, instantUsed: 0 } };
+  if (typeof st.plankSpeedLevel !== 'number') st = { ...st, plankSpeedLevel: 0, autoSellAcc: 0 };
+  const gc = st.tools[GOLDEN_CHAINSAW_ID];
+  if (gc && gc.durability <= 0) {
+    // a Golden Chainsaw already at 0% from an older version breaks now (Gold-bought: free re-equip)
+    const tools = { ...st.tools };
+    delete tools[GOLDEN_CHAINSAW_ID];
+    st = { ...st, tools, owned: { ...st.owned, goldChainsawBroken: !!gc.keep || !!st.owned.goldChainsawBroken } };
+  }
   if (!st.caps) st = { ...st, caps: { dayKey: '', goldenGold: 0, skips: 0, welcome2x: 0, boostHours: 0 } };
   if (!st.offers) st = { ...st, offers: { firstSeenAt: st.lastSaved || Date.now(), starterShown: false } };
   if (typeof st.plankVal !== 'number') st = { ...st, plankVal: st.planks * PLANK_BASE_PRICE };
@@ -1506,20 +1587,41 @@ export function recordSale(s: GameState, p: Product, units: number, money: numbe
   return { ...s, market: { ...s.market, days: out, log: logs } };
 }
 
-export function ensureOrders(s: GameState, now: number): GameState {
-  const dk = dayKeyOf(now);
-  if (s.market.ordersDay === dk) return s;
-  const orders: BulkOrder[] = [];
-  const cap = storageCap(s);
-  for (let i = 0; i < BULK_ORDERS_PER_DAY; i++) {
-    const r = (k: string) => hash(`order:${dk}:${i}:${k}`);
+/** Bug fix batch 1: a new bulk order about every 5 minutes, only 1 at a time. Unanswered, it expires after 5 minutes. */
+export function ensureBulkOrder(s: GameState, now: number): GameState {
+  const regular = s.market.orders.filter((o) => !o.id.startsWith('rush-'));
+  const rush = s.market.orders.filter((o) => o.id.startsWith('rush-'));
+  let cur = regular[regular.length - 1];
+  let changed = false;
+  if (cur && cur.status === 'open' && (cur.expiresAt ?? 0) <= now) {
+    cur = { ...cur, status: 'gone' };
+    changed = true;
+  }
+  let nextAt = s.market.nextOrderAt ?? 0;
+  if ((!cur || cur.status !== 'open') && now >= nextAt) {
+    const i = Math.floor(now / 60000);
+    const r = (k: string) => hash(`order:${i}:${k}`);
+    const cap = storageCap(s);
+    const dk = dayKeyOf(now);
     const product: 'wood' | 'planks' = s.workshop.level >= 0 && r('p') < 0.4 ? 'planks' : 'wood';
     const raw = (product === 'wood' ? 0.2 : 0.06) * cap * (0.6 + r('a') * 0.8);
     const mag = Math.pow(10, Math.max(1, Math.floor(Math.log10(raw)) - 1));
     const amount = Math.max(100, Math.round(raw / mag) * mag);
     const price = Math.round(marketPriceOf(dk, product) * (0.85 + r('price') * 0.5) * 100) / 100;
-    orders.push({ id: `${dk}-${i}`, buyer: BULK_BUYERS[(Math.floor(r('b') * BULK_BUYERS.length) + i) % BULK_BUYERS.length], product, amount, price, status: 'open', countered: false });
+    cur = { id: `b-${now}`, buyer: BULK_BUYERS[Math.floor(r('b') * BULK_BUYERS.length)], product, amount, price, status: 'open', countered: false, expiresAt: now + BULK_ORDER_LASTS_MIN * 60000 };
+    nextAt = now + BULK_ORDER_EVERY_MIN * 60000;
+    changed = true;
   }
+  if (!changed) return s;
+  return { ...s, market: { ...s.market, orders: [...rush, cur!], nextOrderAt: nextAt } };
+}
+
+export function ensureOrders(s: GameState, now: number): GameState {
+  const dk = dayKeyOf(now);
+  s = ensureBulkOrder(s, now);
+  if (s.market.ordersDay === dk) return s;
+  const orders: BulkOrder[] = s.market.orders.filter((o) => !o.id.startsWith('rush-'));
+  const cap = storageCap(s);
   // update 3: Timber Rush weekend adds a limited event order board. The mix changes every week.
   const rush = rushInfo(s, now);
   if (rush.active && systemUnlocked(s, 'market')) {
@@ -1586,7 +1688,7 @@ export function setManagerOn(s: GameState, on: boolean): GameState | null {
 }
 
 export function managerActive(s: GameState) {
-  return s.manager.hired && s.manager.on && !(s.manager.owed! > 0) && storageUsed(s) >= storageCap(s) * MANAGER_SELL_AT;
+  return s.manager.hired && s.manager.on && !(s.manager.owed! > 0);
 }
 
 /** Pays the manager's wage while he is switched on. If you can't pay, it adds up and he pauses. */
@@ -1607,28 +1709,31 @@ function managerTick(s: GameState, dtSec: number, now: number): GameState {
   const dk = dayKeyOf(now);
   let st = s.manager.day !== dk && s.manager.hired ? { ...s, manager: { ...s.manager, day: dk, soldToday: 0, planksToday: 0, moneyToday: 0, collectedToday: 0 } } : s;
   st = payManager(st, dtSec);
-  if (!managerActive(st) || dtSec <= 0) return st;
-  // Update 2: when the yard is 80% full he sells wood (then planks) back down to 80%, at the market price
-  let excess = storageUsed(st) - storageCap(st) * MANAGER_SELL_AT;
-  for (const p of ['wood', 'planks'] as const) {
-    if (excess <= 0) break;
-    const size = p === 'wood' ? 1 : PLANK_WOOD;
-    const r = sellAll(st, p, now, Math.ceil(excess / size));
-    if (r.sold === 0) continue;
-    excess -= r.sold * size;
-    st = r.state;
+  return st;
+}
+
+/** Yard Seller or Manager is selling for you (bug fix batch 1: same rule for both). */
+export function autoSellOn(s: GameState) {
+  return autoSelling(s) || managerActive(s);
+}
+
+/**
+ * Bug fix batch 1: every 5 seconds the Yard Seller / Manager sells 80% of the wood you hold, at the market price.
+ * 20% always stays for planks and crafting (up to the size of your yard). Wood only, never planks.
+ */
+function autoSellTick(s: GameState, dtSec: number, now: number): GameState {
+  if (!autoSellOn(s) || dtSec <= 0) return (s.autoSellAcc ?? 0) === 0 ? s : { ...s, autoSellAcc: 0 };
+  const acc = (s.autoSellAcc ?? 0) + dtSec;
+  if (acc < AUTO_SELL_EVERY_SEC) return { ...s, autoSellAcc: acc };
+  let st: GameState = { ...s, autoSellAcc: acc % AUTO_SELL_EVERY_SEC };
+  const keep = Math.min(st.wood * (1 - AUTO_SELL_SHARE), Math.max(0, storageCap(st) - st.planks * PLANK_WOOD));
+  const n = Math.floor(st.wood - keep);
+  if (n < 1) return st;
+  const r = sellAll(st, 'wood', now, n);
+  st = r.state;
+  if (managerActive(st) && !autoSelling(st)) {
     const m = st.manager;
-    st = {
-      ...st,
-      manager: {
-        ...m,
-        soldToday: m.soldToday + (p === 'wood' ? r.sold : 0),
-        planksToday: (m.planksToday ?? 0) + (p === 'wood' ? 0 : r.sold),
-        moneyToday: m.moneyToday + r.earned,
-        soldTotal: m.soldTotal + r.sold,
-        moneyTotal: m.moneyTotal + r.earned,
-      },
-    };
+    st = { ...st, manager: { ...m, soldToday: m.soldToday + r.sold, moneyToday: m.moneyToday + r.earned, soldTotal: m.soldTotal + r.sold, moneyTotal: m.moneyTotal + r.earned } };
   }
   return st;
 }
@@ -1650,7 +1755,28 @@ export function collectOfflineBonus(s: GameState, r: OfflineResult): GameState {
 /** Planks cut per second from Cut planks and the Sawmill together. */
 export function plankCutRate(s: GameState) {
   const mill = s.sawmill.level > 0 && s.sawmill.on ? SAWMILL_LEVELS[s.sawmill.level - 1].planksPerSec : 0;
-  return (s.cutting ? PLANK_CUT_PER_SEC : 0) + mill;
+  return (s.cutting ? 1 / secPerPlank(s) : 0) + mill;
+}
+
+/** Bug fix batch 1: seconds to cut one plank by hand (10 s at the start, upgrades make it faster). */
+export function secPerPlank(s: GameState) {
+  return PLANK_SPEED_LEVELS[Math.min(s.plankSpeedLevel ?? 0, PLANK_SPEED_LEVELS.length - 1)].secPerPlank;
+}
+
+export function plankSpeedNext(s: GameState) {
+  return PLANK_SPEED_LEVELS[(s.plankSpeedLevel ?? 0) + 1] ?? null;
+}
+
+export function buyPlankSpeed(s: GameState): GameState | null {
+  const n = plankSpeedNext(s);
+  if (!n || s.money < n.cost) return null;
+  return { ...s, money: s.money - n.cost, plankSpeedLevel: (s.plankSpeedLevel ?? 0) + 1, firstWin: true };
+}
+
+/** Bug fix batch 1: a Golden Chainsaw bought with Gold that broke comes back for free, at 100%. */
+export function reequipGoldChainsaw(s: GameState): GameState | null {
+  if (!s.owned.goldChainsawBroken || s.tools[GOLDEN_CHAINSAW_ID]) return null;
+  return { ...s, tools: { ...s.tools, [GOLDEN_CHAINSAW_ID]: { durability: 100, chopWear: 0, minuteWear: 0, keep: true } }, owned: { ...s.owned, goldChainsawBroken: false } };
 }
 
 export function sawmillNextCost(s: GameState) {

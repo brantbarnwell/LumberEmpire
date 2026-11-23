@@ -1,4 +1,4 @@
-// Part 6: AI rival companies and land auctions (section 8). Rivals are bots, never real people.
+// Part 6: AI rival companies and land auctions (section 8).
 // Everything here is decided by seeded rolls, so the same day plays out the same way and can be tested.
 import {
   AUCTION_CHANCE, LOST_BID_PENALTY, AUCTION_OUTBID_SECONDS, AUCTION_SECONDS, AUCTION_START, AUCTION_STEP, LAND, RIVALS, RIVAL_BUY_AFTER_MIN,
@@ -70,6 +70,7 @@ export function rivalTick(s: GameState, now: number): GameState {
         price = sorted[1] ? Math.min(sorted[0].max, sorted[1].max + stepFor(id)) : AUCTION_START * LAND.find((x) => x.id === id)!.asking;
       }
       L = { ...L, status: 'sold', soldTo: who, soldFor: Math.round(price), rivalPlan: [] };
+      if (id === 'clearing') st = { ...st, landGoneUntil: { ...st.landGoneUntil, clearing: now + 3600_000 } }; // bug fix batch 1: Small Clearing is back in 1 hour
       st = addFeed(st, {
         at: L.rivalBuysAt!, kind: 'lose', landId: id,
         text: L.saleType === 'auction'
@@ -207,6 +208,7 @@ function finishAuction(s: GameState, at: number): GameState {
     return addFeed(st, { at, kind: 'rival', landId: a.landId, text: `Nobody bid on ${landName(a.landId)}. Back tomorrow.` });
   }
   st = { ...st, listings: { ...st.listings, [a.landId]: { ...L, status: 'sold', soldTo: winner, soldFor: price, rivalPlan: [] } } };
+  if (a.landId === 'clearing') st = { ...st, landGoneUntil: { ...st.landGoneUntil, clearing: at + 3600_000 } }; // bug fix batch 1: back in 1 hour
   // update 2: bidding in an auction and losing costs 5% of your Money (never charged if you did not bid)
   if (a.log.some((x) => x.who === 'you')) {
     const lost = Math.round(st.money * LOST_BID_PENALTY);

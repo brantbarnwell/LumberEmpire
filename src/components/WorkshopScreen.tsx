@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import {
   craftTimeMs, finishBuildWithGold, finishCraftWithGold, goldToSkip, itemPrice, plankCutRate, sellItems,
-  startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost, systemUnlocked,
+  startBuild, startCraft, workshopUnlocked, upgradeSawmill, setSawmillOn, sawmillNextCost, systemUnlocked, secPerPlank, plankSpeedNext, buyPlankSpeed,
 } from '../game/logic';
 import { SawmillArt, WorkshopArt } from './art/Buildings';
 import { FurnitureArt } from './art/Furniture';
@@ -38,6 +38,7 @@ export function WorkshopScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Buildings</Text>
+      <PlankSpeedCard />
       {systemUnlocked(s, 'sawmill') || s.sawmill.level > 0 ? <SawmillCard /> : <LockedRow id="sawmill" />}
       <Text style={styles.section}>Workshop</Text>
 
@@ -166,6 +167,34 @@ export function WorkshopScreen() {
   );
 }
 
+/** Bug fix batch 1: cutting planks by hand gets faster with upgrades (10 s a plank at the start). */
+function PlankSpeedCard() {
+  const s = useGame();
+  const next = plankSpeedNext(s);
+  const sec = secPerPlank(s);
+  return (
+    <Card style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Icon name="planks" size={30} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>Plank speed</Text>
+          <Text style={styles.small}>Cut planks by hand (Market): {sec} seconds a plank now.</Text>
+        </View>
+      </View>
+      {next ? (
+        <Button
+          label={`Faster: ${next.secPerPlank} seconds a plank`}
+          sub={money(next.cost)}
+          disabled={s.money < next.cost}
+          onPress={() => update((st) => buyPlankSpeed(st)) && haptic.success()}
+        />
+      ) : (
+        <Text style={styles.small}>Fastest hand speed reached (0.1 seconds a plank). The Sawmill is a separate building.</Text>
+      )}
+    </Card>
+  );
+}
+
 function SawmillCard() {
   const s = useGame();
   const lvl = s.sawmill.level;
@@ -181,7 +210,7 @@ function SawmillCard() {
           <Text style={styles.sub}>
             {cur
               ? `Cuts ${cur.planksPerSec} planks a second (${cur.planksPerSec * PLANK_WOOD} wood a second). Cut planks by hand is only ${PLANK_CUT_PER_SEC}.`
-              : `Turns wood into planks much faster than Cut planks (${PLANK_CUT_PER_SEC} a second). Build it with Money. The Empire Pack is no longer sold, so a Sawmill kept through prestige can't be bought now; old buyers keep theirs.`}
+              : `Turns wood into planks much faster than cutting by hand (${secPerPlank(s)} seconds a plank now). Build it with Money. The Empire Pack is no longer sold, so a Sawmill kept through prestige can't be bought now; old buyers keep theirs.`}
           </Text>
         </View>
         {cur && <Switch value={s.sawmill.on} onValueChange={(v) => { update((st) => setSawmillOn(st, v)); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Sawmill on or off" />}
