@@ -141,7 +141,7 @@ function Flyer({ it, onDone }: { it: { icon: 'coin' | 'log'; wood?: string; from
 const styles = StyleSheet.create({
   bar: { paddingHorizontal: 10, paddingBottom: 8, borderBottomLeftRadius: 18, borderBottomRightRadius: 18, borderBottomWidth: 3, borderColor: '#0d1c12' },
   row: { flexDirection: 'row', gap: 8 },
-  pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 2, borderColor: 'rgba(0,0,0,0.35)' },
+  pill: { flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 2, borderColor: 'rgba(0,0,0,0.35)' },
   warn: { borderColor: C.red },
   num: { fontSize: 22, fontWeight: '900', fontVariant: ['tabular-nums'] },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
