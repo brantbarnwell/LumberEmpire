@@ -111,7 +111,7 @@ export function Celebrate() {
         <View style={{ flex: 1 }}>
           {t.kind ? <Text style={styles.kind}>{t.kind}</Text> : null}
           <Text style={styles.title} numberOfLines={1}>{t.title}</Text>
-          {t.sub ? <Text style={styles.sub} numberOfLines={1}>{t.sub}</Text> : null}
+          {t.sub ? <Text style={styles.sub} numberOfLines={2}>{t.sub}</Text> : null}
         </View>
       </Animated.View>
     </View>

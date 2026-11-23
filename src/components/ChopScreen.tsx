@@ -106,7 +106,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
       feel.golden();
       showToast(
         result.golden.capped
-          ? { kind: 'GOLDEN TREE!', title: 'Gold cap reached for today', sub: `+${money(result.golden.money)} and golden wood. More Gold tomorrow.`, icon: 'gold' }
+          ? { kind: 'GOLDEN TREE!', title: 'Gold cap reached for today.', sub: `+${money(result.golden.money)} and golden wood. More Gold tomorrow.`, icon: 'gold' }
           : { kind: 'GOLDEN TREE!', title: `+${result.golden.gold} Gold`, sub: `+${money(result.golden.money)}`, icon: 'gold' },
       );
     }
