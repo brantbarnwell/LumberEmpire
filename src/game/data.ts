@@ -303,8 +303,14 @@ export const GOLD_PER_MINUTE_SKIP = 1 / 3; // speed-ups cost 1 Gold per 3 minute
 // Rewarded videos (opt-in only)
 export const AD_GOLD_PER_VIDEO = 5; // BALANCE
 export const AD_GOLD_VIDEOS_PER_DAY = 5; // spec
-export const AD_BOOST_MINUTES = 60; // Playbook 3: 2x production for 1 hour
-export const AD_BOOST_MAX_MINUTES = 360; // watching again adds 1 hour, up to 6 hours. Never more than 2x
+export const AD_BOOST_MINUTES = 60; // timed boost: 1 hour
+export const AD_BOOST_MULT = 1.5; // pacing tightening: 1.5x (2x for even 30 min a day pushed max-ad players under 2.5 days)
+export const AD_BOOST_MAX_MINUTES = 360; // the shared 2x timer never runs past 6 hours. Never more than 2x
+// Pacing tightening (Nov 22): daily caps, reset at midnight
+export const AD_BOOST_HOURS_PER_DAY = 1; // timed boost hours a day, ads AND Gold buys combined. The 24-hour Gold boost is no longer sold
+export const WELCOME_2X_PER_DAY = 1; // welcome-back 2x: once a day (Collect is always free)
+export const TIME_SKIPS_PER_DAY = 3; // Time Skip: 3 a day = 3 hours of production
+export const GOLDEN_GOLD_PER_DAY = 50; // Golden Trees: 50 Gold a day, then bonus Money and golden wood only
 // Playbook 3: the Watch Ad pill on the home screen
 // Playbook 3 fix: the pill IS the free Gold video (+5 Gold, 5 a day, AD_GOLD_* above)
 export const AD_PILL_COOLDOWN_MIN = 7; // 5 to 10 minutes between videos
@@ -314,8 +320,7 @@ export const AD_OFFLINE_MULT = 2; // spec
 
 // Gold shop: sell time, not power. Prices BALANCE.
 export const GOLD_SHOP = [
-  { id: 'wood1h', title: '2x production for 1 hour', gold: 20, kind: 'wood' as const, hours: 1 },
-  { id: 'wood24h', title: '2x production for 24 hours', gold: 150, kind: 'wood' as const, hours: 24 },
+  { id: 'wood1h', title: '1.5x production for 1 hour', gold: 20, kind: 'wood' as const, hours: 1 }, // same boost as the ad, shares its 1 hour a day
   { id: 'skip1h', title: 'Time Skip: 1 hour of production now', gold: 20, kind: 'skip' as const, hours: 1 },
 ];
 export const GOLD_REPAIR_ALL = 10; // spec: repairs the axe and every tool

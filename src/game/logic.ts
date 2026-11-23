@@ -1,7 +1,7 @@
 // Pure game rules. No React here, so it can be tested and simulated (npm test, npm run pacing).
 import {
   AXES, CHOPS_PER_TREE, CRIT_CHANCE, CRIT_MULT, FELL_BONUS_CHOPS, GOLDEN_GOLD_MAX, GOLDEN_GOLD_MIN,
-  GOLDEN_MONEY_PER_POWER, GOLDEN_TREE_CHANCE, GOLDEN_TREE_SECONDS, MARKET_BASE_PRICE, OFFLINE_MAX_HOURS, OFFLINE_RATE,
+  GOLDEN_MONEY_PER_POWER, GOLDEN_GOLD_PER_DAY, GOLDEN_TREE_CHANCE, GOLDEN_TREE_SECONDS, MARKET_BASE_PRICE, OFFLINE_MAX_HOURS, OFFLINE_RATE,
   RANKS, VIP_DAILY_GOLD, VIP_MONEY_MULT, Grant, productById,
   HELPERS, HELPER_COPY_SCALE, HELPER_LEVEL_BONUS, HELPER_LEVEL_COST_BASE, HELPER_LEVEL_COST_GROWTH, HELPER_MAX_LEVEL,
   LAND, LAND_UPGRADES, PERSONALITY, Personality, SELLER_NAMES, SELLER_WALKAWAY_HOURS, MAX_REJECTIONS,
@@ -13,6 +13,8 @@ import {
 } from './data';
 import { planRivals, rivalTick } from './rivals';
 import { demandOf, hash, itemPriceOf, marketPriceOf, demandLabel as demandLabelM } from './market';
+
+export interface DailyCaps { dayKey: string; goldenGold: number; skips: number; welcome2x: number; boostHours: number }
 
 export interface Boost {
   kind: 'wood' | 'money';
@@ -127,7 +129,8 @@ export interface GameState {
   board: { weekKey: string; startTotal: number; lastWeek: number }; // update 3: weekly leaderboard (kept through prestige)
   login: { index: number; lastClaimDay: string | null };
   ads: { dayKey: string; goldVideos: number; lastVideoAt: number; instantUsed: number }; // Playbook 3 fix: goldVideos = the home Watch Ad pill (+5 Gold); instantUsed = Remove Ads rewards today (max 1)
-  offers: { firstSeenAt: number; starterShown: boolean }; // Playbook 3: Starter Pack shown once, first 72 hours
+  offers: { firstSeenAt: number; starterShown: boolean };
+  caps: DailyCaps; // pacing tightening: daily caps (golden Gold, Time Skips, welcome-back 2x, ad boost hours) // Playbook 3: Starter Pack shown once, first 72 hours
   prestige: { count: number; mult: number };
   notif: { asked: boolean; granted: boolean; lastFireDay: string | null; scheduledAt: number | null };
   firstWin: boolean;
@@ -194,6 +197,12 @@ export interface FeedItem { at: number; text: string; kind: 'rival' | 'you' | 'w
 export interface DayStats { day: string; wood: number; planks: number; furniture: number; money: number; woodMoney: number }
 export interface BulkOrder { id: string; buyer: string; product: 'wood' | 'planks'; amount: number; price: number; status: 'open' | 'done' | 'gone'; countered: boolean }
 export interface SaleLog { what: string; units: number; price: number; at: number; minutes: number | null }
+
+/** Today's caps (they reset at midnight). */
+export function capsToday(s: GameState, now: number): DailyCaps {
+  const dk = dayKeyOf(now);
+  return s.caps && s.caps.dayKey === dk ? s.caps : { dayKey: dk, goldenGold: 0, skips: 0, welcome2x: 0, boostHours: 0 };
+}
 
 export function dayKeyOf(now: number) {
   const d = new Date(now);
@@ -285,6 +294,7 @@ export function newGame(now = Date.now()): GameState {
     login: { index: 0, lastClaimDay: null },
     ads: { dayKey: dayKeyOf(now), goldVideos: 0, lastVideoAt: 0, instantUsed: 0 },
     offers: { firstSeenAt: now, starterShown: false },
+    caps: { dayKey: dayKeyOf(now), goldenGold: 0, skips: 0, welcome2x: 0, boostHours: 0 },
     prestige: { count: 0, mult: 1 },
     notif: { asked: false, granted: false, lastFireDay: null, scheduledAt: null },
     firstWin: false,
@@ -1030,7 +1040,7 @@ export interface ChopResult {
   crit: boolean;
   felled: boolean;
   fellBonus: number;
-  golden: { gold: number; money: number } | null;
+  golden: { gold: number; money: number; capped: boolean } | null; // capped: today's 50 Gold from Golden Trees is used up
   newGoldenTree: boolean;
   axeBroke: boolean;
   axeLow: boolean;
@@ -1067,10 +1077,12 @@ export function chop(s: GameState, now: number, rand: () => number = Math.random
     treeChops = 0;
     fellBonus = per * FELL_BONUS_CHOPS;
     if (treeGoldenUntil && treeGoldenUntil > now) {
-      const g = GOLDEN_GOLD_MIN + Math.floor(rand() * (GOLDEN_GOLD_MAX - GOLDEN_GOLD_MIN + 1));
+      const roll = GOLDEN_GOLD_MIN + Math.floor(rand() * (GOLDEN_GOLD_MAX - GOLDEN_GOLD_MIN + 1));
+      const caps = capsToday(st, now);
+      const g = Math.max(0, Math.min(roll, GOLDEN_GOLD_PER_DAY - caps.goldenGold)); // 50 Gold a day, then Money and wood only
       const m = Math.max(GOLDEN_MONEY_PER_POWER, GOLDEN_MONEY_PER_POWER * axe.power);
-      golden = { gold: g, money: m };
-      st = addMoney({ ...st, gold: st.gold + g, goldenTreesFound: st.goldenTreesFound + 1 }, m);
+      golden = { gold: g, money: m, capped: g === 0 };
+      st = addMoney({ ...st, gold: st.gold + g, goldenTreesFound: st.goldenTreesFound + 1, caps: { ...caps, goldenGold: caps.goldenGold + g } }, m);
       fellBonus *= 3;
     }
     treeGoldenUntil = null;
@@ -1328,7 +1340,7 @@ export function rankInfo(totalMoney: number) {
  */
 export function addBoost(boosts: Boost[], kind: Boost['kind'], mult: number, hours: number, now: number, source: Boost['source'] = 'pack'): Boost[] {
   const add = hours * 3600_000;
-  const live = boosts.filter((b) => b.kind === kind && b.until > now && b.mult === mult).sort((a, b) => b.until - a.until)[0];
+  const live = boosts.filter((b) => b.kind === kind && b.until > now).sort((a, b) => b.until - a.until)[0]; // any running boost of this kind: one timer, never stacks
   if (live) return boosts.map((b) => (b === live ? { ...b, until: b.until + add } : b));
   return [...boosts.filter((b) => b.until > now), { kind, mult, until: now + add, source }];
 }
@@ -1450,6 +1462,7 @@ export function migrate(s: GameState): GameState {
   if (!st.woodMix) st = { ...st, woodMix: { pine: st.wood } };
   // Playbook 3
   if (typeof st.ads.lastVideoAt !== 'number' || typeof st.ads.instantUsed !== 'number') st = { ...st, ads: { dayKey: st.ads.dayKey, goldVideos: st.ads.goldVideos ?? 0, lastVideoAt: 0, instantUsed: 0 } };
+  if (!st.caps) st = { ...st, caps: { dayKey: '', goldenGold: 0, skips: 0, welcome2x: 0, boostHours: 0 } };
   if (!st.offers) st = { ...st, offers: { firstSeenAt: st.lastSaved || Date.now(), starterShown: false } };
   if (typeof st.plankVal !== 'number') st = { ...st, plankVal: st.planks * PLANK_BASE_PRICE };
   st = { ...st, stats: { ...emptyStats(), ...st.stats } };

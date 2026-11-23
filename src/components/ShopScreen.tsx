@@ -5,8 +5,8 @@ import { Icon } from './art/Icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { canClaimVip, claimVip, grantProduct, incomePerMin } from '../game/logic';
-import { ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, GOLD_PER_HOUR, STARTER_PACK_HOURS } from '../game/data';
-import { STARTER_ID, buyGoldItem, forSale, goldRepair, starterOnSale } from '../game/meta';
+import { ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, GOLD_PER_HOUR, STARTER_PACK_HOURS, TIME_SKIPS_PER_DAY } from '../game/data';
+import { STARTER_ID, adBoostHoursLeft, buyGoldItem, skipValue, clockText, forSale, goldRepair, msToMidnight, skipsLeft, starterOnSale } from '../game/meta';
 import { duration, money, whole } from '../game/format';
 import { buy, restore, useStore } from '../services/purchases';
 import { haptic } from '../services/haptics';
@@ -191,9 +191,17 @@ function StoreScreen() {
         <Card key={g.id} style={styles.packCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.packTitle}>{g.title}</Text>
-            <Text style={styles.perk}>{g.kind === 'skip' ? `+${money(incomePerMin(s, now) * 60)} right now.` : 'A 2x boost that is already running gets longer instead. Never above 2x.'}</Text>
+            <Text style={styles.perk}>
+              {g.kind !== 'skip'
+                ? adBoostHoursLeft(s, now) > 0
+                  ? 'Timed boost: 1 hour a day, ads and Gold together. Never stacks.'
+                  : `1 hour used today. More in ${clockText(msToMidnight(now))}.`
+                : skipsLeft(s, now) > 0
+                  ? `+${money(skipValue(s, now))} right now. ${skipsLeft(s, now)} of ${TIME_SKIPS_PER_DAY} Time Skips left today.`
+                  : `3 of 3 Time Skips used today. More in ${clockText(msToMidnight(now))}.`}
+            </Text>
           </View>
-          <Button small variant="gold" label={`${g.gold} Gold`} disabled={s.gold < g.gold} onPress={() => {
+          <Button small variant="gold" label={(g.kind === 'skip' ? skipsLeft(s, now) : adBoostHoursLeft(s, now)) <= 0 ? 'Used today' : `${g.gold} Gold`} disabled={s.gold < g.gold || (g.kind === 'skip' ? skipsLeft(s, now) : adBoostHoursLeft(s, now)) <= 0} onPress={() => {
             if (update((st) => buyGoldItem(st, g.id, Date.now()))) { haptic.success(); setMsg({ kind: 'ok', text: g.kind === 'skip' ? 'Time skipped!' : `${g.title} started!` }); }
           }} />
         </Card>

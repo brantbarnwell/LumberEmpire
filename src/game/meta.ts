@@ -4,10 +4,10 @@ import {
   DAILY_QUEST_MONEY_MIN, DAILY_REWARDS, GOLD_REPAIR_ALL, GOLD_SHOP, PRESTIGE_AT, QuestDef, WEEKLY_QUESTS, WEEKLY_QUEST_GOLD,
   WEEKLY_QUEST_BOOST_HOURS, WEEKLY_QUEST_MONEY_MIN, PRESTIGE_GOLD, COSMETICS, RARE_COSMETICS, RARE_EXTRA_GOLD, CosmeticKind,
   HELPERS, LAND, LAND_UPGRADES, TOOLS, SAWMILL_LEVELS, WORKSHOPS, YARD_SELLER_COST, MANAGER_COST, RIVALS,
-  AD_PILL_COOLDOWN_MIN, AD_PILL_UNLOCK_SEC, AD_FREE_INSTANT_PER_DAY, STARTER_PACK_HOURS, PRODUCTS,
+  AD_PILL_COOLDOWN_MIN, AD_BOOST_HOURS_PER_DAY, AD_BOOST_MULT, WELCOME_2X_PER_DAY, TIME_SKIPS_PER_DAY, AD_PILL_UNLOCK_SEC, AD_FREE_INSTANT_PER_DAY, STARTER_PACK_HOURS, PRODUCTS,
 } from './data';
 import {
-  GameState, Quest, addBoost, prodBoostLeftMs, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
+  GameState, Quest, addBoost, prodBoostLeftMs, capsToday, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
   weekKeyOf, woodPerMinEstimate, hireCost, levelCost, landUpgradeCost, sawmillNextCost, storageUpgradeCost, systemUnlocked, unitPrice,
   workshopUnlocked,
 } from './logic';
@@ -306,14 +306,40 @@ export function adBoostLeftMs(s: GameState, now: number) {
   return prodBoostLeftMs(s, now);
 }
 
-export function canAdBoost(s: GameState, now: number) {
-  return adBoostLeftMs(s, now) + AD_BOOST_MINUTES * 60000 <= AD_BOOST_MAX_MINUTES * 60000;
+/** Timed boost hours left today, ads and Gold buys combined (cap 1). */
+export function adBoostHoursLeft(s: GameState, now: number) {
+  return Math.max(0, AD_BOOST_HOURS_PER_DAY - capsToday(s, now).boostHours);
 }
 
-/** 2x production for 1 hour. Watching again adds 1 hour (up to 6 hours). It never goes above 2x. */
+export function canAdBoost(s: GameState, now: number) {
+  return adBoostHoursLeft(s, now) >= AD_BOOST_MINUTES / 60 && adBoostLeftMs(s, now) + AD_BOOST_MINUTES * 60000 <= AD_BOOST_MAX_MINUTES * 60000;
+}
+
+/** 1.5x production for 1 hour, 1 hour a day (ads and Gold combined). Shares one timer, never stacks. */
 export function rewardAdBoost(s: GameState, now: number): GameState | null {
   if (!canAdBoost(s, now)) return null;
-  return { ...s, boosts: addBoost(s.boosts, 'wood', 2, AD_BOOST_MINUTES / 60, now, 'ad') };
+  const c = capsToday(s, now);
+  return { ...s, boosts: addBoost(s.boosts, 'wood', AD_BOOST_MULT, AD_BOOST_MINUTES / 60, now, 'ad'), caps: { ...c, boostHours: c.boostHours + AD_BOOST_MINUTES / 60 } };
+}
+
+/** Welcome-back 2x: once a day. Collect is always free. */
+export function welcome2xLeft(s: GameState, now: number) {
+  return Math.max(0, WELCOME_2X_PER_DAY - capsToday(s, now).welcome2x);
+}
+
+export function useWelcome2x(s: GameState, now: number): GameState {
+  const c = capsToday(s, now);
+  return { ...s, caps: { ...c, welcome2x: c.welcome2x + 1 } };
+}
+
+/** 1 hour of normal production: without timed 2x boosts or a Golden Log Frenzy, so a skip can't be multiplied. */
+export function skipValue(s: GameState, now: number) {
+  return incomePerMin({ ...s, boosts: [], frenzyUntil: 0 }, now) * 60;
+}
+
+/** Time Skips left today (3 a day = 3 hours of production). */
+export function skipsLeft(s: GameState, now: number) {
+  return Math.max(0, TIME_SKIPS_PER_DAY - capsToday(s, now).skips);
 }
 
 // ---------- Gold shop (sell time, not power) ----------
@@ -321,8 +347,15 @@ export function rewardAdBoost(s: GameState, now: number): GameState | null {
 export function buyGoldItem(s: GameState, id: string, now: number): GameState | null {
   const it = GOLD_SHOP.find((x) => x.id === id);
   if (!it || s.gold < it.gold) return null;
-  if (it.kind === 'skip') return addMoney({ ...s, gold: s.gold - it.gold }, incomePerMin(s, now) * 60 * it.hours);
-  return { ...s, gold: s.gold - it.gold, boosts: addBoost(s.boosts, it.kind, 2, it.hours, now, 'gold') };
+  if (it.kind === 'skip') {
+    if (skipsLeft(s, now) <= 0) return null; // 3 a day; Gold above that waits for tomorrow
+    const c = capsToday(s, now);
+    return addMoney({ ...s, gold: s.gold - it.gold, caps: { ...c, skips: c.skips + 1 } }, skipValue(s, now) * it.hours);
+  }
+  // 2x boosts bought with Gold share the daily 2-hour cap with the ad boost
+  if (adBoostHoursLeft(s, now) < it.hours || adBoostLeftMs(s, now) + it.hours * 3600_000 > AD_BOOST_MAX_MINUTES * 60000) return null;
+  const c = capsToday(s, now);
+  return { ...s, gold: s.gold - it.gold, boosts: addBoost(s.boosts, it.kind, AD_BOOST_MULT, it.hours, now, 'gold'), caps: { ...c, boostHours: c.boostHours + it.hours } };
 }
 
 /** Spec: 10 Gold repairs the axe and every tool to 100%, no Money. */

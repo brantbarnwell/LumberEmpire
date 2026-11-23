@@ -76,7 +76,7 @@ for (let i = 0; i < 7; i++) ad = rewardGoldVideo(ad, MON + i * 8 * 60_000) ?? ad
 ok(ad.gold === 25 && goldVideosLeft(ad, MON + 3600_000) === 0, 'free Gold videos capped at 5 a day');
 let b = { ...newGame(MON), boosts: addBoost([], 'wood', 2, 1, MON) };
 b = rewardAdBoost(b, MON)!;
-ok(Math.abs(woodMultFor(b, MON, 'pine') - 2) < 1e-9 && b.boosts.filter((x) => x.until > MON).length === 1 && Math.abs(b.boosts[0].until - MON - 2 * 3600_000) < 1, 'Playbook 3: two 2x boosts = 2x for 2 hours, never 4x');
+ok(Math.abs(woodMultFor(b, MON, 'pine') - 2) < 1e-9 && b.boosts.filter((x) => x.until > MON).length === 1 && Math.abs(b.boosts[0].until - MON - 2 * 3600_000) < 1, 'boosts share one timer: an ad boost on top of a running 2x makes it longer, never stacks');
 ok(Math.abs(moneyMult({ ...newGame(MON), vipActive: true, boosts: addBoost([], 'money', 2, 1, MON) }, MON) - 3) < 1e-9, 'VIP 2x + money 2x = 3x');
 let off = computeOffline({ ...h, wood: 0, selling: false, storageLevel: 9, lastSaved: MON - 20 * 3600_000 }, MON);
 ok(!!off.result && Math.abs(off.result.produced - 2.5 * 0.5 * 8 * 3600) < 1, `offline: 50% rate, 8h cap (${Math.round(off.result!.produced)} wood)`);
@@ -421,7 +421,32 @@ import * as PD from '../src/game/data';
   // boosts
   let bb = newGame(MON);
   for (let i = 0; i < 8; i++) bb = PM.rewardAdBoost(bb, MON) ?? bb;
-  ok(Math.abs(PM.adBoostLeftMs(bb, MON) - 6 * 3600_000) < 1 && woodMultFor(bb, MON, 'pine') === 2, 'ad boost: 1 hour each, stacks time to max 6 hours, stays 2x');
+  ok(Math.abs(PM.adBoostLeftMs(bb, MON) - 3600_000) < 1 && woodMultFor(bb, MON, 'pine') === 1.5 && PM.adBoostHoursLeft(bb, MON) === 0, 'timed boost: 1.5x for 1 hour, 1 hour a day');
+  ok(PM.buyGoldItem({ ...bb, gold: 100 }, 'wood1h', MON) === null, 'Gold-bought boost shares the 1 hour a day: refused after the ad boost');
+  const gbb = PM.buyGoldItem({ ...newGame(MON), gold: 100 }, 'wood1h', MON)!;
+  ok(!!gbb && gbb.gold === 80 && PM.rewardAdBoost(gbb, MON) === null, 'a Gold boost uses up the ad boost too');
+  ok(!PD.GOLD_SHOP.some((g) => g.id === 'wood24h'), 'the 24-hour Gold boost is no longer sold');
+  ok(!!PM.rewardAdBoost(bb, MON + 24 * 3600_000), 'timed boost: resets at midnight');
+  // Time Skip: 3 a day, 1 normal hour
+  let ts = { ...newGame(MON), gold: 200 } as GameState;
+  for (let i = 0; i < 5; i++) ts = PM.buyGoldItem(ts, 'skip1h', MON) ?? ts;
+  ok(ts.gold === 140 && PM.skipsLeft(ts, MON) === 0 && PM.skipsLeft(ts, MON + 24 * 3600_000) === 3, 'Time Skip: 3 a day, Gold above that waits for tomorrow');
+  const sk = { ...newGame(MON), gold: 20, helpers: { apprentice: { count: 10, level: 0 } } } as GameState;
+  const plain = PM.buyGoldItem(sk, 'skip1h', MON)!.money;
+  const boosted = PM.buyGoldItem({ ...sk, boosts: addBoost([], 'wood', 2, 1, MON), frenzyUntil: MON + 30_000 }, 'skip1h', MON)!.money;
+  ok(Math.abs(plain - boosted) < 1e-6, 'Time Skip pays 1 normal hour, never boosted by a 2x boost or a Frenzy');
+  // Golden Trees: 50 Gold a day
+  let gt = devSpawnGolden({ ...newGame(MON), caps: { dayKey: L24.dayKeyOf(MON), goldenGold: 45, skips: 0, welcome2x: 0, boostHours: 0 } }, MON);
+  let gr: any = null;
+  for (let i = 0; i < 18 && !gr; i++) { const r = chop(gt, MON + 1000, () => 0.99); gt = r.state; if (r.result.golden) gr = r.result.golden; }
+  ok(gr && gr.gold === 5 && !gr.capped && gt.gold === 5, 'Golden Tree: rolls 5-15 Gold but stops at 50 a day (45 + 5)');
+  gt = devSpawnGolden(gt, MON + 2000); gr = null;
+  const m0 = gt.money;
+  for (let i = 0; i < 18 && !gr; i++) { const r = chop(gt, MON + 3000, () => 0.5); gt = r.state; if (r.result.golden) gr = r.result.golden; }
+  ok(gr && gr.gold === 0 && gr.capped && gt.gold === 5 && gt.money > m0, 'after the cap: bonus Money and golden wood only, "Gold cap reached for today"');
+  // welcome-back 2x: once a day
+  const wbs = PM.useWelcome2x(newGame(MON), MON);
+  ok(PM.welcome2xLeft(wbs, MON) === 0 && PM.welcome2xLeft(wbs, MON + 24 * 3600_000) === 1, 'welcome-back 2x: once a day, back at midnight');
   const perm = { ...grantProduct(newGame(MON), 'com.lumberempire.prod2x', 'pp', MON)!, boosts: addBoost([], 'wood', 2, 1, MON) };
   ok(Math.abs(woodMultFor(perm, MON, 'pine') - 3) < 1e-9, '2x Production Forever + 2x boost = 3x (they add)');
   const permP = doPrestige({ ...perm, runMoneyEarned: PRESTIGE_AT * 4 }, MON)!;

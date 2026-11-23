@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import { addMoney, collectOffline, collectOfflineBonus, offlineCapHours, sellAll, unitPrice } from '../game/logic';
-import { adFree, buyIdeas, instantLeft, instantUsedText, useInstant } from '../game/meta';
+import { adFree, buyIdeas, instantLeft, instantUsedText, useInstant, useWelcome2x, welcome2xLeft } from '../game/meta';
 import { AD_OFFLINE_MULT } from '../game/data';
 import { runAdReward } from '../game/adflow';
 import { saveGame } from '../game/save';
@@ -68,10 +68,10 @@ export function WelcomeBack() {
     const e = await runAdReward({
       adFree: adFree(getState()),
       show: showRewardedVideo,
-      canGrant: () => !!getState().pendingOffline && instantLeft(getState(), Date.now()) > 0,
+      canGrant: () => !!getState().pendingOffline && instantLeft(getState(), Date.now()) > 0 && welcome2xLeft(getState(), Date.now()) > 0,
       grant: () => {
         const ok = collect(AD_OFFLINE_MULT);
-        if (ok) update((st) => useInstant(st, Date.now())); // Remove Ads: this was today's 1 instant reward
+        if (ok) update((st) => useInstant(useWelcome2x(st, Date.now()), Date.now())); // once a day; Remove Ads: also today's 1 instant reward
         if (ok) saveGame(getState());
         return ok;
       },
@@ -80,7 +80,8 @@ export function WelcomeBack() {
     if (e) setErr(e);
   };
   const cap = offlineCapHours(s);
-  const showAd = !managed && (free || adReady()); // never offer a video that can't play
+  const daily2xUsed = welcome2xLeft(s, now) <= 0; // pacing: the 2x is once a day, Collect is always free
+  const showAd = !managed && !daily2xUsed && (free || adReady()); // never offer a video that can't play
   const used = instantLeft(s, now) <= 0; // Remove Ads: today's 1 instant reward is already used
 
   return (
@@ -109,6 +110,7 @@ export function WelcomeBack() {
           </View>
         )}
         {err && <Text style={styles.err}>{err}</Text>}
+        {!managed && daily2xUsed && <Text style={styles.used}>2x used today. Collect is always free.</Text>}
         <View style={styles.buttons}>
           <Button style={{ flex: 1 }} label={managed ? 'OK' : 'Collect'} sub={managed ? undefined : money(total)} disabled={busy} onPress={() => (managed ? update((st) => ({ ...st, pendingOffline: null })) : collect(1))} />
           {showAd && (
@@ -145,6 +147,7 @@ const styles = StyleSheet.create({
   ideaName: { fontSize: 14, fontWeight: '900', color: C.ink, flex: 1 },
   ideaCost: { fontSize: 14, fontWeight: '900', color: C.money },
   buttons: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 12 },
+  used: { fontSize: 13, fontWeight: '900', color: C.inkSoft, textAlign: 'center', marginTop: 8 },
   err: { color: C.red, fontWeight: '800', fontSize: 12.5, textAlign: 'center', marginTop: 6 },
   small: { fontSize: 11, color: C.inkSoft, fontWeight: '600', textAlign: 'center', marginTop: 10 },
 });

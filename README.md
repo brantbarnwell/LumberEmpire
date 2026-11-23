@@ -104,7 +104,8 @@ Built:
   - Helpers and the Sawmill work the wood of the land they're on.
   - Logs fly into the counter in the right colour.
 - Playbook 3 (GAME_SPEC.md, "Playbook 3: make money"):
-  - Rewarded ads only: welcome back 2x, a 1-hour 2x boost (up to 6 h), and the Watch Ad pill on the home screen.
+  - Rewarded ads only: welcome back 2x (once a day), a 1.5x boost (1 hour a day), and the Watch Ad pill on the home screen.
+  - Daily caps: 3 Time Skips, 50 Gold from Golden Trees.
   - The pill pays +5 Gold a video, has a 7 min cooldown and is capped at 5 a day.
   - Remove Ads: 1 instant ad reward a day in total.
   - Store: Starter Pack $2.99, the 6 Gold packs from section 3, Remove Ads + Gold, 2x Forever, 24 h offline. Old packs are retired. VIP is hidden for now.

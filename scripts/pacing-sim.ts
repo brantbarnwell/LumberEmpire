@@ -17,7 +17,7 @@ if (process.env.LANDK) { const k = Number(process.env.LANDK); LAND.slice(Number(
 if (process.env.CREW) { const c = Number(process.env.CREW); LAND.forEach((l, i) => { if (i >= Number(process.env.CREWFROM ?? 0)) l.crew = Math.min(l.crew, c); }); }
 if (process.env.COSTK) { const k = Number(process.env.COSTK); HELPERS.slice(3).forEach((h) => (h.cost *= k)); }
 if (process.env.LATE) { const k = Number(process.env.LATE); HELPERS.slice(Number(process.env.LATEH ?? 2)).forEach((h) => (h.woodPerSec *= k)); LAND.slice(2).forEach((l) => (l.woodPerSec *= k)); }
-let seed = 7;
+let seed = Number(process.env.SEED ?? 7);
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const T0 = new Date(2026, 10, 23 + Number(process.env.START ?? 0), 10, 0, 0).getTime(); // START=days after Monday Nov 23
 
@@ -108,6 +108,7 @@ function early(tps: number, t0 = T0) {
   return { firsts, out };
 }
 
+if (!process.env.SKIPEARLY) {
 console.log('=== Early game (fixed buying order, steady tapping) ===');
 console.log(`Targets: first axe ${PACING_TARGETS.firstAxeMinutes}m, helper ${PACING_TARGETS.firstHelperMinutes}m, land ${PACING_TARGETS.firstLandMinutes}m, workshop ${PACING_TARGETS.firstWorkshopMinutes}m (shed counts when built)`);
 for (const tps of [1.5, 2, 3]) {
@@ -122,6 +123,7 @@ for (const tps of [1.5, 2, 3]) {
   const runs = Array.from({ length: 7 }, (_, i) => early(2, new Date(2026, 10, 23 + i, 10).getTime()).firsts);
   const med = (k: string) => { const v = runs.map((r) => r[k]).sort((a, b) => a - b); return `${v[3].toFixed(0)}m (${v[0].toFixed(0)}-${v[6].toFixed(0)})`; };
   console.log('2 taps/sec, 7 different start days, typical (range): ' + keys.map((k) => `${k} ${med(k)}`).join(' | '));
+}
 }
 
 (globalThis as any).__planMode = false;
@@ -168,6 +170,7 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
 function days(nDays: number) {
   let s = newGame(T0);
   // ADS=free: 5 Gold videos a day (pill, 7 min cooldown). ADS=freemax: also welcome-back 2x every return and the 1h boost.
+  // ADS=golden: no ads, but all Gold (Golden Trees) spent on Time Skips. ADS=all: freemax + golden together.
   // ADS=payer: Remove Ads (+400 Gold), 1 instant reward a day, used on the first welcome-back 2x of the day (the best one).
   // With ADS set, Gold is spent on Time Skips (20 Gold = 1 hour of production now).
   const ADS = process.env.ADS ?? '';
@@ -182,17 +185,19 @@ function days(nDays: number) {
   const marks = [5e6, 1e7, 2.5e7, 5e7, 1e8, 2.5e8];
   const hits: string[] = [];
   for (let d = 0; d < nDays; d++) {
+    if (process.env.QUICK && prestigeAt !== null) break; // QUICK=1: stop at prestige
     for (const h of sessionStarts) {
       const start = T0 + d * 86400_000 + (h - 10) * 3600_000;
       if (start > now) {
         s = { ...s, lastSaved: now };
         const off = computeOffline(s, start);
         let mult = 1;
-        if (off.result && (ADS === 'freemax' || (ADS === 'payer' && M.instantLeft(off.state, start) > 0))) {
-          mult = 2;
+        const allAds = ADS === 'freemax' || ADS === 'all';
+        if (off.result && M.welcome2xLeft(off.state, start) > 0 && (allAds || (ADS === 'payer' && M.instantLeft(off.state, start) > 0))) {
+          mult = 1 + Math.min(1, (Number(process.env.WB_H ?? 99) * 3600) / off.result.away); // WB_H: 2x on at most N hours away
         }
         s = off.result ? collectOffline(off.state, off.result, mult) : off.state;
-        if (mult === 2 && ADS === 'payer') s = M.useInstant(s, start);
+        if (mult > 1) s = M.useInstant(M.useWelcome2x(s, start), start);
         if (process.env.TRACE && d < 2) console.log(`  offline to ${h}h: +$${Math.round(off.result?.earned ?? 0)} sold ${Math.round(off.result?.sold ?? 0)} made ${Math.round(off.result?.produced ?? 0)} wood=${Math.round(s.wood)} price=${s.sellPrice} buyers=${s.buyers.wood.toFixed(1)} owed=${Math.round(s.wagesOwed)}`);
         now = start;
       }
@@ -200,13 +205,14 @@ function days(nDays: number) {
         now += 1000;
         s = chop(s, now, rand).state;
         const goldBefore = s.gold;
-        if (ADS === 'free' || ADS === 'freemax') s = M.rewardGoldVideo(s, now) ?? s;
-        if (ADS === 'freemax') s = M.rewardAdBoost(s, now) ?? s;
+        if (ADS === 'free' || ADS === 'freemax' || ADS === 'all') s = M.rewardGoldVideo(s, now) ?? s;
+        if ((ADS === 'freemax' || ADS === 'all') && (now - T0) / 1000 >= Number(process.env.BOOST_AFTER_H ?? 0) * 3600) s = M.rewardAdBoost(s, now) ?? s; // BOOST_AFTER_H: what-if only
         // only Gold from ads is spent (Gold from golden trees etc. is left alone, as in the no-ads run)
         if (ADS) {
           const g = s.gold - goldBefore;
           if (g > 0) adGold += g;
-          while (adGold >= 20) { const n = M.buyGoldItem(s, 'skip1h', now); if (!n) break; s = n; adGold -= 20; }
+          if (ADS === 'golden' || ADS === 'all' || ADS === 'goldboost') adGold = s.gold; // spend every Gold, Golden Trees included
+          while (adGold >= 20) { const n = M.buyGoldItem(s, ADS === 'goldboost' ? 'wood1h' : 'skip1h', now); if (!n) break; s = n; adGold -= 20; }
         }
         s = upkeep(tick(s, 1, now), now);
         for (let k = 0; k < 5; k++) {
@@ -218,6 +224,8 @@ function days(nDays: number) {
         }
         if (prestigeAt === null && canPrestige(s)) { prestigeAt = (now - T0) / 86400_000; gainAt = prestigeGain(s); }
         if (process.env.TRACE && d < 2 && t === 1799) console.log(`  session ${h}h end: earned ${Math.round(s.runMoneyEarned)} money ${Math.round(s.money)} wood=${Math.round(s.wood)} helpers=${Object.values(s.helpers).reduce((a, x) => a + x.count, 0)} price=${s.sellPrice} rate=${(require('../src/game/logic').salesPerSec(s)).toFixed(2)} buyers=${s.buyers.wood.toFixed(1)}`);
+        if (process.env.BTRACE && (t === 0 || t === 1799) && d < 3) console.log(`  d${d + 1} ${h}h t=${t}: boosts ${JSON.stringify(s.boosts.map((b) => ({ k: b.kind, m: b.mult, left: Math.round((b.until - now) / 60000), src: b.source })))} caps ${JSON.stringify(s.caps)} gold ${s.gold}`);
+        if (process.env.PROGRESS && t === 1799) console.log(`  d${d + 1} ${h}h: ${(100 * s.runMoneyEarned / PRESTIGE_AT).toFixed(1)}% of prestige`);
         while (marks.length && s.runMoneyEarned >= marks[0]) hits.push(`$${marks.shift()! / 1e6}M after ${((now - T0) / 86400_000).toFixed(1)} days`);
       }
     }

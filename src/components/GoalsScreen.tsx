@@ -9,10 +9,10 @@ import { update, useGame } from '../game/store';
 import { rushInfo } from '../game/logic';
 import {
   adBoostLeftMs, adFree, canAdBoost, canClaimLogin, canPrestige, claimLogin, loginIndexNow, claimQuest, dailyQuestMoney, doPrestige,
-  instantLeft, instantUsedText, loginRewardText, prestigeGain, prestigePreview, prestigeProgress, weeklyBoard, questLabel, questProgress, rewardAdBoost,
+  instantLeft, instantUsedText, adBoostHoursLeft, clockText, msToMidnight, loginRewardText, prestigeGain, prestigePreview, prestigeProgress, weeklyBoard, questLabel, questProgress, rewardAdBoost,
 } from '../game/meta';
 import {
-  AD_BOOST_MINUTES, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, DAILY_QUEST_GOLD, DAILY_REWARDS, PRESTIGE_AT, PRESTIGE_NAME,
+  AD_BOOST_MINUTES, AD_BOOST_MULT, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, DAILY_QUEST_GOLD, DAILY_REWARDS, PRESTIGE_AT, PRESTIGE_NAME,
   WEEKLY_QUEST_GOLD, WOOD_NAMES,
 } from '../game/data';
 import { duration, money, small, whole } from '../game/format';
@@ -107,12 +107,16 @@ export function GoalsScreen() {
         <Text style={styles.small}>Free Gold: the Watch Ad button on Home, +{AD_GOLD_PER_VIDEO} Gold, {AD_GOLD_VIDEOS_PER_DAY} a day.</Text>
         <View style={styles.freeRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>2x production for {AD_BOOST_MINUTES / 60} hour</Text>
-            <Text style={styles.small}>{adBoostLeftMs(s, now) > 0 ? `Active: ${duration(adBoostLeftMs(s, now))} left. Another adds 1 hour (max 6h), never more than 2x` : 'Chopping, helpers and land'}</Text>
+            <Text style={styles.name}>{AD_BOOST_MULT}x production for {AD_BOOST_MINUTES / 60} hour</Text>
+            <Text style={styles.small}>
+              {adBoostHoursLeft(s, now) <= 0
+                ? `1 hour used today. More in ${clockText(msToMidnight(now))}`
+                : `${adBoostLeftMs(s, now) > 0 ? `Active: ${duration(adBoostLeftMs(s, now))} left. ` : ''}1 hour a day (ads and Gold together)`}
+            </Text>
           </View>
           <Button
             small
-            label={instantLeft(s, now) <= 0 ? '1 of 1 used' : free ? 'Claim' : '▶ Watch'}
+            label={adBoostHoursLeft(s, now) <= 0 ? '1 hour used today' : instantLeft(s, now) <= 0 ? '1 of 1 used' : free ? 'Claim' : '▶ Watch'}
             loading={busy === 'boost'}
             disabled={!!busy || !canAdBoost(s, now) || instantLeft(s, now) <= 0}
             onPress={() => reward('boost', (st) => rewardAdBoost(st, Date.now()))}

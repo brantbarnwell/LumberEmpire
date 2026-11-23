@@ -202,12 +202,12 @@ Weather affects chopping, selling, and the price the player should set.
 
 ## 12. Rare golden trees
 
-- Spawn chance about 1 in 500 trees, 0.2% when a new tree grows. Fully random, cannot be farmed.
+- Spawn chance 1 in 200 trees (0.5% when a new tree grows). Fully random, cannot be farmed.
 - Golden tree glows gold, sparkles, has a gold icon, and makes a special sound.
 - Only stays for 60 seconds. If not chopped in time, it disappears.
-- If chopped down, player gets a small amount of Gold only, 3 to 10 Gold random. Keep the reward small.
-- Also gives bonus Money and golden wood.
-- Pop up: "You found a Golden Tree! +7 Gold". Add to Golden Trees Found counter in achievements.
+- If chopped down: 5 to 15 Gold random, plus bonus Money and golden wood.
+- Max 50 Gold a day from Golden Trees (resets at midnight). After the cap, a Golden Tree gives bonus Money and golden wood only, and shows "Gold cap reached for today".
+- Pop up: "GOLDEN TREE! +7 Gold". Add to Golden Trees Found counter in achievements.
 
 ## 13. Workshop building chain - shed to factory
 
@@ -574,16 +574,21 @@ Rewarded ads only (no forced ads, no interstitials):
   - Cap: "New ads in 6:12:08 · 5 of 5 used today", counting down to midnight.
   - Hidden: in the first 4 minutes of play, while tapping (back 2.5 s after the last chop), behind the welcome-back screen, and when no video is loaded.
   - Pulses only when a new offer becomes ready.
-- **Welcome back (Money):** "Watch ad for 2x offline earnings", once per return, plain Collect beside it. Hidden when no video is loaded.
-- **Timed boost (Money, Goals tab):** 2x production for 1 hour. Each extra ad adds 1 hour, up to 6 hours.
-  - All timed 2x boosts share one timer and never go above 2x (never 4x).
-  - Permanent purchases and Timber Rush add on top: 2x boost + 2x Forever = 3x. Prestige multiplies everything.
+- **Welcome back (Money):** "Watch ad for 2x offline earnings", **once a day** (pacing tightening). Collect is always free, unlimited returns. After the daily 2x is used, the screen shows Collect only with "2x used today. Collect is always free." Hidden when no video is loaded.
+- **Timed boost (Money, Goals tab), pacing tightening:** **1.5x production for 1 hour, 1 hour a day.** Ads and Gold buys count together.
+  - Muse's 2x for 2 hours a day, then 2x for 30 minutes a day, both left the every-ad player under 2.5 days. Brant's fallback (1.5x for 1 hour a day) is what's built.
+  - After the hour is used, the button shows "1 hour used today" with a countdown to midnight.
+  - The Gold Shop sells the same boost: 1.5x for 1 hour, 20 Gold, sharing the 1 hour a day. The 24-hour Gold boost is no longer sold; one already running is kept until it ends.
+  - All timed boosts share one timer and never stack: a new one makes the running one longer.
+  - Permanent purchases and Timber Rush add on top: 1.5x boost + 2x Forever = 2.5x. Prestige multiplies everything.
 - **Paying out:** rewards are paid when the video finishes (AdMob "earned reward") and saved at once, never when it opens. Closed early or failed = nothing. A video that fails to load retries 30 s later.
 - **Remove Ads, expert rule:** after buying Remove Ads, every ad reward is instant with no video, but only 1 a day in total, across the home Gold pill, the welcome-back 2x and the timed boost.
   - After the 1 is used, the other ad buttons that day show "1 of 1 used today, new rewards tomorrow" with a countdown to midnight. The home pill shows "1 of 1 used today", greyed, no reward.
   - The cap resets to 1 at midnight.
   - The same rule applies to the old Remove Ads and to VIP.
-- **Time Skip:** 20 Gold = 1 hour of production now.
+- **Time Skip:** 20 Gold = 1 hour of normal production now, **3 a day** (3 hours). Gold above that can't be spent on Time Skips that day. At the cap the Shop shows "3 of 3 Time Skips used today. More in 5:12:03." A Time Skip always pays 1 normal hour: a running boost or a Golden Log Frenzy doesn't multiply it (exploit fix).
+- **Golden Trees:** max 50 Gold a day (section 12). After that, bonus Money and golden wood only, with "Gold cap reached for today".
+- **Daily caps reset at midnight** (local time).
 - **Interstitials (later, if ever):** max 1 per 3 minutes, only at natural breaks (after prestige), never mid-chop, never for payers, never right after a rewarded ad.
 
 Store, in this order (product list in section 3, code in `src/game/data.ts` PRODUCTS):
@@ -598,12 +603,16 @@ Notes:
 - The Sawmill card says plainly that a Sawmill kept through prestige can no longer be bought.
 - VIP is hidden until monthly content ships.
 
-Pacing, Monday start, 2 taps/sec (`ADS=... npm run pacing`). Gold from ads is spent on Time Skips:
-| Player | Prestige |
-|---|---|
-| No ads | 3.46 days |
-| Free, 5 Gold videos a day | 3.08 days |
-| Payer, 1 instant reward a day (morning welcome-back 2x) + the 400 Gold | 2.92 days |
-| Free, every ad every time (5 Gold, welcome-back 2x each return, boosts) | 1.46 days (below the 2.5-day target, not changed in this fix) |
-| With 2x Forever | 1.92 days |
-| With the Starter Pack | 2.92 days |
+Pacing after the tightening, 2 taps/sec, by start day (`ADS=... START=0..6 npm run pacing`). Gold from ads is spent on Time Skips. Target 2.5 to 3.9 days.
+| Player | Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+|---|---|---|---|---|---|---|---|
+| No ads | 3.46 | 3.46 | 3.29 | 2.93 | 2.92 | 2.92 | 2.92 |
+| Free, 5 Gold videos a day | 3.08 | 3.08 | 2.92 | 2.92 | 2.92 | 2.47 | 2.47 |
+| Payer, 1 instant reward a day (morning welcome-back 2x) + 400 Gold | 2.92 | 2.92 | 2.92 | 2.31 | 2.09 | 2.29 | 2.29 |
+| Free, every ad every time (5 Gold videos, welcome-back 2x once a day, 1 hour 1.5x boost) | 2.46 | 2.92 | 2.92 | 2.46 | 2.08 | 2.08 | 2.29 |
+| Golden Trees only, all Gold (max 50 a day) on Time Skips (max 3 a day) | 2.93 | 2.92 | 2.92 | 2.29 | 2.29 | 2.29 | 2.92 |
+
+Known issue, not fixed here (no other changes allowed in this update):
+- Starts from Thursday to Sunday get the Timber Rush weekend. With no ads at all, those runs are already 94–95% of the way to prestige at the 2.46-day session, so almost any extra help tips them under 2.5 days. That's why even 5 Gold videos a day drops Sat and Sun to 2.47.
+- The fix has to come from the base game, for example a slightly higher prestige target or a smaller Rush. More ad caps can't fix it.
+- The simulator's random seed alone can move a result by up to 0.6 days.
