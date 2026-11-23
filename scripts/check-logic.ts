@@ -480,3 +480,10 @@ import * as PD from '../src/game/data';
   ok(['propack', 'megapack', 'landpack'].every((id) => PD.PRODUCTS.find((p) => p.id === `com.lumberempire.${id}`)!.hidden) && !!grantProduct(newGame(MON), 'com.lumberempire.megapack', 'old1', MON), 'Pro / Empire / Land Baron packs: hidden, but old buyers still restore');
   ok(PRODUCTS.find((p) => p.id === 'com.lumberempire.noads2')!.removes!.length > 20, 'Remove Ads says what it removes');
 }
+
+{
+  // old saves (update 2) can hold quest ids that no longer exist
+  const old = { ...newGame(MON), daily: { dayKey: L24.dayKeyOf(MON), quests: [{ id: 'sell', target: 10, baseline: 0, claimed: false }] } } as GameState;
+  const fixed = ensureQuests(old, MON);
+  ok(fixed.daily.quests.length === 3 && fixed.daily.quests.every((q) => q.id !== 'sell'), 'old quests from an older version are replaced, no crash');
+}

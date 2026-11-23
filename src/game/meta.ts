@@ -144,14 +144,16 @@ function available(def: QuestDef, s: GameState) {
 export function ensureQuests(s: GameState, now: number): GameState {
   let st = s;
   const dk = dayKeyOf(now);
-  if (st.daily.dayKey !== dk) {
+  const known = (id: string) => [...DAILY_QUESTS, ...WEEKLY_QUESTS].some((q) => q.id === id);
+  // saves from older versions can hold quests that no longer exist: roll new ones
+  if (st.daily.dayKey !== dk || st.daily.quests.some((q) => !known(q.id))) {
     const pool = DAILY_QUESTS.filter((d) => available(d, st));
     const picked = [...pool].sort((a, b) => hash(dk + a.id) - hash(dk + b.id)).slice(0, 3);
     const quests: Quest[] = picked.map((d) => ({ id: d.id, target: targetFor(d, st, now), baseline: st.stats[d.metric], claimed: false }));
     st = { ...st, daily: { dayKey: dk, quests } };
   }
   const wk = weekKeyOf(now);
-  if (st.weekly.weekKey !== wk) {
+  if (st.weekly.weekKey !== wk || (st.weekly.quest && !known(st.weekly.quest.id))) {
     const d = WEEKLY_QUESTS[Math.floor(hash('wk' + wk) * WEEKLY_QUESTS.length)];
     st = { ...st, weekly: { weekKey: wk, quest: { id: d.id, target: targetFor(d, st, now), baseline: st.stats[d.metric], claimed: false } } };
   }
@@ -164,11 +166,13 @@ export function questDef(id: string) {
 
 export function questProgress(s: GameState, q: Quest) {
   const d = questDef(q.id);
+  if (!d) return 0; // a quest from an older version, replaced on the next tick
   return Math.min(q.target, Math.max(0, s.stats[d.metric] - q.baseline));
 }
 
 export function questLabel(q: Quest) {
   const d = questDef(q.id);
+  if (!d) return 'New quest coming';
   const n = d.metric === 'moneyEarned' ? fmtMoney(q.target) : whole(q.target);
   return d.label(n);
 }
