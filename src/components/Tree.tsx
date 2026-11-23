@@ -130,8 +130,8 @@ export function Tree({
   const origin = useRef({ x: 0, y: 0 });
 
   // size and place the tree at the bottom middle of the tap area
-  const scale = Math.max(0.6, Math.min(1.05, (areaH - 24) / TREE_H, (areaW * 0.66) / TREE_W));
-  const cx = areaW * 0.42; // a little left of centre so the sawmill shows on the right
+  const scale = Math.max(0.6, Math.min(1.05, (areaH - 24) / TREE_H, (areaW * 0.62) / TREE_W));
+  const cx = areaW * 0.38; // left of centre: the sawmill shows on the right, and the Watch Ad pill (Playbook 3) sits mid-right clear of the tree
   const left = cx - TREE_W / 2;
   const top = areaH - TREE_H - (TREE_H * (scale - 1)) / 2 - 10;
 

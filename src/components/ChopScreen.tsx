@@ -19,6 +19,7 @@ import { Icon } from './art/Icons';
 import { showToast } from './Celebrate';
 import { feel, fly, lessMotion } from '../services/feel';
 import { C } from './theme';
+import { WatchAdPill } from './WatchAdPill';
 
 const ND = Platform.OS !== 'web';
 
@@ -84,6 +85,9 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
   const s = useGame();
   const now = useNow(500);
   const [area, setArea] = useState({ w: 390, h: 520 });
+  const areaRef = useRef<any>(null);
+  const [areaTop, setAreaTop] = useState(122);
+  const lastChopAt = useRef(0);
   const golden = !!s.treeGoldenUntil && s.treeGoldenUntil > now;
   const frenzy = frenzyOn(s, now);
   const tint = useRef(new Animated.Value(0)).current;
@@ -93,6 +97,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
 
   const doChop = () => {
     const t = Date.now();
+    lastChopAt.current = t;
     const axe = AXES[getState().axeIndex];
     const { state, result } = chop(getState(), t);
     update(() => state);
@@ -109,7 +114,14 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
   const groundY = area.h - 34;
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }} onLayout={(e: LayoutChangeEvent) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+      <View
+        ref={areaRef}
+        style={{ flex: 1 }}
+        onLayout={(e: LayoutChangeEvent) => {
+          setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+          areaRef.current?.measureInWindow?.((_x: number, y: number) => setAreaTop(y));
+        }}
+      >
         <Backdrop bg={s.cosmetics.bg} h={area.h} live />
         <ProductionLine s={s} width={area.w} groundY={groundY} />
         <View pointerEvents="none" style={[styles.ground, { top: groundY + 6, backgroundColor: groundColor(s.cosmetics.bg) }]} />
@@ -127,6 +139,7 @@ export function ChopScreen({ onOpenUpgrades }: { onOpenUpgrades?: () => void }) 
         />
         <GoldenLog now={now} />
         <Chips now={now} onRepair={onOpenUpgrades} />
+        <WatchAdPill now={now} areaTop={areaTop} areaH={area.h} lastChopAt={lastChopAt.current} />
       </View>
       <View style={[styles.sellBar, { backgroundColor: groundColor(s.cosmetics.bg) }]}>
         <SellButton p="wood" />

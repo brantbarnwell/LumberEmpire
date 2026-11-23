@@ -165,6 +165,7 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
 
 function days(nDays: number) {
   let s = newGame(T0);
+  if (process.env.PERM) s = { ...s, owned: { ...s.owned, products: process.env.PERM.split(",").map((x: string) => `com.lumberempire.${x}`) } }; // PERM=prod2x or starter: paid upgrades
   let now = T0;
   let prestigeAt = null as number | null;
   let gainAt = 0;

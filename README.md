@@ -103,6 +103,10 @@ Built:
   - 14 lands; each grows mostly its own wood plus the older woods.
   - Helpers and the Sawmill work the wood of the land they're on.
   - Logs fly into the counter in the right colour.
+- Playbook 3 (GAME_SPEC.md, "Playbook 3: make money"):
+  - Rewarded ads only: welcome back 2x, a 1-hour 2x boost (up to 6 h), and the Watch Ad pill on the home screen.
+  - The pill pays 30 min of production, has a 7 min cooldown and is capped at 5 a day.
+  - New store: Starter Pack, Gold packs priced in hours saved, Remove Ads + Gold, 2x Forever, 24 h offline. VIP is hidden for now.
     - New systems unlocking on a schedule.
     - Local notifications.
     - A weekly leaderboard against the AI rivals.

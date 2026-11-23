@@ -76,7 +76,7 @@ for (let i = 0; i < 7; i++) ad = rewardGoldVideo(ad, MON) ?? ad;
 ok(ad.gold === 25 && goldVideosLeft(ad, MON) === 0, 'free Gold videos capped at 5 a day');
 let b = { ...newGame(MON), boosts: addBoost([], 'wood', 2, 1, MON) };
 b = rewardAdBoost(b, MON)!;
-ok(Math.abs(woodMultFor(b, MON, 'pine') - 3) < 1e-9, 'boosts add: 2x + 2x = 3x, not 4x');
+ok(Math.abs(woodMultFor(b, MON, 'pine') - 2) < 1e-9 && b.boosts.filter((x) => x.until > MON).length === 1 && Math.abs(b.boosts[0].until - MON - 2 * 3600_000) < 1, 'Playbook 3: two 2x boosts = 2x for 2 hours, never 4x');
 ok(Math.abs(moneyMult({ ...newGame(MON), vipActive: true, boosts: addBoost([], 'money', 2, 1, MON) }, MON) - 3) < 1e-9, 'VIP 2x + money 2x = 3x');
 let off = computeOffline({ ...h, wood: 0, selling: false, storageLevel: 9, lastSaved: MON - 20 * 3600_000 }, MON);
 ok(!!off.result && Math.abs(off.result.produced - 2.5 * 0.5 * 8 * 3600) < 1, `offline: 50% rate, 8h cap (${Math.round(off.result!.produced)} wood)`);
@@ -340,3 +340,105 @@ const by = L24.passiveByType(crewS, MON);
 ok((by.crystal ?? 0) > 0 && (by.pine ?? 0) > 0, 'helpers on Crystal Caves cut crystal; the rest chop pine at home');
 const cut = tick({ ...newGame(MON), wood: 1000, woodMix: { crystal: 1000 }, sawmill: { level: 1, on: true }, cutting: false } as GameState, 1, MON);
 ok(cut.planks > 0 && L24.avgPlankBase(cut) > 10, `the Sawmill cuts the wood you have: crystal planks are worth more (${L24.avgPlankBase(cut).toFixed(2)} each at base)`);
+
+// ---- Playbook 3: ads and store ----
+import * as PM from '../src/game/meta';
+import { runAdReward } from '../src/game/adflow';
+import * as PD from '../src/game/data';
+{
+  const P = newGame0(MON); // real unlock timing
+  ok(PM.adCashState(P, MON).status === 'locked' && PM.adCashState({ ...P, playSec: 239 }, MON).status === 'locked', 'Watch Ad pill: not in the first 4 minutes');
+  const A = { ...P, playSec: 300 };
+  ok(PM.adCashState(A, MON).status === 'ready', 'Watch Ad pill: ready after 4 minutes');
+  const small = PM.adCashAmount(A, MON);
+  const bigS = { ...A, helpers: { apprentice: { count: 20, level: 3 }, master: { count: 5, level: 0 } }, lands: { clearing: { upgrades: [], paid: 0 }, crystal: { upgrades: [], paid: 0 } } } as GameState;
+  const big = PM.adCashAmount(bigS, MON);
+  ok(big > small * 20 && Math.abs(big - Math.round(L24.incomePerMin(bigS, MON) * 30)) < 1, `pill pays 30 min of current production, scales up (${small} early, ${big} later)`);
+  let x = PM.rewardAdCash(A, MON, 500)!;
+  ok(!!x && x.money === A.money + 500, 'pill pays exactly the amount shown');
+  const cd = PM.adCashState(x, MON + 60_000);
+  ok(cd.status === 'cooldown' && Math.round((cd as any).msLeft / 1000) === 6 * 60, 'cooldown 7 minutes: "Ready in 6:00" one minute later');
+  ok(PM.rewardAdCash(x, MON + 60_000, 500) === null, 'no reward during the cooldown');
+  let t2 = MON;
+  for (let i = 1; i < 5; i++) { t2 += 7 * 60_000; x = PM.rewardAdCash(x, t2, 500) ?? x; }
+  const cap = PM.adCashState(x, t2 + 8 * 60_000);
+  ok(x.ads.cashVideos === 5 && cap.status === 'capped' && (cap as any).msLeft > 0, '5 a day, then a countdown to midnight (not a dead button)');
+  ok(PM.adCashState(x, MON + 24 * 3600_000).status === 'ready', 'resets the next day');
+  ok(PM.goldVideosLeft(x, t2) === 5, 'pill and free Gold videos have their own counters');
+}
+{
+  // reward only when the video finishes, never when it opens
+  const run = async (events: ('earned' | 'closed-ok' | 'closed-early' | 'error')[], adFree = false) => {
+    let paid = 0;
+    const err = await runAdReward({
+      adFree,
+      canGrant: () => true,
+      grant: () => { paid++; return true; },
+      show: async (onEarned) => {
+        let res: any = { ok: false, message: 'closed' };
+        for (const e of events) {
+          if (e === 'earned') onEarned();
+          if (e === 'closed-ok') res = { ok: true };
+          if (e === 'closed-early') res = { ok: false, message: 'Watch the whole video to get the reward.' };
+          if (e === 'error') res = { ok: false, message: 'The video failed to play.' };
+        }
+        return res;
+      },
+    });
+    return { paid, err };
+  };
+  (async () => {
+    const a = await run(['earned', 'closed-ok']);
+    ok(a.paid === 1 && a.err === null, 'ad: watched to the end = paid once');
+    const b = await run(['closed-early']);
+    ok(b.paid === 0 && !!b.err, 'ad: closed early = no reward');
+    const c = await run(['error']);
+    ok(c.paid === 0 && !!c.err, 'ad: failed to play = no reward');
+    const d = await run(['earned', 'earned', 'closed-ok']);
+    ok(d.paid === 1, 'ad: earned event twice = still paid once');
+    const e = await run(['earned', 'closed-early']);
+    ok(e.paid === 1 && e.err === null, 'ad: return-from-ad path, paid at the finish even if the close looks odd');
+    const f = await run(['closed-ok']);
+    ok(f.paid === 1, 'ad: finished but no earned event = still paid');
+    const g = await run([], true);
+    ok(g.paid === 1 && g.err === null, 'Remove Ads: reward is instant, no video');
+    let opened = 0;
+    await runAdReward({ adFree: false, canGrant: () => false, grant: () => true, show: async () => { opened++; return { ok: true }; } });
+    ok(opened === 0, 'ad: never shows a video when the reward is not available');
+  })();
+}
+{
+  // boosts
+  let bb = newGame(MON);
+  for (let i = 0; i < 8; i++) bb = PM.rewardAdBoost(bb, MON) ?? bb;
+  ok(Math.abs(PM.adBoostLeftMs(bb, MON) - 6 * 3600_000) < 1 && woodMultFor(bb, MON, 'pine') === 2, 'ad boost: 1 hour each, stacks time to max 6 hours, stays 2x');
+  const perm = { ...grantProduct(newGame(MON), 'com.lumberempire.prod2x', 'pp', MON)!, boosts: addBoost([], 'wood', 2, 1, MON) };
+  ok(Math.abs(woodMultFor(perm, MON, 'pine') - 3) < 1e-9, '2x Production Forever + 2x boost = 3x (they add)');
+  const permP = doPrestige({ ...perm, runMoneyEarned: PRESTIGE_AT * 4 }, MON)!;
+  ok(L24.permProdBonus(permP) === 1 && permP.prestige.mult > 1, '2x Forever is kept through prestige, prestige still multiplies on top');
+  const g3 = grantProduct(newGame(MON), 'com.lumberempire.gold80', 'g80', MON)!;
+  ok(g3.gold === 80, 'Gold packs pay Gold');
+  const perHour = PD.PRODUCTS.filter((p) => p.kind === 'gold' && !p.hidden).map((p) => Number(p.usd.slice(1)) / ((p.grant.gold ?? 0) / PD.GOLD_PER_HOUR));
+  ok(perHour.length === 4 && perHour.every((h) => h > 0.2 && h < 0.26), `Gold packs priced at about $0.25 per hour saved (${perHour.map((h) => h.toFixed(3)).join(', ')})`);
+  const skip = PM.buyGoldItem({ ...newGame(MON), gold: 20 }, 'skip1h', MON)!;
+  ok(skip.gold === 0 && skip.money > 0, 'Time Skip: 20 Gold = 1 hour of production now');
+}
+{
+  // store
+  const st = newGame0(MON);
+  ok(!PM.starterPopupDue(st, MON), 'Starter Pack: no pop-up before the first helper');
+  const h1 = { ...st, helpers: { apprentice: { count: 1, level: 0 } } };
+  ok(PM.starterPopupDue(h1, MON), 'Starter Pack: pops up after the first helper');
+  ok(!PM.starterPopupDue({ ...h1, offers: { ...h1.offers, starterShown: true } }, MON), 'Starter Pack: shown once');
+  ok(!PM.starterOnSale(h1, MON + 73 * 3600_000) && PM.starterOnSale(h1, MON + 71 * 3600_000), 'Starter Pack: first 72 hours only');
+  const sp = grantProduct(h1, PM.STARTER_ID, 'sp', MON)!;
+  ok(sp.gold === 300 && Math.abs(woodMultFor(sp, MON, 'pine') - 1.2) < 1e-9 && sp.cosmetics.owned.includes('axe-fire') && !PM.starterOnSale(sp, MON), 'Starter Pack: 300 Gold, +20% production forever, Fire Axe look');
+  const o24 = grantProduct(newGame(MON), 'com.lumberempire.offline24', 'o24', MON)!;
+  const offA = computeOffline({ ...o24, helpers: { apprentice: { count: 1, level: 0 } }, storageLevel: 9, lastSaved: MON - 30 * 3600_000 }, MON);
+  ok(L24.offlineCapHours(o24) === 24 && Math.abs(offA.result!.away - 24 * 3600) < 1, 'Longer Offline: 24 hour cap (free is 8)');
+  const na = grantProduct(newGame(MON), 'com.lumberempire.noads2', 'na', MON)!;
+  ok(na.owned.noAds && na.gold === 400 && PM.adFree(na), 'Remove Ads: no videos, rewards instant, plus 400 Gold');
+  ok(PM.forSale().every((p) => p.kind !== 'vip'), 'VIP is not for sale until monthly content ships');
+  ok(PM.forSale().map((p) => p.id).join(',') === 'com.lumberempire.starter,com.lumberempire.gold80,com.lumberempire.gold420,com.lumberempire.gold880,com.lumberempire.gold1800,com.lumberempire.noads2,com.lumberempire.prod2x,com.lumberempire.offline24', 'store order: Starter, Gold packs, Remove Ads, 2x Forever, Longer Offline');
+  ok(PRODUCTS.find((p) => p.id === 'com.lumberempire.noads2')!.removes!.length > 20, 'Remove Ads says what it removes');
+}

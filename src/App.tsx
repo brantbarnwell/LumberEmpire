@@ -20,6 +20,7 @@ import { MarketScreen } from './components/MarketScreen';
 import { ShopScreen } from './components/ShopScreen';
 import { PopupView } from './components/PopupView';
 import { WelcomeBack } from './components/WelcomeBack';
+import { StarterOffer } from './components/StarterOffer';
 import { NotifPrompt } from './components/NotifPrompt';
 import { AuctionBanner } from './components/AuctionBanner';
 import { Celebrate } from './components/Celebrate';
@@ -155,6 +156,7 @@ function Game({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
       <TabBar tab={tab} onTab={setTab} dots={{ upgrades: goalsDot }} locked={{ land: !systemUnlocked(s, 'land'), workshop: !systemUnlocked(s, 'workshop'), market: !systemUnlocked(s, 'market') }} />
       <NotifPrompt />
       <WelcomeBack />
+      <StarterOffer onHome={tab === 'chop' || tab === 'shop'} />
       <PopupView />
       <Celebrate />
       <FlyLayer />

@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
-import { addMoney, collectOffline, collectOfflineBonus, sellAll, unitPrice } from '../game/logic';
+import { addMoney, collectOffline, collectOfflineBonus, offlineCapHours, sellAll, unitPrice } from '../game/logic';
 import { adFree, buyIdeas } from '../game/meta';
-import { AD_OFFLINE_MULT, OFFLINE_MAX_HOURS } from '../game/data';
+import { AD_OFFLINE_MULT } from '../game/data';
+import { runAdReward } from '../game/adflow';
+import { saveGame } from '../game/save';
 import { duration, money, whole } from '../game/format';
-import { earnReward } from '../services/ads';
+import { adReady, showRewardedVideo } from '../services/ads';
 import { feel } from '../services/feel';
 import { Icon } from './art/Icons';
 import { Button } from './ui';
@@ -46,7 +48,7 @@ export function WelcomeBack() {
   const ideas = buyIdeas(s, s.money + total, now, 3);
 
   const collect = (mult: number) => {
-    update((st) => {
+    const ok = update((st) => {
       const p = st.pendingOffline;
       if (!p) return null;
       let x = managed ? collectOfflineBonus(st, p) : collectOffline(st, p, mult);
@@ -56,22 +58,34 @@ export function WelcomeBack() {
       }
       return { ...x, pendingOffline: null };
     });
-    feel.reward();
+    if (ok) feel.reward();
+    return !!ok;
   };
+  // Playbook 3: once per return. Paid when the video finishes; if it fails, plain Collect still works.
   const watch = async () => {
     setErr(null);
     setBusy(true);
-    const res = await earnReward(adFree(getState()));
+    const e = await runAdReward({
+      adFree: adFree(getState()),
+      show: showRewardedVideo,
+      canGrant: () => !!getState().pendingOffline,
+      grant: () => {
+        const ok = collect(AD_OFFLINE_MULT);
+        if (ok) saveGame(getState());
+        return ok;
+      },
+    });
     setBusy(false);
-    if (res.ok) collect(AD_OFFLINE_MULT);
-    else setErr(res.message);
+    if (e) setErr(e);
   };
+  const cap = offlineCapHours(s);
+  const showAd = !managed && (free || adReady()); // never offer a video that can't play
 
   return (
     <View style={styles.back}>
       <View style={styles.card}>
         <Text style={styles.title}>Welcome back!</Text>
-        <Text style={styles.away}>Away {duration(r.away * 1000)}{r.away >= OFFLINE_MAX_HOURS * 3600 - 60 ? ' (8 hour max)' : ''}</Text>
+        <Text style={styles.away}>Away {duration(r.away * 1000)}{r.away >= cap * 3600 - 60 ? ` (${cap} hour max)` : ''}</Text>
         <View style={styles.lump}>
           <Icon name="money" size={34} />
           <Text style={styles.amount}>{money(shown)}</Text>
@@ -95,9 +109,11 @@ export function WelcomeBack() {
         {err && <Text style={styles.err}>{err}</Text>}
         <View style={styles.buttons}>
           <Button style={{ flex: 1 }} label={managed ? 'OK' : 'Collect'} sub={managed ? undefined : money(total)} disabled={busy} onPress={() => (managed ? update((st) => ({ ...st, pendingOffline: null })) : collect(1))} />
-          <Button style={{ flex: 1 }} variant="gold" loading={busy} label={free ? `${AD_OFFLINE_MULT}x free (VIP)` : `▶ Ad for ${AD_OFFLINE_MULT}x`} sub={money(total * AD_OFFLINE_MULT)} onPress={free ? () => collect(AD_OFFLINE_MULT) : watch} />
+          {showAd && (
+            <Button style={{ flex: 1.3 }} variant="gold" loading={busy} label={free ? `${AD_OFFLINE_MULT}x offline earnings` : `▶ Watch ad for ${AD_OFFLINE_MULT}x offline earnings`} sub={money(total * AD_OFFLINE_MULT)} onPress={watch} />
+          )}
         </View>
-        <Text style={styles.small}>While you are away, your crew works at half speed for up to 8 hours. Collect is always free.</Text>
+        <Text style={styles.small}>While you are away, your crew works at half speed for up to {cap} hours. Collect is always free.</Text>
       </View>
     </View>
   );

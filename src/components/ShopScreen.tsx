@@ -4,11 +4,12 @@ import { CosmeticsScreen } from './Cosmetics';
 import { Icon } from './art/Icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
-import { canClaimVip, claimVip, grantProduct } from '../game/logic';
-import { PRODUCTS, ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY } from '../game/data';
-import { adFree, buyGoldItem, goldRepair, goldVideosLeft, rewardGoldVideo } from '../game/meta';
+import { canClaimVip, claimVip, grantProduct, incomePerMin } from '../game/logic';
+import { ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, GOLD_PER_HOUR, STARTER_PACK_HOURS } from '../game/data';
+import { STARTER_ID, adFree, buyGoldItem, forSale, goldRepair, goldVideosLeft, rewardGoldVideo, starterOnSale } from '../game/meta';
+import { adReady } from '../services/ads';
 import { runReward } from './reward';
-import { whole } from '../game/format';
+import { duration, money, whole } from '../game/format';
 import { buy, restore, useStore } from '../services/purchases';
 import { haptic } from '../services/haptics';
 import { Button, Card, GoldCoin } from './ui';
@@ -53,7 +54,7 @@ function StoreScreen() {
     }
     if (p.kind === 'vip') {
       update((st) => ({ ...st, vipActive: true }));
-      setMsg({ kind: 'ok', text: 'Welcome to VIP Tycoon! 2x earnings are on. Claim your 100 daily Gold below.' });
+      setMsg({ kind: 'ok', text: 'Welcome to VIP Tycoon!' });
     } else {
       update((st) => grantProduct(st, r.productId, r.transactionId, Date.now()));
       setMsg({ kind: 'ok', text: `Thanks! ${p.title} added to your account.` });
@@ -87,9 +88,35 @@ function StoreScreen() {
   };
 
   const price = (p: ShopProduct) => store.prices[p.id] ?? p.usd;
-  const vip = PRODUCTS.filter((p) => p.kind === 'vip');
-  const packs = PRODUCTS.filter((p) => p.kind === 'pack');
-  const gold = PRODUCTS.filter((p) => p.kind === 'gold');
+  const sale = forSale();
+  const starter = sale.find((p) => p.id === STARTER_ID);
+  const gold = sale.filter((p) => p.kind === 'gold');
+  const packs = sale.filter((p) => p.kind === 'pack' && p.id !== STARTER_ID);
+  const videoOk = adFree(s) || adReady();
+
+  const packCard = (p: ShopProduct, extra?: string) => {
+    const owned = s.owned.products.includes(p.id);
+    return (
+      <Card key={p.id} style={styles.packCard}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={styles.packTitle}>{p.title}</Text>
+            {p.badge && <Text style={styles.badge}>{p.badge}</Text>}
+          </View>
+          {p.perks.map((k) => (
+            <Text key={k} style={styles.perk}>• {k}</Text>
+          ))}
+          {p.removes && <Text style={styles.removes}>{p.removes}</Text>}
+          {extra && <Text style={styles.small}>{extra}</Text>}
+        </View>
+        {owned ? (
+          <Text style={styles.owned}>Owned ✓</Text>
+        ) : (
+          <Button label={p.removes ? 'Remove ad videos' : price(p)} sub={p.removes ? price(p) : undefined} loading={busy === p.id} disabled={!!busy} onPress={() => onBuy(p)} style={{ minWidth: 92, maxWidth: 130 }} />
+        )}
+      </Card>
+    );
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.cream }} contentContainerStyle={styles.content}>
@@ -100,8 +127,9 @@ function StoreScreen() {
           <Text style={styles.balanceText}>{whole(s.gold)}</Text>
         </View>
       </View>
+
       <Text style={styles.note}>
-        Real-money purchases go through Apple. Gold is for speed-ups and cosmetics. Land and helpers are always bought with in-game Money.
+        Everything in the game can be earned for free by playing. Buying only makes things faster, easier or nicer looking. Land and helpers are always bought with in-game Money.
       </Text>
 
       {store.status !== 'ready' && store.status !== 'loading' && store.message && msg?.text !== store.message && (
@@ -116,69 +144,80 @@ function StoreScreen() {
         </View>
       )}
 
-      {/* VIP */}
-      <LinearGradient colors={['#3b1d63', '#6a35a8']} style={styles.vip}>
-        <Text style={styles.vipTitle}>👑 VIP Tycoon</Text>
-        <Text style={styles.vipPerks}>2x earnings · {VIP_DAILY_GOLD} free Gold every day · Exclusive VIP cosmetics · No ads (video rewards are instant)</Text>
-        {s.vipActive ? (
-          <View style={{ gap: 8, marginTop: 8 }}>
-            <Text style={styles.vipActive}>You are VIP! Thanks for the support.</Text>
-            <Button
-              variant="gold"
-              label={canClaimVip(s, now) ? `Claim ${VIP_DAILY_GOLD} Gold` : 'Daily Gold claimed. Come back tomorrow'}
-              disabled={!canClaimVip(s, now)}
-              onPress={() => update((st) => claimVip(st, Date.now())) && haptic.success()}
-            />
+      {/* VIP is not for sale until monthly content ships. Players who already have it keep their daily Gold. */}
+      {s.vipActive && (
+        <Card style={styles.packCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.packTitle}>VIP Tycoon</Text>
+            <Text style={styles.perk}>You are VIP. Thanks for the support.</Text>
           </View>
-        ) : (
-          <View style={styles.vipBtns}>
-            {vip.map((p) => (
-              <View key={p.id} style={{ flex: 1 }}>
-                {p.badge && <Text style={styles.vipBadge}>{p.badge}</Text>}
-                <Button
-                  variant="gold"
-                  label={p.id.endsWith('yearly') ? 'Yearly' : 'Monthly'}
-                  sub={price(p)}
-                  loading={busy === p.id}
-                  disabled={!!busy}
-                  onPress={() => onBuy(p)}
-                />
-              </View>
-            ))}
-          </View>
-        )}
-        {!s.vipActive && <Text style={styles.vipFine}>Renews automatically. Cancel any time in your iPhone Settings › Apple ID › Subscriptions.</Text>}
-      </LinearGradient>
+          <Button
+            small
+            variant="gold"
+            label={canClaimVip(s, now) ? `Claim ${VIP_DAILY_GOLD} Gold` : 'Claimed today'}
+            disabled={!canClaimVip(s, now)}
+            onPress={() => update((st) => claimVip(st, Date.now())) && haptic.success()}
+          />
+        </Card>
+      )}
+
+      {/* 1. Starter Pack: first 72 hours only */}
+      {starter && starterOnSale(s, now) && packCard(starter, `Leaves the shop in ${duration(s.offers.firstSeenAt + STARTER_PACK_HOURS * 3600_000 - now)}.`)}
+
+      {/* 2. Gold, priced in hours saved */}
+      <Text style={styles.section}>Gold</Text>
+      <Text style={styles.note}>Gold buys time: {GOLD_PER_HOUR} Gold skips about 1 hour. It also buys cosmetics.</Text>
+      <View style={styles.goldGrid}>
+        {gold.map((p) => (
+          <Card key={p.id} style={styles.goldCard}>
+            {p.badge && <Text style={[styles.badge, { alignSelf: 'center' }]}>{p.badge}</Text>}
+            <View style={styles.coins}>
+              <GoldCoin size={30} />
+              {(p.grant.gold ?? 0) >= 400 && <View style={{ marginLeft: -12 }}><GoldCoin size={30} /></View>}
+              {(p.grant.gold ?? 0) >= 1800 && <View style={{ marginLeft: -12 }}><GoldCoin size={30} /></View>}
+            </View>
+            <Text style={styles.goldAmt}>{p.title}</Text>
+            {p.hours && <Text style={styles.hours}>≈ {p.hours} hours saved</Text>}
+            <Button small label={price(p)} loading={busy === p.id} disabled={!!busy} onPress={() => onBuy(p)} />
+          </Card>
+        ))}
+      </View>
+
+      {/* 3-5. Remove Ads + Gold, 2x Production Forever, Longer Offline */}
+      <Text style={styles.section}>Upgrades</Text>
+      {packs.map((p) => packCard(p))}
 
       <Text style={styles.section}>Spend Gold</Text>
       <Text style={styles.note}>Gold buys time, never power you can't earn by playing.</Text>
-      <Card style={styles.packCard}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.packTitle}>Free Gold</Text>
-          <Text style={styles.perk}>+{AD_GOLD_PER_VIDEO} Gold {adFree(s) ? '(instant for you)' : 'for an optional video'} · {goldVideosLeft(s, now)}/{AD_GOLD_VIDEOS_PER_DAY} left today</Text>
-        </View>
-        <Button
-          small
-          label={adFree(s) ? 'Claim' : '▶ Watch'}
-          loading={busy === 'adgold'}
-          disabled={!!busy || goldVideosLeft(s, now) === 0}
-          onPress={async () => {
-            setMsg(null);
-            setBusy('adgold');
-            const err = await runReward((st) => rewardGoldVideo(st, Date.now()));
-            setBusy(null);
-            setMsg(err ? { kind: 'info', text: err } : { kind: 'ok', text: `+${AD_GOLD_PER_VIDEO} Gold!` });
-          }}
-        />
-      </Card>
+      {videoOk && (
+        <Card style={styles.packCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.packTitle}>Free Gold</Text>
+            <Text style={styles.perk}>+{AD_GOLD_PER_VIDEO} Gold {adFree(s) ? '(instant for you)' : 'for an optional video'} · {goldVideosLeft(s, now)}/{AD_GOLD_VIDEOS_PER_DAY} left today</Text>
+          </View>
+          <Button
+            small
+            label={adFree(s) ? 'Claim' : '▶ Watch'}
+            loading={busy === 'adgold'}
+            disabled={!!busy || goldVideosLeft(s, now) === 0}
+            onPress={async () => {
+              setMsg(null);
+              setBusy('adgold');
+              const err = await runReward((st) => rewardGoldVideo(st, Date.now()));
+              setBusy(null);
+              setMsg(err ? { kind: 'info', text: err } : { kind: 'ok', text: `+${AD_GOLD_PER_VIDEO} Gold!` });
+            }}
+          />
+        </Card>
+      )}
       {GOLD_SHOP.map((g) => (
         <Card key={g.id} style={styles.packCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.packTitle}>{g.title}</Text>
-            <Text style={styles.perk}>Adds to your other boosts.</Text>
+            <Text style={styles.perk}>{g.kind === 'skip' ? `+${money(incomePerMin(s, now) * 60)} right now.` : 'A 2x boost that is already running gets longer instead. Never above 2x.'}</Text>
           </View>
           <Button small variant="gold" label={`${g.gold} Gold`} disabled={s.gold < g.gold} onPress={() => {
-            if (update((st) => buyGoldItem(st, g.id, Date.now()))) { haptic.success(); setMsg({ kind: 'ok', text: `${g.title} started!` }); }
+            if (update((st) => buyGoldItem(st, g.id, Date.now()))) { haptic.success(); setMsg({ kind: 'ok', text: g.kind === 'skip' ? 'Time skipped!' : `${g.title} started!` }); }
           }} />
         </Card>
       ))}
@@ -190,60 +229,6 @@ function StoreScreen() {
         <Button small variant="gold" label={`${GOLD_REPAIR_ALL} Gold`} disabled={s.gold < GOLD_REPAIR_ALL || goldRepair(s) === null}
           onPress={() => { if (update((st) => goldRepair(st))) { haptic.success(); setMsg({ kind: 'ok', text: 'Axe repaired!' }); } }} />
       </Card>
-
-      <Text style={styles.section}>Special Packs</Text>
-      {packs.map((p) => {
-        const owned = s.owned.products.includes(p.id);
-        return (
-          <Card key={p.id} style={styles.packCard}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <Text style={styles.packTitle}>{p.title}</Text>
-                {p.badge && <Text style={styles.badge}>{p.badge}</Text>}
-              </View>
-              {p.perks.map((k) => (
-                <Text key={k} style={styles.perk}>• {k}</Text>
-              ))}
-              {p.grant.buildings && (
-                <Text style={styles.small}>The Sawmill is saved to your account and added when Buildings open.</Text>
-              )}
-            </View>
-            {owned ? (
-              <Text style={styles.owned}>Owned ✓</Text>
-            ) : (
-              <Button
-                label={price(p)}
-                loading={busy === p.id}
-                disabled={!!busy}
-                onPress={() => onBuy(p)}
-                style={{ minWidth: 92 }}
-              />
-            )}
-          </Card>
-        );
-      })}
-
-      <Text style={styles.section}>Gold</Text>
-      <View style={styles.goldGrid}>
-        {gold.map((p) => (
-          <Card key={p.id} style={styles.goldCard}>
-            {p.badge && <Text style={[styles.badge, { alignSelf: 'center' }]}>{p.badge}</Text>}
-            <View style={styles.coins}>
-              <GoldCoin size={30} />
-              {(p.grant.gold ?? 0) >= 1200 && <View style={{ marginLeft: -12 }}><GoldCoin size={30} /></View>}
-              {(p.grant.gold ?? 0) >= 7000 && <View style={{ marginLeft: -12 }}><GoldCoin size={30} /></View>}
-            </View>
-            <Text style={styles.goldAmt}>{p.title}</Text>
-            <Button
-              small
-              label={price(p)}
-              loading={busy === p.id}
-              disabled={!!busy}
-              onPress={() => onBuy(p)}
-            />
-          </Card>
-        ))}
-      </View>
 
       <Button
         variant="ghost"
@@ -259,6 +244,8 @@ function StoreScreen() {
 }
 
 const styles = StyleSheet.create({
+  removes: { fontSize: 12, fontWeight: '800', color: C.ink, marginTop: 4, backgroundColor: 'rgba(245,197,66,0.25)', borderRadius: 8, padding: 6 },
+  hours: { fontSize: 11.5, fontWeight: '800', color: C.inkSoft, textAlign: 'center' },
   segs: { flexDirection: 'row', gap: 6, padding: 10, paddingBottom: 0 },
   seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: C.cardEdge, backgroundColor: '#f1e4c6' },
   segOn: { backgroundColor: C.card, borderColor: '#3a2210' },

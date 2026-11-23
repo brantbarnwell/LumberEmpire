@@ -1,3 +1,4 @@
+import { adReady } from '../services/ads';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { feel } from '../services/feel';
@@ -99,8 +100,8 @@ export function GoalsScreen() {
         />
       </Card>
 
-      {/* Free rewards */}
-      <Card>
+      {/* Free rewards (Playbook 3: only when a video can actually play) */}
+      {(free || adReady()) && <Card>
         <Text style={styles.h}>Free rewards</Text>
         <Text style={styles.sub}>{free ? 'You are ad-free: these are instant, no video.' : 'Optional. Watch a short video only if you want to.'}</Text>
         <View style={styles.freeRow}>
@@ -118,8 +119,8 @@ export function GoalsScreen() {
         </View>
         <View style={styles.freeRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>2x wood for {AD_BOOST_MINUTES} min</Text>
-            <Text style={styles.small}>{adBoostLeftMs(s, now) > 0 ? `Active: ${duration(adBoostLeftMs(s, now))} left (adds time, up to 4h)` : 'Chopping, helpers and land'}</Text>
+            <Text style={styles.name}>2x production for {AD_BOOST_MINUTES / 60} hour</Text>
+            <Text style={styles.small}>{adBoostLeftMs(s, now) > 0 ? `Active: ${duration(adBoostLeftMs(s, now))} left. Another adds 1 hour (max 6h), never more than 2x` : 'Chopping, helpers and land'}</Text>
           </View>
           <Button
             small
@@ -129,7 +130,7 @@ export function GoalsScreen() {
             onPress={() => reward('boost', (st) => rewardAdBoost(st, Date.now()))}
           />
         </View>
-      </Card>
+      </Card>}
 
       {/* Quests */}
       <Card>

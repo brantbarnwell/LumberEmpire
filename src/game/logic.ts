@@ -126,7 +126,8 @@ export interface GameState {
   weekly: { weekKey: string; quest: Quest | null };
   board: { weekKey: string; startTotal: number; lastWeek: number }; // update 3: weekly leaderboard (kept through prestige)
   login: { index: number; lastClaimDay: string | null };
-  ads: { dayKey: string; goldVideos: number };
+  ads: { dayKey: string; goldVideos: number; cashVideos: number; lastCashAt: number }; // Playbook 3: cash = the home Watch Ad pill
+  offers: { firstSeenAt: number; starterShown: boolean }; // Playbook 3: Starter Pack shown once, first 72 hours
   prestige: { count: number; mult: number };
   notif: { asked: boolean; granted: boolean; lastFireDay: string | null; scheduledAt: number | null };
   firstWin: boolean;
@@ -282,7 +283,8 @@ export function newGame(now = Date.now()): GameState {
     weekly: { weekKey: '', quest: null },
     board: { weekKey: '', startTotal: 0, lastWeek: 0 },
     login: { index: 0, lastClaimDay: null },
-    ads: { dayKey: dayKeyOf(now), goldVideos: 0 },
+    ads: { dayKey: dayKeyOf(now), goldVideos: 0, cashVideos: 0, lastCashAt: 0 },
+    offers: { firstSeenAt: now, starterShown: false },
     prestige: { count: 0, mult: 1 },
     notif: { asked: false, granted: false, lastFireDay: null, scheduledAt: null },
     firstWin: false,
@@ -359,7 +361,7 @@ export function ownedWoodTypes(s: GameState): WoodType[] {
 export function woodMultFor(s: GameState, now: number, type: WoodType, forest = false) {
   const r = rushInfo(s, now);
   const rush = forest && r.active && r.type === type ? RUSH_BONUS : 0;
-  return (1 + boostBonus(s, 'wood', now) + rush) * s.prestige.mult;
+  return (1 + boostBonus(s, 'wood', now) + rush + permProdBonus(s)) * s.prestige.mult;
 }
 
 export function durabilityPower(d: number) {
@@ -1255,7 +1257,7 @@ export interface OfflineResult { away: number; earned: number; gross?: number; s
  */
 export function computeOffline(s: GameState, now: number): { state: GameState; result: OfflineResult | null } {
   const realAway = (now - s.lastSaved) / 1000;
-  const away = Math.min(realAway, OFFLINE_MAX_HOURS * 3600);
+  const away = Math.min(realAway, offlineCapHours(s) * 3600);
   if (realAway < 60) return { state: s, result: null };
   let st = s;
   const step = 10;
@@ -1319,8 +1321,35 @@ export function rankInfo(totalMoney: number) {
 
 // ---------- store purchases ----------
 
+/**
+ * Playbook 3: timed boosts never stack the multiplier. A new 2x boost while a 2x boost is running
+ * makes the timer longer instead (two 2x boosts = 2x for twice as long, never 4x).
+ * Permanent purchases and Timber Rush still add on top (2x boost + 2x forever = 3x).
+ */
 export function addBoost(boosts: Boost[], kind: Boost['kind'], mult: number, hours: number, now: number, source: Boost['source'] = 'pack'): Boost[] {
-  return [...boosts, { kind, mult, until: now + hours * 3600_000, source }];
+  const add = hours * 3600_000;
+  const live = boosts.filter((b) => b.kind === kind && b.until > now && b.mult === mult).sort((a, b) => b.until - a.until)[0];
+  if (live) return boosts.map((b) => (b === live ? { ...b, until: b.until + add } : b));
+  return [...boosts.filter((b) => b.until > now), { kind, mult, until: now + add, source }];
+}
+
+/** How long the running 2x production boost has left (all sources share one timer). */
+export function prodBoostLeftMs(s: GameState, now: number) {
+  return s.boosts.filter((b) => b.kind === 'wood' && b.until > now).reduce((m, b) => Math.max(m, b.until - now), 0);
+}
+
+/** Playbook 3: permanent production you bought (+20% Starter Pack, +100% 2x Forever). Kept through prestige. */
+export function permProdBonus(s: GameState) {
+  let b = 0;
+  for (const id of s.owned.products) b += productById(id)?.grant.prodBonus ?? 0;
+  return b;
+}
+
+/** Offline cap in hours: 8, or 24 with the Longer Offline purchase. */
+export function offlineCapHours(s: GameState) {
+  let h = OFFLINE_MAX_HOURS;
+  for (const id of s.owned.products) h = Math.max(h, productById(id)?.grant.offlineHours ?? 0);
+  return h;
 }
 
 function addApprentices(s: GameState, n: number): GameState {
@@ -1371,6 +1400,7 @@ export function applyGrant(s: GameState, g: Grant, now: number): GameState {
   const later = (g.buildings ?? []).filter((b) => b !== 'sawmill');
   if (later.length) st.owned.pendingBuildings = [...new Set([...st.owned.pendingBuildings, ...later])];
   if (g.noAds) st.owned.noAds = true;
+  if (g.cosmetics) st = { ...st, cosmetics: { ...st.cosmetics, owned: [...new Set([...st.cosmetics.owned, ...g.cosmetics])] } };
   st = packCosmetics(st);
   if (g.landIfMissing) {
     if (st.lands[g.landIfMissing.id]) st.gold += g.landIfMissing.elseGold;
@@ -1418,6 +1448,9 @@ export function migrate(s: GameState): GameState {
     st = { ...st, lands, listings: {}, listingsDay: '', auction: null };
   }
   if (!st.woodMix) st = { ...st, woodMix: { pine: st.wood } };
+  // Playbook 3
+  if (typeof st.ads.cashVideos !== 'number') st = { ...st, ads: { ...st.ads, cashVideos: 0, lastCashAt: 0 } };
+  if (!st.offers) st = { ...st, offers: { firstSeenAt: st.lastSaved || Date.now(), starterShown: false } };
   if (typeof st.plankVal !== 'number') st = { ...st, plankVal: st.planks * PLANK_BASE_PRICE };
   st = { ...st, stats: { ...emptyStats(), ...st.stats } };
   if (!st.cosmetics) st = { ...st, cosmetics: { owned: ['tree-pine', 'axe-rusty', 'bg-forest'], tree: 'tree-pine', axe: null, bg: 'bg-forest' } };

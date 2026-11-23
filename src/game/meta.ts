@@ -4,9 +4,10 @@ import {
   DAILY_QUEST_MONEY_MIN, DAILY_REWARDS, GOLD_REPAIR_ALL, GOLD_SHOP, PRESTIGE_AT, QuestDef, WEEKLY_QUESTS, WEEKLY_QUEST_GOLD,
   WEEKLY_QUEST_BOOST_HOURS, WEEKLY_QUEST_MONEY_MIN, PRESTIGE_GOLD, COSMETICS, RARE_COSMETICS, RARE_EXTRA_GOLD, CosmeticKind,
   HELPERS, LAND, LAND_UPGRADES, TOOLS, SAWMILL_LEVELS, WORKSHOPS, YARD_SELLER_COST, MANAGER_COST, RIVALS,
+  AD_CASH_COOLDOWN_MIN, AD_CASH_MIN, AD_CASH_MINUTES, AD_CASH_PER_DAY, AD_CASH_UNLOCK_SEC, STARTER_PACK_HOURS, PRODUCTS,
 } from './data';
 import {
-  GameState, Quest, addBoost, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
+  GameState, Quest, addBoost, prodBoostLeftMs, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
   weekKeyOf, woodPerMinEstimate, hireCost, levelCost, landUpgradeCost, sawmillNextCost, storageUpgradeCost, systemUnlocked, unitPrice,
   workshopUnlocked,
 } from './logic';
@@ -196,36 +197,88 @@ export function adFree(s: GameState) {
   return s.vipActive || s.owned.noAds;
 }
 
+/** Today's ad counters (they reset at midnight). */
+function adsToday(s: GameState, now: number): GameState['ads'] {
+  const dk = dayKeyOf(now);
+  return s.ads.dayKey === dk ? s.ads : { ...s.ads, dayKey: dk, goldVideos: 0, cashVideos: 0 };
+}
+
 export function goldVideosLeft(s: GameState, now: number) {
-  const used = s.ads.dayKey === dayKeyOf(now) ? s.ads.goldVideos : 0;
-  return Math.max(0, AD_GOLD_VIDEOS_PER_DAY - used);
+  return Math.max(0, AD_GOLD_VIDEOS_PER_DAY - adsToday(s, now).goldVideos);
 }
 
 export function rewardGoldVideo(s: GameState, now: number): GameState | null {
   if (goldVideosLeft(s, now) <= 0) return null;
-  const dk = dayKeyOf(now);
-  const used = s.ads.dayKey === dk ? s.ads.goldVideos : 0;
-  return { ...s, gold: s.gold + AD_GOLD_PER_VIDEO, ads: { dayKey: dk, goldVideos: used + 1 } };
+  const a = adsToday(s, now);
+  return { ...s, gold: s.gold + AD_GOLD_PER_VIDEO, ads: { ...a, goldVideos: a.goldVideos + 1 } };
+}
+
+// ---------- Playbook 3: the Watch Ad pill on the home screen ----------
+
+/** What the pill pays right now: 30 minutes of what you make now, so it never becomes useless later. */
+export function adCashAmount(s: GameState, now: number) {
+  return Math.max(AD_CASH_MIN, Math.round(incomePerMin(s, now) * AD_CASH_MINUTES));
+}
+
+export type AdCashState =
+  | { status: 'locked' } // first 4 minutes of play: not shown
+  | { status: 'ready'; left: number }
+  | { status: 'cooldown'; msLeft: number; left: number } // "Ready in 4:32"
+  | { status: 'capped'; msLeft: number }; // 5 used today: countdown to midnight
+
+function msToMidnight(now: number) {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - now;
+}
+
+export function adCashState(s: GameState, now: number): AdCashState {
+  if (s.playSec < AD_CASH_UNLOCK_SEC && s.prestige.count === 0) return { status: 'locked' };
+  const a = adsToday(s, now);
+  const left = AD_CASH_PER_DAY - a.cashVideos;
+  if (left <= 0) return { status: 'capped', msLeft: msToMidnight(now) };
+  const wait = a.lastCashAt + AD_CASH_COOLDOWN_MIN * 60000 - now;
+  if (wait > 0) return { status: 'cooldown', msLeft: wait, left };
+  return { status: 'ready', left };
+}
+
+/** Pays the amount shown on the button (fixed when they tapped). Only when ready. */
+export function rewardAdCash(s: GameState, now: number, amount: number): GameState | null {
+  if (adCashState(s, now).status !== 'ready' || !(amount > 0)) return null;
+  const a = adsToday(s, now);
+  return { ...addMoney(s, amount), ads: { ...a, cashVideos: a.cashVideos + 1, lastCashAt: now } };
+}
+
+// ---------- Playbook 3: Starter Pack offer ----------
+
+export const STARTER_ID = 'com.lumberempire.starter';
+
+/** For sale only in the first 72 hours, and only until bought. */
+export function starterOnSale(s: GameState, now: number) {
+  return !s.owned.products.includes(STARTER_ID) && now - s.offers.firstSeenAt < STARTER_PACK_HOURS * 3600_000;
+}
+
+/** The one-time pop-up: after the first milestone (first helper hired), once, first 72 hours only. */
+export function starterPopupDue(s: GameState, now: number) {
+  const helpers = Object.values(s.helpers).reduce((n, h) => n + (h?.count ?? 0), 0);
+  return starterOnSale(s, now) && !s.offers.starterShown && (helpers > 0 || s.prestige.count > 0);
+}
+
+export function forSale() {
+  return PRODUCTS.filter((p) => !p.hidden);
 }
 
 export function adBoostLeftMs(s: GameState, now: number) {
-  const b = s.boosts.find((x) => x.source === 'ad' && x.until > now);
-  return b ? b.until - now : 0;
+  return prodBoostLeftMs(s, now);
 }
 
 export function canAdBoost(s: GameState, now: number) {
   return adBoostLeftMs(s, now) + AD_BOOST_MINUTES * 60000 <= AD_BOOST_MAX_MINUTES * 60000;
 }
 
-/** 2x production for 30 minutes. Watching again adds 30 minutes (up to 4 hours), it never stacks to 4x. */
+/** 2x production for 1 hour. Watching again adds 1 hour (up to 6 hours). It never goes above 2x. */
 export function rewardAdBoost(s: GameState, now: number): GameState | null {
   if (!canAdBoost(s, now)) return null;
-  const add = AD_BOOST_MINUTES * 60000;
-  const existing = s.boosts.find((x) => x.source === 'ad' && x.until > now);
-  const boosts = existing
-    ? s.boosts.map((b) => (b === existing ? { ...b, until: b.until + add } : b))
-    : [...s.boosts, { kind: 'wood' as const, mult: 2, until: now + add, source: 'ad' as const }];
-  return { ...s, boosts };
+  return { ...s, boosts: addBoost(s.boosts, 'wood', 2, AD_BOOST_MINUTES / 60, now, 'ad') };
 }
 
 // ---------- Gold shop (sell time, not power) ----------
@@ -233,6 +286,7 @@ export function rewardAdBoost(s: GameState, now: number): GameState | null {
 export function buyGoldItem(s: GameState, id: string, now: number): GameState | null {
   const it = GOLD_SHOP.find((x) => x.id === id);
   if (!it || s.gold < it.gold) return null;
+  if (it.kind === 'skip') return addMoney({ ...s, gold: s.gold - it.gold }, incomePerMin(s, now) * 60 * it.hours);
   return { ...s, gold: s.gold - it.gold, boosts: addBoost(s.boosts, it.kind, 2, it.hours, now, 'gold') };
 }
 

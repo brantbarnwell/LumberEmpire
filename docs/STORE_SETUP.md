@@ -13,19 +13,16 @@ Purchases do **not** work in Expo Go or the web preview. The Shop says so and sh
 
 | Product ID | Type | Price |
 |---|---|---|
-| com.lumberempire.gold100 | Consumable | $0.99 |
-| com.lumberempire.gold550 | Consumable | $4.99 |
-| com.lumberempire.gold1200 | Consumable | $9.99 |
-| com.lumberempire.gold3000 | Consumable | $19.99 |
-| com.lumberempire.gold7000 | Consumable | $49.99 |
-| com.lumberempire.gold15000 | Consumable | $99.99 |
-| com.lumberempire.starterpack | Non-Consumable | $4.99 |
-| com.lumberempire.propack | Non-Consumable | $19.99 |
-| com.lumberempire.megapack | Non-Consumable | $49.99 |
-| com.lumberempire.landpack | Non-Consumable | $29.99 |
-| com.lumberempire.noads | Non-Consumable | $4.99 |
-| com.lumberempire.vip.monthly | Auto-Renewable Subscription (group "VIP") | $4.99 / month |
-| com.lumberempire.vip.yearly | Auto-Renewable Subscription (group "VIP") | $39.99 / year |
+| com.lumberempire.starter | Non-Consumable | $2.99 |
+| com.lumberempire.gold80 | Consumable | $0.99 |
+| com.lumberempire.gold420 | Consumable | $4.99 |
+| com.lumberempire.gold880 | Consumable | $9.99 |
+| com.lumberempire.gold1800 | Consumable | $19.99 |
+| com.lumberempire.noads2 | Non-Consumable | $4.99 |
+| com.lumberempire.prod2x | Non-Consumable | $7.99 |
+| com.lumberempire.offline24 | Non-Consumable | $3.99 |
+
+Playbook 3 (Nov 22): these 8 are the whole store. Do NOT create the old IDs (gold100, gold550, gold1200, gold3000, gold7000, gold15000, starterpack, propack, megapack, landpack, noads) or the VIP subscriptions. If you already created any, set them to "Remove from sale". Apple never lets an ID be reused, so the new ones have new names. VIP comes back later as $4.99/month only, after monthly content ships.
 
 5. Users and Access > Sandbox: create a Sandbox tester (a new email you don't use for anything else). On the iPhone: Settings > App Store > Sandbox Account, sign in with it. Sandbox purchases are free.
 
@@ -33,7 +30,7 @@ Purchases do **not** work in Expo Go or the web preview. The Shop says so and sh
 
 1. Make an account at revenuecat.com and create a project.
 2. Add an Apple App Store app with bundle ID com.lumberempire.game and connect it to App Store Connect (RevenueCat walks you through the In-App Purchase key).
-3. Import the 13 products above.
+3. Import the 8 products above.
 4. Create an Entitlement with the identifier **vip** and attach both VIP subscriptions to it.
 5. Copy the **Apple public SDK key** (starts with `appl_`).
 

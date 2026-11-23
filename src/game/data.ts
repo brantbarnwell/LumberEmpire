@@ -39,6 +39,7 @@ export const GOLDEN_MONEY_PER_POWER = 25; // bonus Money = 25 x axe power. BALAN
 // Selling (update 2): everything sells at the market price, set by the game. No price slider.
 export const MARKET_BASE_PRICE = 0.1; // $ per wood at normal demand. Re-tuned in Part 5 after the demand fix. BALANCE
 export const OFFLINE_MAX_HOURS = 8; // spec Part 3: keep 8 hour cap
+export const OFFLINE_MAX_HOURS_LONG = 24; // Playbook 3: the Longer Offline purchase raises it to 24 hours
 export const OFFLINE_RATE = 0.5; // spec Part 3: helpers and land work at 50% while you are away
 
 // Empire ranks (spec section 10). Total Money earned, all time. Top rank matches prestige at $200M (Part 4).
@@ -71,6 +72,9 @@ export interface Grant {
   land?: string[]; // old pack design, no longer used
   landIfMissing?: { id: string; elseGold: number }; // Land Baron Pack
   noAds?: boolean;
+  prodBonus?: number; // Playbook 3: permanent production, +0.2 = +20%. Adds to boosts, kept through prestige
+  offlineHours?: number; // Playbook 3: longer offline cap
+  cosmetics?: string[]; // Playbook 3: cosmetic ids added to the Cosmetics shop as owned
 }
 
 export type ProductKind = 'gold' | 'pack' | 'vip';
@@ -83,51 +87,71 @@ export interface ShopProduct {
   perks: string[];
   badge?: string;
   grant: Grant;
+  hours?: number; // Gold packs: about how many hours of time skips the Gold buys
+  removes?: string; // Remove Ads: exactly what it removes, said on the button
+  hidden?: boolean; // retired: not for sale, still granted and restored for players who bought it
 }
 
+// Playbook 3 (sell time, not power): everything here can be earned for free by playing.
+// Paying buys speed, convenience and looks, never a wall. Gold is priced in hours saved, about $0.25 an hour
+// (20 Gold = 1 hour of time skips, see GOLD_PER_MINUTE_SKIP).
+export const GOLD_PER_HOUR = 20;
+export const STARTER_PACK_HOURS = 72; // shown only in the first 72 hours
+export const STARTER_PROD_BONUS = 0.2; // +20% production forever
+export const PERM_PROD_BONUS = 1; // "2x production": +100%, adds to boosts, prestige still multiplies on top
+
 export const PRODUCTS: ShopProduct[] = [
-  // Gold packs (consumable)
-  { id: 'com.lumberempire.gold100', kind: 'gold', title: '100 Gold', usd: '$0.99', perks: [], grant: { gold: 100 } },
-  { id: 'com.lumberempire.gold550', kind: 'gold', title: '550 Gold', usd: '$4.99', perks: [], grant: { gold: 550 } },
-  { id: 'com.lumberempire.gold1200', kind: 'gold', title: '1,200 Gold', usd: '$9.99', perks: [], badge: 'Popular', grant: { gold: 1200 } },
-  { id: 'com.lumberempire.gold3000', kind: 'gold', title: '3,000 Gold', usd: '$19.99', perks: [], grant: { gold: 3000 } },
-  { id: 'com.lumberempire.gold7000', kind: 'gold', title: '7,000 Gold', usd: '$49.99', perks: [], grant: { gold: 7000 } },
-  { id: 'com.lumberempire.gold15000', kind: 'gold', title: '15,000 Gold', usd: '$99.99', perks: [], badge: 'Best Value', grant: { gold: 15000 } },
-
-  // One-time packs (non-consumable)
+  // 1. Starter Pack: after the first helper, shown once, first 72 hours only
   {
-    id: 'com.lumberempire.starterpack', kind: 'pack', title: 'Starter Pack', usd: '$4.99', badge: 'Best for new players',
-    perks: ['500 Gold', 'Steel Axe skin', '2x Wood for 24 hours'],
-    grant: { gold: 500, skins: ['steel-axe-skin'], woodBoost: { mult: 2, hours: 24 } },
+    id: 'com.lumberempire.starter', kind: 'pack', title: 'Starter Pack', usd: '$2.99', badge: 'First 72 hours only',
+    perks: ['300 Gold (about 15 hours of time skips)', '+20% production forever', 'Fire Axe look (cosmetic)'],
+    grant: { gold: 300, prodBonus: STARTER_PROD_BONUS, cosmetics: ['axe-fire'] },
   },
+  // 2. Gold packs (consumable), priced in hours saved
+  { id: 'com.lumberempire.gold80', kind: 'gold', title: '80 Gold', usd: '$0.99', hours: 4, perks: [], grant: { gold: 80 } },
+  { id: 'com.lumberempire.gold420', kind: 'gold', title: '420 Gold', usd: '$4.99', hours: 21, perks: [], grant: { gold: 420 } },
+  { id: 'com.lumberempire.gold880', kind: 'gold', title: '880 Gold', usd: '$9.99', hours: 44, perks: [], badge: 'Popular', grant: { gold: 880 } },
+  { id: 'com.lumberempire.gold1800', kind: 'gold', title: '1,800 Gold', usd: '$19.99', hours: 90, perks: [], badge: 'Best value', grant: { gold: 1800 } },
+  // 3. Remove Ads, bundled with Gold
   {
-    id: 'com.lumberempire.propack', kind: 'pack', title: 'Pro Logger Pack', usd: '$19.99',
-    perks: ['2,500 Gold', 'Diamond Axe skin (looks only, keeps your axe stats)', '2x Money for 7 days'],
-    grant: { gold: 2500, skins: ['diamond-axe-skin'], moneyBoost: { mult: 2, hours: 24 * 7 } },
+    id: 'com.lumberempire.noads2', kind: 'pack', title: 'Remove Ads + 400 Gold', usd: '$4.99',
+    removes: 'Removes every ad video. You still get all the rewards, instantly, with no video. There are no banner or pop-up ads to remove.',
+    perks: ['No ad videos, rewards are instant', '400 Gold'], grant: { noAds: true, gold: 400 },
   },
+  // 4. Permanent 2x production: makes runs faster, prestige still multiplies on top and is still the way to grow
   {
-    id: 'com.lumberempire.megapack', kind: 'pack', title: 'Empire Pack', usd: '$49.99',
-    perks: ['7,000 Gold', 'Dragon Axe', 'Sawmill', '5x Wood for 7 days'],
-    grant: { gold: 7000, exclusiveAxes: ['dragon'], buildings: ['sawmill'], woodBoost: { mult: 5, hours: 24 * 7 } },
+    id: 'com.lumberempire.prod2x', kind: 'pack', title: '2x Production Forever', usd: '$7.99',
+    perks: ['+100% production from your axe, helpers and land', 'Adds to boosts (2x boost + this = 3x)', 'Kept through prestige'],
+    grant: { prodBonus: PERM_PROD_BONUS },
   },
+  // 5. Longer offline cap
   {
-    id: 'com.lumberempire.landpack', kind: 'pack', title: 'Land Baron Pack', usd: '$29.99',
-    perks: ['1,000 Gold', '2x Wood for 7 days', 'Small Clearing land (or +500 Gold if you own it)'],
-    grant: { gold: 1000, woodBoost: { mult: 2, hours: 24 * 7 }, landIfMissing: { id: 'clearing', elseGold: 500 } },
-  },
-  {
-    id: 'com.lumberempire.noads', kind: 'pack', title: 'Remove Ads', usd: '$4.99',
-    perks: ['No ads ever: video rewards become instant'], grant: { noAds: true },
+    id: 'com.lumberempire.offline24', kind: 'pack', title: 'Longer Offline: 24 hours', usd: '$3.99',
+    perks: ['Your crew keeps working up to 24 hours while you are away (free: 8 hours)'], grant: { offlineHours: OFFLINE_MAX_HOURS_LONG },
   },
 
-  // Subscriptions
+  // Retired products: not for sale any more. Kept so old purchases still restore and pending ones still pay out.
+  { id: 'com.lumberempire.gold100', kind: 'gold', title: '100 Gold', usd: '$0.99', hidden: true, perks: [], grant: { gold: 100 } },
+  { id: 'com.lumberempire.gold550', kind: 'gold', title: '550 Gold', usd: '$4.99', hidden: true, perks: [], grant: { gold: 550 } },
+  { id: 'com.lumberempire.gold1200', kind: 'gold', title: '1,200 Gold', usd: '$9.99', hidden: true, perks: [], grant: { gold: 1200 } },
+  { id: 'com.lumberempire.gold3000', kind: 'gold', title: '3,000 Gold', usd: '$19.99', hidden: true, perks: [], grant: { gold: 3000 } },
+  { id: 'com.lumberempire.gold7000', kind: 'gold', title: '7,000 Gold', usd: '$49.99', hidden: true, perks: [], grant: { gold: 7000 } },
+  { id: 'com.lumberempire.gold15000', kind: 'gold', title: '15,000 Gold', usd: '$99.99', hidden: true, perks: [], grant: { gold: 15000 } },
+  { id: 'com.lumberempire.starterpack', kind: 'pack', title: 'Starter Pack (old)', usd: '$4.99', hidden: true, perks: [], grant: { gold: 500, skins: ['steel-axe-skin'], woodBoost: { mult: 2, hours: 24 } } },
+  { id: 'com.lumberempire.propack', kind: 'pack', title: 'Pro Logger Pack', usd: '$19.99', hidden: true, perks: [], grant: { gold: 2500, skins: ['diamond-axe-skin'], moneyBoost: { mult: 2, hours: 24 * 7 } } },
+  { id: 'com.lumberempire.megapack', kind: 'pack', title: 'Empire Pack', usd: '$49.99', hidden: true, perks: [], grant: { gold: 7000, exclusiveAxes: ['dragon'], buildings: ['sawmill'], woodBoost: { mult: 2, hours: 24 * 7 } } },
+  { id: 'com.lumberempire.landpack', kind: 'pack', title: 'Land Baron Pack', usd: '$29.99', hidden: true, perks: [], grant: { gold: 1000, woodBoost: { mult: 2, hours: 24 * 7 }, landIfMissing: { id: 'clearing', elseGold: 500 } } },
+  { id: 'com.lumberempire.noads', kind: 'pack', title: 'Remove Ads', usd: '$4.99', hidden: true, perks: [], grant: { noAds: true } },
+
+  // 6. VIP: NOT for sale until we ship monthly content. No weekly subscription, ever.
+  // When it comes back: $4.99/month, no ad videos, daily Gold, a small permanent boost, longer offline cap.
   {
-    id: 'com.lumberempire.vip.monthly', kind: 'vip', title: 'VIP Tycoon Monthly', usd: '$4.99 / month',
-    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP cosmetics', 'No ads: video rewards are instant'], grant: {},
+    id: 'com.lumberempire.vip.monthly', kind: 'vip', title: 'VIP Tycoon Monthly', usd: '$4.99 / month', hidden: true,
+    perks: ['No ad videos', 'Daily Gold', 'Small permanent boost', 'Longer offline cap'], grant: {},
   },
   {
-    id: 'com.lumberempire.vip.yearly', kind: 'vip', title: 'VIP Tycoon Yearly', usd: '$39.99 / year', badge: 'Save 33%',
-    perks: ['2x earnings', '100 free Gold every day', 'Exclusive VIP cosmetics', 'No ads: video rewards are instant'], grant: {},
+    id: 'com.lumberempire.vip.yearly', kind: 'vip', title: 'VIP Tycoon Yearly', usd: '$39.99 / year', hidden: true,
+    perks: ['No ad videos', 'Daily Gold', 'Small permanent boost', 'Longer offline cap'], grant: {},
   },
 ];
 
@@ -283,15 +307,21 @@ export const GOLD_PER_MINUTE_SKIP = 1 / 3; // speed-ups cost 1 Gold per 3 minute
 // Rewarded videos (opt-in only)
 export const AD_GOLD_PER_VIDEO = 5; // BALANCE
 export const AD_GOLD_VIDEOS_PER_DAY = 5; // spec
-export const AD_BOOST_MINUTES = 30; // spec: 2x production for 30 minutes
-export const AD_BOOST_MAX_MINUTES = 240; // watching again adds 30 min, up to 4 hours. BALANCE
+export const AD_BOOST_MINUTES = 60; // Playbook 3: 2x production for 1 hour
+export const AD_BOOST_MAX_MINUTES = 360; // watching again adds 1 hour, up to 6 hours. Never more than 2x
+// Playbook 3: the Watch Ad pill on the home screen
+export const AD_CASH_MINUTES = 30; // pays 30 minutes of what you make right now
+export const AD_CASH_MIN = 25; // never less than $25 (the very first minutes)
+export const AD_CASH_COOLDOWN_MIN = 7; // 5 to 10 minutes between ads
+export const AD_CASH_PER_DAY = 5; // cap: 5 a day
+export const AD_CASH_UNLOCK_SEC = 4 * 60; // not in the first 4 minutes of play
 export const AD_OFFLINE_MULT = 2; // spec
 
 // Gold shop: sell time, not power. Prices BALANCE.
 export const GOLD_SHOP = [
-  { id: 'wood1h', title: '2x Wood for 1 hour', gold: 20, kind: 'wood' as const, hours: 1 },
-  { id: 'wood24h', title: '2x Wood for 24 hours', gold: 150, kind: 'wood' as const, hours: 24 },
-  { id: 'money1h', title: '2x Money for 1 hour', gold: 20, kind: 'money' as const, hours: 1 },
+  { id: 'wood1h', title: '2x production for 1 hour', gold: 20, kind: 'wood' as const, hours: 1 },
+  { id: 'wood24h', title: '2x production for 24 hours', gold: 150, kind: 'wood' as const, hours: 24 },
+  { id: 'skip1h', title: 'Time Skip: 1 hour of production now', gold: 20, kind: 'skip' as const, hours: 1 },
 ];
 export const GOLD_REPAIR_ALL = 10; // spec: repairs the axe and every tool
 

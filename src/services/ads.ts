@@ -6,7 +6,8 @@ import { Platform } from 'react-native';
 
 const IOS_UNIT = process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_ID ?? '';
 
-export type AdResult = { ok: true } | { ok: false; message: string };
+import type { AdResult } from '../game/adflow';
+export type { AdResult };
 
 let mod: typeof import('react-native-google-mobile-ads') | null = null;
 let ready = false;
@@ -29,6 +30,11 @@ function loadNext() {
   loaded = false;
   ad = mod.RewardedAd.createForAdRequest(unitId(), { requestNonPersonalizedAdsOnly: true });
   ad.addAdEventListener(mod.RewardedAdEventType.LOADED, () => { loaded = true; });
+  const mine = ad;
+  ad.addAdEventListener(mod.AdEventType.ERROR, () => {
+    // no video to show (no fill / no network): the buttons stay hidden; try again in 30 seconds
+    if (ad === mine && !loaded) setTimeout(() => { if (ad === mine) loadNext(); }, 30_000);
+  });
   ad.load();
 }
 
@@ -48,8 +54,8 @@ export function adReady() {
   return ready && loaded;
 }
 
-/** Shows a video. Resolves ok only if the player watched to the end. */
-export function showRewardedVideo(): Promise<AdResult> {
+/** Shows a video. onEarned runs the moment the video is finished. Resolves when it closes. */
+export function showRewardedVideo(onEarned?: () => void): Promise<AdResult> {
   const b = adsBlocker();
   if (b) return Promise.resolve({ ok: false, message: b });
   if (!ready || !ad || !mod) return Promise.resolve({ ok: false, message: 'Videos are still loading. Try again in a moment.' });
@@ -59,7 +65,7 @@ export function showRewardedVideo(): Promise<AdResult> {
   return new Promise((resolve) => {
     let earned = false;
     const subs = [
-      current.addAdEventListener(m.RewardedAdEventType.EARNED_REWARD, () => { earned = true; }),
+      current.addAdEventListener(m.RewardedAdEventType.EARNED_REWARD, () => { earned = true; onEarned?.(); }),
       current.addAdEventListener(m.AdEventType.CLOSED, () => {
         subs.forEach((u) => u());
         loadNext();
@@ -79,7 +85,7 @@ export function showRewardedVideo(): Promise<AdResult> {
   });
 }
 
-/** Runs a reward: instantly for ad-free players, otherwise after a full video. */
+/** Old helper: instantly for ad-free players, otherwise after a full video. */
 export async function earnReward(adFree: boolean): Promise<AdResult> {
   if (adFree) return { ok: true };
   return showRewardedVideo();
