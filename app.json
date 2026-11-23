@@ -37,9 +37,20 @@
       [
         "expo-build-properties",
         {
-          "ios": { "deploymentTarget": "17.0" }
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2beeff95-bc4a-44e1-ad14-5d6594488988"
+      }
+    },
+    "owner": "brantbarnwell",
+    "updates": {
+      "url": "https://u.expo.dev/2beeff95-bc4a-44e1-ad14-5d6594488988"
+    }
   }
 }
