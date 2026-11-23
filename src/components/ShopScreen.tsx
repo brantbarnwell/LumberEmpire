@@ -6,9 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { update, useGame } from '../game/store';
 import { canClaimVip, claimVip, grantProduct, incomePerMin } from '../game/logic';
 import { ShopProduct, VIP_DAILY_GOLD, productById, GOLD_SHOP, GOLD_REPAIR_ALL, AD_GOLD_PER_VIDEO, AD_GOLD_VIDEOS_PER_DAY, GOLD_PER_HOUR, STARTER_PACK_HOURS } from '../game/data';
-import { STARTER_ID, adFree, buyGoldItem, forSale, goldRepair, goldVideosLeft, rewardGoldVideo, starterOnSale } from '../game/meta';
-import { adReady } from '../services/ads';
-import { runReward } from './reward';
+import { STARTER_ID, buyGoldItem, forSale, goldRepair, starterOnSale } from '../game/meta';
 import { duration, money, whole } from '../game/format';
 import { buy, restore, useStore } from '../services/purchases';
 import { haptic } from '../services/haptics';
@@ -92,7 +90,6 @@ function StoreScreen() {
   const starter = sale.find((p) => p.id === STARTER_ID);
   const gold = sale.filter((p) => p.kind === 'gold');
   const packs = sale.filter((p) => p.kind === 'pack' && p.id !== STARTER_ID);
-  const videoOk = adFree(s) || adReady();
 
   const packCard = (p: ShopProduct, extra?: string) => {
     const owned = s.owned.products.includes(p.id);
@@ -189,27 +186,7 @@ function StoreScreen() {
 
       <Text style={styles.section}>Spend Gold</Text>
       <Text style={styles.note}>Gold buys time, never power you can't earn by playing.</Text>
-      {videoOk && (
-        <Card style={styles.packCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.packTitle}>Free Gold</Text>
-            <Text style={styles.perk}>+{AD_GOLD_PER_VIDEO} Gold {adFree(s) ? '(instant for you)' : 'for an optional video'} · {goldVideosLeft(s, now)}/{AD_GOLD_VIDEOS_PER_DAY} left today</Text>
-          </View>
-          <Button
-            small
-            label={adFree(s) ? 'Claim' : '▶ Watch'}
-            loading={busy === 'adgold'}
-            disabled={!!busy || goldVideosLeft(s, now) === 0}
-            onPress={async () => {
-              setMsg(null);
-              setBusy('adgold');
-              const err = await runReward((st) => rewardGoldVideo(st, Date.now()));
-              setBusy(null);
-              setMsg(err ? { kind: 'info', text: err } : { kind: 'ok', text: `+${AD_GOLD_PER_VIDEO} Gold!` });
-            }}
-          />
-        </Card>
-      )}
+      <Text style={styles.note}>Free Gold: the Watch Ad button on Home, +{AD_GOLD_PER_VIDEO} Gold a video, {AD_GOLD_VIDEOS_PER_DAY} a day.</Text>
       {GOLD_SHOP.map((g) => (
         <Card key={g.id} style={styles.packCard}>
           <View style={{ flex: 1 }}>

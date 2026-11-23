@@ -126,7 +126,7 @@ export interface GameState {
   weekly: { weekKey: string; quest: Quest | null };
   board: { weekKey: string; startTotal: number; lastWeek: number }; // update 3: weekly leaderboard (kept through prestige)
   login: { index: number; lastClaimDay: string | null };
-  ads: { dayKey: string; goldVideos: number; cashVideos: number; lastCashAt: number }; // Playbook 3: cash = the home Watch Ad pill
+  ads: { dayKey: string; goldVideos: number; lastVideoAt: number; instantUsed: number }; // Playbook 3 fix: goldVideos = the home Watch Ad pill (+5 Gold); instantUsed = Remove Ads rewards today (max 1)
   offers: { firstSeenAt: number; starterShown: boolean }; // Playbook 3: Starter Pack shown once, first 72 hours
   prestige: { count: number; mult: number };
   notif: { asked: boolean; granted: boolean; lastFireDay: string | null; scheduledAt: number | null };
@@ -283,7 +283,7 @@ export function newGame(now = Date.now()): GameState {
     weekly: { weekKey: '', quest: null },
     board: { weekKey: '', startTotal: 0, lastWeek: 0 },
     login: { index: 0, lastClaimDay: null },
-    ads: { dayKey: dayKeyOf(now), goldVideos: 0, cashVideos: 0, lastCashAt: 0 },
+    ads: { dayKey: dayKeyOf(now), goldVideos: 0, lastVideoAt: 0, instantUsed: 0 },
     offers: { firstSeenAt: now, starterShown: false },
     prestige: { count: 0, mult: 1 },
     notif: { asked: false, granted: false, lastFireDay: null, scheduledAt: null },
@@ -1449,7 +1449,7 @@ export function migrate(s: GameState): GameState {
   }
   if (!st.woodMix) st = { ...st, woodMix: { pine: st.wood } };
   // Playbook 3
-  if (typeof st.ads.cashVideos !== 'number') st = { ...st, ads: { ...st.ads, cashVideos: 0, lastCashAt: 0 } };
+  if (typeof st.ads.lastVideoAt !== 'number' || typeof st.ads.instantUsed !== 'number') st = { ...st, ads: { dayKey: st.ads.dayKey, goldVideos: st.ads.goldVideos ?? 0, lastVideoAt: 0, instantUsed: 0 } };
   if (!st.offers) st = { ...st, offers: { firstSeenAt: st.lastSaved || Date.now(), starterShown: false } };
   if (typeof st.plankVal !== 'number') st = { ...st, plankVal: st.planks * PLANK_BASE_PRICE };
   st = { ...st, stats: { ...emptyStats(), ...st.stats } };

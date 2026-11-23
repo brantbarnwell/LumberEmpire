@@ -181,7 +181,7 @@ function SawmillCard() {
           <Text style={styles.sub}>
             {cur
               ? `Cuts ${cur.planksPerSec} planks a second (${cur.planksPerSec * PLANK_WOOD} wood a second). Cut planks by hand is only ${PLANK_CUT_PER_SEC}.`
-              : `Turns wood into planks much faster than Cut planks (${PLANK_CUT_PER_SEC} a second). Comes with the Empire Pack, or build it with Money.`}
+              : `Turns wood into planks much faster than Cut planks (${PLANK_CUT_PER_SEC} a second). Build it with Money. The Empire Pack is no longer sold, so a Sawmill kept through prestige can't be bought now; old buyers keep theirs.`}
           </Text>
         </View>
         {cur && <Switch value={s.sawmill.on} onValueChange={(v) => { update((st) => setSawmillOn(st, v)); }} trackColor={{ true: C.leafLight, false: '#bbb' }} accessibilityLabel="Sawmill on or off" />}

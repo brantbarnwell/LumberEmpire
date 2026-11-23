@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getState, update, useGame } from '../game/store';
 import { addMoney, collectOffline, collectOfflineBonus, offlineCapHours, sellAll, unitPrice } from '../game/logic';
-import { adFree, buyIdeas } from '../game/meta';
+import { adFree, buyIdeas, instantLeft, instantUsedText, useInstant } from '../game/meta';
 import { AD_OFFLINE_MULT } from '../game/data';
 import { runAdReward } from '../game/adflow';
 import { saveGame } from '../game/save';
@@ -68,9 +68,10 @@ export function WelcomeBack() {
     const e = await runAdReward({
       adFree: adFree(getState()),
       show: showRewardedVideo,
-      canGrant: () => !!getState().pendingOffline,
+      canGrant: () => !!getState().pendingOffline && instantLeft(getState(), Date.now()) > 0,
       grant: () => {
         const ok = collect(AD_OFFLINE_MULT);
+        if (ok) update((st) => useInstant(st, Date.now())); // Remove Ads: this was today's 1 instant reward
         if (ok) saveGame(getState());
         return ok;
       },
@@ -80,6 +81,7 @@ export function WelcomeBack() {
   };
   const cap = offlineCapHours(s);
   const showAd = !managed && (free || adReady()); // never offer a video that can't play
+  const used = instantLeft(s, now) <= 0; // Remove Ads: today's 1 instant reward is already used
 
   return (
     <View style={styles.back}>
@@ -110,7 +112,15 @@ export function WelcomeBack() {
         <View style={styles.buttons}>
           <Button style={{ flex: 1 }} label={managed ? 'OK' : 'Collect'} sub={managed ? undefined : money(total)} disabled={busy} onPress={() => (managed ? update((st) => ({ ...st, pendingOffline: null })) : collect(1))} />
           {showAd && (
-            <Button style={{ flex: 1.3 }} variant="gold" loading={busy} label={free ? `${AD_OFFLINE_MULT}x offline earnings` : `▶ Watch ad for ${AD_OFFLINE_MULT}x offline earnings`} sub={money(total * AD_OFFLINE_MULT)} onPress={watch} />
+            <Button
+              style={{ flex: 1.3 }}
+              variant="gold"
+              loading={busy}
+              disabled={used}
+              label={used ? instantUsedText(now) : free ? `${AD_OFFLINE_MULT}x offline earnings (instant)` : `▶ Watch ad for ${AD_OFFLINE_MULT}x offline earnings`}
+              sub={used ? undefined : money(total * AD_OFFLINE_MULT)}
+              onPress={watch}
+            />
           )}
         </View>
         <Text style={styles.small}>While you are away, your crew works at half speed for up to {cap} hours. Collect is always free.</Text>

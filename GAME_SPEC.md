@@ -43,7 +43,7 @@ Top bar must show clearly: Money as $1,250, Gold with a gold coin icon, and a Sh
 
 Use Expo in-app purchases / RevenueCat with StoreKit 2 on iOS. Do not use fake money or fake purchase buttons. Every purchase must go through Apple.
 
-Gold packs:
+Gold packs (for sale):
 - com.lumberempire.gold100 - 100 Gold - $0.99
 - com.lumberempire.gold550 - 550 Gold - $4.99
 - com.lumberempire.gold1200 - 1200 Gold - $9.99
@@ -51,19 +51,22 @@ Gold packs:
 - com.lumberempire.gold7000 - 7000 Gold - $49.99
 - com.lumberempire.gold15000 - 15000 Gold - $99.99
 
-One-time packs:
-- com.lumberempire.starterpack - Starter Pack - $4.99 - 500 Gold, Steel Axe skin, 2x Wood for 24 hours
-- com.lumberempire.propack - Pro Logger Pack - $19.99 - 2500 Gold, Diamond Axe skin (looks only, keeps your current axe stats), 2x Money for 7 days
-- com.lumberempire.megapack - Empire Pack - $49.99 - 7000 Gold, Dragon Axe, Sawmill, 5x Wood for 7 days
-- com.lumberempire.landpack - Land Baron Pack - $29.99 - 1000 Gold, 2x Wood for 7 days, Small Clearing if you don't own it yet (if you do, +500 Gold instead)
-- com.lumberempire.noads - Remove Ads - $4.99 - one-time, removes all ads forever
+One-time packs (for sale, Playbook 3):
+- com.lumberempire.starter - Starter Pack - $2.99 - 300 Gold, +20% production forever, Fire Axe look (shows as owned in Cosmetics). Pop-up once after the first helper, first 72 hours only.
+- com.lumberempire.noads2 - Remove Ads + 400 Gold - $4.99 - no ad videos. 1 ad reward a day is instant (any ad button), then "1 of 1 used today" until midnight.
+- com.lumberempire.prod2x - 2x Production Forever - $7.99
+- com.lumberempire.offline24 - Longer Offline - $3.99 - offline cap 8 to 24 hours
 
-Subscriptions:
-- com.lumberempire.vip.monthly - VIP Tycoon Monthly - $4.99 per month
-- com.lumberempire.vip.yearly - VIP Tycoon Yearly - $39.99 per year
-- VIP: 2x earnings, 100 free Gold every day, exclusive VIP cosmetics, no ads (video rewards are instant).
+Retired (hidden in the Shop, not for sale, still restored for old buyers with Restore Purchases):
+- com.lumberempire.starterpack - old Starter Pack - $4.99 - 500 Gold, Steel Axe skin, 2x Wood for 24 hours
+- com.lumberempire.propack - Pro Logger Pack - $19.99 - 2500 Gold, Diamond Axe skin, 2x Money for 7 days
+- com.lumberempire.megapack - Empire Pack - $49.99 - 7000 Gold, Dragon Axe, Sawmill (level 1 kept through prestige), timed Wood boost. New players can't get a Sawmill kept through prestige from a pack; there is no replacement product.
+- com.lumberempire.landpack - Land Baron Pack - $29.99 - 1000 Gold, 2x Wood for 7 days, Small Clearing or +500 Gold
+- com.lumberempire.noads - old Remove Ads - $4.99 - same 1-a-day instant rule as noads2
 
-Shop tab must show all packs with real dollar prices, working Buy buttons, a Restore Purchases button, loading states, success and error messages. Include a StoreKit Configuration / sandbox test setup for testing. Brant must create these same products with the same IDs and prices in App Store Connect before real money works.
+Subscriptions: not for sale until monthly content ships (com.lumberempire.vip.monthly $4.99/month; the yearly plan stays off). No weekly subscription.
+
+Shop tab shows only the products for sale, in this order: Starter Pack, Gold packs, Remove Ads, 2x Production Forever, Longer Offline. It has real dollar prices, working Buy buttons, a Restore Purchases button, loading states, and success and error messages. Brant must create the products that are for sale, with the same IDs and prices, in App Store Connect before real money works (docs/STORE_SETUP.md).
 
 ## 4. Core loop
 
@@ -558,40 +561,49 @@ Rules:
 
 ## Playbook 3: make money (Nov 22)
 
-Note on numbering: this repo's GAME_SPEC.md and Muse's copy have different section numbers. Muse's copy uses 27 to 31 for its own sections. This section has no number on purpose. The Update 4 balance table is in this repo's GAME_SPEC.md under "## 27. Update 4: land tree tiers".
+Note on numbering: this repo's GAME_SPEC.md and Muse's copy have different section numbers. Muse's copy uses 28 to 35 for its own sections, and this repo has no sections past 27. This section has no number on purpose. The Update 4 balance table is in this repo's GAME_SPEC.md under "## 27. Update 4: land tree tiers".
 
-Rule: sell time, not power. Everything can be earned for free. Paying buys speed, convenience and cosmetics, never a wall.
+Rule: sell time, not power. Everything can be earned for free. Paying buys speed, convenience and cosmetics, never a wall. This section replaces the older ad and boost rules in section 17 (Part 3, items 1 and 6).
 
-Rewarded ads (no forced ads, no interstitials):
-- **Welcome back:** "Watch ad for 2x offline earnings", once per return, with a plain Collect button beside it. Hidden when no video is loaded.
-- **Timed boost (Goals tab):** 2x production for 1 hour. Watching again adds 1 hour, up to 6 hours.
-- **All timed boosts share one 2x timer.** A new 2x boost makes the timer longer instead of stacking (never 4x). Permanent purchases and Timber Rush add on top: 2x boost + 2x Forever = 3x. Prestige multiplies everything.
-- **Watch Ad pill (home):**
-  - Placement: right edge, centre at 56% down the screen, 166 × 52 points, clear of the tree.
-  - Copy: "Watch Ad · +30 min" with the exact cash shown ("+$5,970").
-  - Pays: 30 minutes of current production, minimum $25.
-  - Cooldown: 7 minutes, shown as "Ready in 4:32".
-  - Cap: 5 a day, then "New ads in 6:12:08" until midnight.
-  - Pulses with a glow for 10 s only when a new offer becomes ready.
+Rewarded ads only (no forced ads, no interstitials):
+- **Watch Ad pill (home), Playbook 3 fix: pays Gold.**
+  - Copy: "Watch Ad · +5 Gold" with "5 of 5 left today" under it.
+  - Pays: +5 Gold per video, max 5 a day, with its own counter. Free players must watch the video. This pill is the free Gold video; the Goals and Shop tabs point to it.
+  - Placement: right edge, centre 56% down the screen, 166 × 52 points, clear of the tree.
+  - Cooldown: 7 minutes, shown as "Ready in 6:59".
+  - Cap: "New ads in 6:12:08 · 5 of 5 used today", counting down to midnight.
   - Hidden: in the first 4 minutes of play, while tapping (back 2.5 s after the last chop), behind the welcome-back screen, and when no video is loaded.
-- **Free Gold video:** +5 Gold, max 5 a day. It has its own counter.
-- **Paying out:** rewards are paid when the video finishes (AdMob "earned reward") and saved at once, never when it opens. Closed early or failed = no reward. If the video loads with an error, the app retries 30 s later.
-- **Remove Ads:** removes the videos, not the rewards. Rewards become instant, still with the same caps.
+  - Pulses only when a new offer becomes ready.
+- **Welcome back (Money):** "Watch ad for 2x offline earnings", once per return, plain Collect beside it. Hidden when no video is loaded.
+- **Timed boost (Money, Goals tab):** 2x production for 1 hour. Each extra ad adds 1 hour, up to 6 hours.
+  - All timed 2x boosts share one timer and never go above 2x (never 4x).
+  - Permanent purchases and Timber Rush add on top: 2x boost + 2x Forever = 3x. Prestige multiplies everything.
+- **Paying out:** rewards are paid when the video finishes (AdMob "earned reward") and saved at once, never when it opens. Closed early or failed = nothing. A video that fails to load retries 30 s later.
+- **Remove Ads, expert rule:** after buying Remove Ads, every ad reward is instant with no video, but only 1 a day in total, across the home Gold pill, the welcome-back 2x and the timed boost.
+  - After the 1 is used, the other ad buttons that day show "1 of 1 used today, new rewards tomorrow" with a countdown to midnight. The home pill shows "1 of 1 used today", greyed, no reward.
+  - The cap resets to 1 at midnight.
+  - The same rule applies to the old Remove Ads and to VIP.
+- **Time Skip:** 20 Gold = 1 hour of production now.
 - **Interstitials (later, if ever):** max 1 per 3 minutes, only at natural breaks (after prestige), never mid-chop, never for payers, never right after a rewarded ad.
 
-Store, in this order (`src/game/data.ts` PRODUCTS):
-| Product | ID | Price | Gives |
-|---|---|---|---|
-| Starter Pack | com.lumberempire.starter | $2.99 | 300 Gold, +20% production forever, Fire Axe look. Pop-up once after the first helper, first 72 hours only |
-| 80 Gold | com.lumberempire.gold80 | $0.99 | about 4 hours of time skips |
-| 420 Gold | com.lumberempire.gold420 | $4.99 | about 21 hours |
-| 880 Gold | com.lumberempire.gold880 | $9.99 | about 44 hours |
-| 1,800 Gold | com.lumberempire.gold1800 | $19.99 | about 90 hours |
-| Remove Ads + 400 Gold | com.lumberempire.noads2 | $4.99 | no ad videos (rewards instant) + 400 Gold |
-| 2x Production Forever | com.lumberempire.prod2x | $7.99 | +100% production, kept through prestige |
-| Longer Offline | com.lumberempire.offline24 | $3.99 | offline cap 8 h → 24 h |
+Store, in this order (product list in section 3, code in `src/game/data.ts` PRODUCTS):
+- Starter Pack $2.99
+- the 6 Gold packs from section 3 (100 / 550 / 1,200 / 3,000 / 7,000 / 15,000 Gold)
+- Remove Ads + 400 Gold $4.99
+- 2x Production Forever $7.99
+- Longer Offline $3.99 (8 h to 24 h)
 
-- 20 Gold = 1 hour (speed-ups cost 1 Gold per 3 minutes). New Gold item: Time Skip, 20 Gold = 1 hour of production now.
-- VIP is hidden until monthly content ships. Then it's $4.99/month only, no weekly subscription: no ad videos, daily Gold, small permanent boost, longer offline cap.
-- The old products (old gold packs, Pro / Empire / Land Baron packs, the old Remove Ads) are retired. They're hidden but still restore for anyone who bought them.
-- Pacing for a free player is unchanged: prestige 3.46 days (Mon start). With 2x Forever: 1.92 days. With the Starter Pack: 2.92 days.
+Notes:
+- Pro, Empire and Land Baron packs are retired; old buyers still restore them.
+- The Sawmill card says plainly that a Sawmill kept through prestige can no longer be bought.
+- VIP is hidden until monthly content ships.
+
+Pacing, Monday start, 2 taps/sec (`ADS=... npm run pacing`). Gold from ads is spent on Time Skips:
+| Player | Prestige |
+|---|---|
+| No ads | 3.46 days |
+| Free, 5 Gold videos a day | 3.08 days |
+| Payer, 1 instant reward a day (morning welcome-back 2x) + the 400 Gold | 2.92 days |
+| Free, every ad every time (5 Gold, welcome-back 2x each return, boosts) | 1.46 days (below the 2.5-day target, not changed in this fix) |
+| With 2x Forever | 1.92 days |
+| With the Starter Pack | 2.92 days |

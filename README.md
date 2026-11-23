@@ -105,8 +105,9 @@ Built:
   - Logs fly into the counter in the right colour.
 - Playbook 3 (GAME_SPEC.md, "Playbook 3: make money"):
   - Rewarded ads only: welcome back 2x, a 1-hour 2x boost (up to 6 h), and the Watch Ad pill on the home screen.
-  - The pill pays 30 min of production, has a 7 min cooldown and is capped at 5 a day.
-  - New store: Starter Pack, Gold packs priced in hours saved, Remove Ads + Gold, 2x Forever, 24 h offline. VIP is hidden for now.
+  - The pill pays +5 Gold a video, has a 7 min cooldown and is capped at 5 a day.
+  - Remove Ads: 1 instant ad reward a day in total.
+  - Store: Starter Pack $2.99, the 6 Gold packs from section 3, Remove Ads + Gold, 2x Forever, 24 h offline. Old packs are retired. VIP is hidden for now.
     - New systems unlocking on a schedule.
     - Local notifications.
     - A weekly leaderboard against the AI rivals.

@@ -1,3 +1,5 @@
+import * as M from '../src/game/meta';
+import { grantProduct } from '../src/game/logic';
 // npm run pacing
 // Plays the real game rules with a simple pretend player and prints how long things take.
 import {
@@ -165,6 +167,12 @@ function bestBuy(s: GameState, now: number): { cost: number; buy: () => GameStat
 
 function days(nDays: number) {
   let s = newGame(T0);
+  // ADS=free: 5 Gold videos a day (pill, 7 min cooldown). ADS=freemax: also welcome-back 2x every return and the 1h boost.
+  // ADS=payer: Remove Ads (+400 Gold), 1 instant reward a day, used on the first welcome-back 2x of the day (the best one).
+  // With ADS set, Gold is spent on Time Skips (20 Gold = 1 hour of production now).
+  const ADS = process.env.ADS ?? '';
+  let adGold = 0;
+  if (ADS === 'payer') { s = grantProduct(s, 'com.lumberempire.noads2', 'sim', T0) ?? s; adGold = 400; } // the 400 Gold in the pack
   if (process.env.PERM) s = { ...s, owned: { ...s.owned, products: process.env.PERM.split(",").map((x: string) => `com.lumberempire.${x}`) } }; // PERM=prod2x or starter: paid upgrades
   let now = T0;
   let prestigeAt = null as number | null;
@@ -179,13 +187,27 @@ function days(nDays: number) {
       if (start > now) {
         s = { ...s, lastSaved: now };
         const off = computeOffline(s, start);
-        s = off.result ? collectOffline(off.state, off.result, 1) : off.state;
+        let mult = 1;
+        if (off.result && (ADS === 'freemax' || (ADS === 'payer' && M.instantLeft(off.state, start) > 0))) {
+          mult = 2;
+        }
+        s = off.result ? collectOffline(off.state, off.result, mult) : off.state;
+        if (mult === 2 && ADS === 'payer') s = M.useInstant(s, start);
         if (process.env.TRACE && d < 2) console.log(`  offline to ${h}h: +$${Math.round(off.result?.earned ?? 0)} sold ${Math.round(off.result?.sold ?? 0)} made ${Math.round(off.result?.produced ?? 0)} wood=${Math.round(s.wood)} price=${s.sellPrice} buyers=${s.buyers.wood.toFixed(1)} owed=${Math.round(s.wagesOwed)}`);
         now = start;
       }
       for (let t = 0; t < 1800; t += 1) {
         now += 1000;
         s = chop(s, now, rand).state;
+        const goldBefore = s.gold;
+        if (ADS === 'free' || ADS === 'freemax') s = M.rewardGoldVideo(s, now) ?? s;
+        if (ADS === 'freemax') s = M.rewardAdBoost(s, now) ?? s;
+        // only Gold from ads is spent (Gold from golden trees etc. is left alone, as in the no-ads run)
+        if (ADS) {
+          const g = s.gold - goldBefore;
+          if (g > 0) adGold += g;
+          while (adGold >= 20) { const n = M.buyGoldItem(s, 'skip1h', now); if (!n) break; s = n; adGold -= 20; }
+        }
         s = upkeep(tick(s, 1, now), now);
         for (let k = 0; k < 5; k++) {
           const b = bestBuy(s, now);
@@ -200,6 +222,7 @@ function days(nDays: number) {
       }
     }
     if (process.env.DEBUG) { const b = bestBuy(s, now); const L = require('../src/game/logic'); const noLand = { ...s, lands: {} }; console.log(`  d${d + 1} value/s ${Math.round(L.passiveValuePerSec(s, now))} (no land ${Math.round(L.passiveValuePerSec(noLand, now))}) chop$ ${(L.woodPerChop(s, now) * L.woodMarketPrice(s.dayKey, L.chopType(s))).toFixed(1)} prestige ${s.prestige.mult} boosts ${JSON.stringify(s.boosts)} money ${Math.round(s.money)} wps ${Math.round(require('../src/game/logic').passiveWoodPerSec(s, now))} helpers ${JSON.stringify(s.helpers)} lands ${Object.keys(s.lands)} tools ${Object.keys(s.tools)} next ${b?.cost}`); }
+    if (process.env.GOLDLOG) console.log(`  day ${d + 1} Gold on hand ${Math.round(s.gold)} (ad Gold unspent ${adGold})`);
     log.push(`day ${d + 1}: earned ${Math.round(s.runMoneyEarned).toLocaleString()} this run, ${Object.values(s.helpers).reduce((a, h) => a + h.count, 0)} helpers, ${Object.keys(s.lands).length} lands, ${Object.keys(s.tools).length} tools, storage ${storageCap(s).toLocaleString()}`);
   }
   return { prestigeAt, gain: gainAt, log, hits };

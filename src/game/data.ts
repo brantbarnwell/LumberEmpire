@@ -93,8 +93,8 @@ export interface ShopProduct {
 }
 
 // Playbook 3 (sell time, not power): everything here can be earned for free by playing.
-// Paying buys speed, convenience and looks, never a wall. Gold is priced in hours saved, about $0.25 an hour
-// (20 Gold = 1 hour of time skips, see GOLD_PER_MINUTE_SKIP).
+// Paying buys speed, convenience and looks, never a wall. Each Gold pack shows the hours of time skips it buys
+// (20 Gold = 1 hour of time skips, see GOLD_PER_MINUTE_SKIP). Gold pack amounts are Muse's spec (section 3).
 export const GOLD_PER_HOUR = 20;
 export const STARTER_PACK_HOURS = 72; // shown only in the first 72 hours
 export const STARTER_PROD_BONUS = 0.2; // +20% production forever
@@ -107,16 +107,18 @@ export const PRODUCTS: ShopProduct[] = [
     perks: ['300 Gold (about 15 hours of time skips)', '+20% production forever', 'Fire Axe look (cosmetic)'],
     grant: { gold: 300, prodBonus: STARTER_PROD_BONUS, cosmetics: ['axe-fire'] },
   },
-  // 2. Gold packs (consumable), priced in hours saved
-  { id: 'com.lumberempire.gold80', kind: 'gold', title: '80 Gold', usd: '$0.99', hours: 4, perks: [], grant: { gold: 80 } },
-  { id: 'com.lumberempire.gold420', kind: 'gold', title: '420 Gold', usd: '$4.99', hours: 21, perks: [], grant: { gold: 420 } },
-  { id: 'com.lumberempire.gold880', kind: 'gold', title: '880 Gold', usd: '$9.99', hours: 44, perks: [], badge: 'Popular', grant: { gold: 880 } },
-  { id: 'com.lumberempire.gold1800', kind: 'gold', title: '1,800 Gold', usd: '$19.99', hours: 90, perks: [], badge: 'Best value', grant: { gold: 1800 } },
+  // 2. Gold packs (consumable): Muse's spec amounts (GAME_SPEC section 3)
+  { id: 'com.lumberempire.gold100', kind: 'gold', title: '100 Gold', usd: '$0.99', hours: 5, perks: [], grant: { gold: 100 } },
+  { id: 'com.lumberempire.gold550', kind: 'gold', title: '550 Gold', usd: '$4.99', hours: 27, perks: [], grant: { gold: 550 } },
+  { id: 'com.lumberempire.gold1200', kind: 'gold', title: '1,200 Gold', usd: '$9.99', hours: 60, perks: [], badge: 'Popular', grant: { gold: 1200 } },
+  { id: 'com.lumberempire.gold3000', kind: 'gold', title: '3,000 Gold', usd: '$19.99', hours: 150, perks: [], grant: { gold: 3000 } },
+  { id: 'com.lumberempire.gold7000', kind: 'gold', title: '7,000 Gold', usd: '$49.99', hours: 350, perks: [], grant: { gold: 7000 } },
+  { id: 'com.lumberempire.gold15000', kind: 'gold', title: '15,000 Gold', usd: '$99.99', hours: 750, perks: [], badge: 'Best value', grant: { gold: 15000 } },
   // 3. Remove Ads, bundled with Gold
   {
     id: 'com.lumberempire.noads2', kind: 'pack', title: 'Remove Ads + 400 Gold', usd: '$4.99',
-    removes: 'Removes every ad video. You still get all the rewards, instantly, with no video. There are no banner or pop-up ads to remove.',
-    perks: ['No ad videos, rewards are instant', '400 Gold'], grant: { noAds: true, gold: 400 },
+    removes: 'Removes every ad video. You get 1 ad reward a day instantly, with no video (any ad button). There are no banner or pop-up ads to remove.',
+    perks: ['No ad videos: 1 instant ad reward a day', '400 Gold'], grant: { noAds: true, gold: 400 },
   },
   // 4. Permanent 2x production: makes runs faster, prestige still multiplies on top and is still the way to grow
   {
@@ -131,12 +133,6 @@ export const PRODUCTS: ShopProduct[] = [
   },
 
   // Retired products: not for sale any more. Kept so old purchases still restore and pending ones still pay out.
-  { id: 'com.lumberempire.gold100', kind: 'gold', title: '100 Gold', usd: '$0.99', hidden: true, perks: [], grant: { gold: 100 } },
-  { id: 'com.lumberempire.gold550', kind: 'gold', title: '550 Gold', usd: '$4.99', hidden: true, perks: [], grant: { gold: 550 } },
-  { id: 'com.lumberempire.gold1200', kind: 'gold', title: '1,200 Gold', usd: '$9.99', hidden: true, perks: [], grant: { gold: 1200 } },
-  { id: 'com.lumberempire.gold3000', kind: 'gold', title: '3,000 Gold', usd: '$19.99', hidden: true, perks: [], grant: { gold: 3000 } },
-  { id: 'com.lumberempire.gold7000', kind: 'gold', title: '7,000 Gold', usd: '$49.99', hidden: true, perks: [], grant: { gold: 7000 } },
-  { id: 'com.lumberempire.gold15000', kind: 'gold', title: '15,000 Gold', usd: '$99.99', hidden: true, perks: [], grant: { gold: 15000 } },
   { id: 'com.lumberempire.starterpack', kind: 'pack', title: 'Starter Pack (old)', usd: '$4.99', hidden: true, perks: [], grant: { gold: 500, skins: ['steel-axe-skin'], woodBoost: { mult: 2, hours: 24 } } },
   { id: 'com.lumberempire.propack', kind: 'pack', title: 'Pro Logger Pack', usd: '$19.99', hidden: true, perks: [], grant: { gold: 2500, skins: ['diamond-axe-skin'], moneyBoost: { mult: 2, hours: 24 * 7 } } },
   { id: 'com.lumberempire.megapack', kind: 'pack', title: 'Empire Pack', usd: '$49.99', hidden: true, perks: [], grant: { gold: 7000, exclusiveAxes: ['dragon'], buildings: ['sawmill'], woodBoost: { mult: 2, hours: 24 * 7 } } },
@@ -310,11 +306,10 @@ export const AD_GOLD_VIDEOS_PER_DAY = 5; // spec
 export const AD_BOOST_MINUTES = 60; // Playbook 3: 2x production for 1 hour
 export const AD_BOOST_MAX_MINUTES = 360; // watching again adds 1 hour, up to 6 hours. Never more than 2x
 // Playbook 3: the Watch Ad pill on the home screen
-export const AD_CASH_MINUTES = 30; // pays 30 minutes of what you make right now
-export const AD_CASH_MIN = 25; // never less than $25 (the very first minutes)
-export const AD_CASH_COOLDOWN_MIN = 7; // 5 to 10 minutes between ads
-export const AD_CASH_PER_DAY = 5; // cap: 5 a day
-export const AD_CASH_UNLOCK_SEC = 4 * 60; // not in the first 4 minutes of play
+// Playbook 3 fix: the pill IS the free Gold video (+5 Gold, 5 a day, AD_GOLD_* above)
+export const AD_PILL_COOLDOWN_MIN = 7; // 5 to 10 minutes between videos
+export const AD_PILL_UNLOCK_SEC = 4 * 60; // not in the first 4 minutes of play
+export const AD_FREE_INSTANT_PER_DAY = 1; // Remove Ads: 1 instant reward a day in total, across every ad button
 export const AD_OFFLINE_MULT = 2; // spec
 
 // Gold shop: sell time, not power. Prices BALANCE.

@@ -4,7 +4,7 @@ import {
   DAILY_QUEST_MONEY_MIN, DAILY_REWARDS, GOLD_REPAIR_ALL, GOLD_SHOP, PRESTIGE_AT, QuestDef, WEEKLY_QUESTS, WEEKLY_QUEST_GOLD,
   WEEKLY_QUEST_BOOST_HOURS, WEEKLY_QUEST_MONEY_MIN, PRESTIGE_GOLD, COSMETICS, RARE_COSMETICS, RARE_EXTRA_GOLD, CosmeticKind,
   HELPERS, LAND, LAND_UPGRADES, TOOLS, SAWMILL_LEVELS, WORKSHOPS, YARD_SELLER_COST, MANAGER_COST, RIVALS,
-  AD_CASH_COOLDOWN_MIN, AD_CASH_MIN, AD_CASH_MINUTES, AD_CASH_PER_DAY, AD_CASH_UNLOCK_SEC, STARTER_PACK_HOURS, PRODUCTS,
+  AD_PILL_COOLDOWN_MIN, AD_PILL_UNLOCK_SEC, AD_FREE_INSTANT_PER_DAY, STARTER_PACK_HOURS, PRODUCTS,
 } from './data';
 import {
   GameState, Quest, addBoost, prodBoostLeftMs, addMoney, dayKeyOf, fixEverything, freshRun, hash, incomePerMin, marketPriceFor, repairAllCost,
@@ -200,52 +200,87 @@ export function adFree(s: GameState) {
 /** Today's ad counters (they reset at midnight). */
 function adsToday(s: GameState, now: number): GameState['ads'] {
   const dk = dayKeyOf(now);
-  return s.ads.dayKey === dk ? s.ads : { ...s.ads, dayKey: dk, goldVideos: 0, cashVideos: 0 };
+  return s.ads.dayKey === dk ? s.ads : { ...s.ads, dayKey: dk, goldVideos: 0, instantUsed: 0 };
 }
+
+export function msToMidnight(now: number) {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - now;
+}
+
+// ---------- Playbook 3 fix: Remove Ads = 1 instant reward a day, in total ----------
+
+/** Instant rewards left today for Remove Ads / VIP players (Infinity = not ad-free, they watch videos). */
+export function instantLeft(s: GameState, now: number) {
+  if (!adFree(s)) return Infinity;
+  return Math.max(0, AD_FREE_INSTANT_PER_DAY - adsToday(s, now).instantUsed);
+}
+
+/**
+ * Wraps any ad reward. Free players: unchanged. Ad-free players: the reward is instant, but only
+ * 1 a day across every ad button (home pill, welcome-back 2x, timed boost).
+ */
+export function withAdRule(apply: (s: GameState) => GameState | null, now: number) {
+  return (s: GameState): GameState | null => {
+    if (!adFree(s)) return apply(s);
+    if (instantLeft(s, now) <= 0) return null;
+    const x = apply(s);
+    if (!x) return null;
+    const a = adsToday(x, now);
+    return { ...x, ads: { ...a, instantUsed: a.instantUsed + 1 } };
+  };
+}
+
+/** Counts one instant reward for an ad-free player (used by the welcome-back 2x). */
+export function useInstant(s: GameState, now: number): GameState {
+  if (!adFree(s)) return s;
+  const a = adsToday(s, now);
+  return { ...s, ads: { ...a, instantUsed: a.instantUsed + 1 } };
+}
+
+/** "1 of 1 used today, new rewards tomorrow" + countdown, for every ad button once the 1 is used. */
+export function instantUsedText(now: number) {
+  return `1 of 1 used today, new rewards tomorrow (${clockText(msToMidnight(now))})`;
+}
+
+export function clockText(ms: number) {
+  const t = Math.ceil(ms / 1000);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const ss = String(t % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+// ---------- the free Gold video = the Watch Ad pill on the home screen ----------
 
 export function goldVideosLeft(s: GameState, now: number) {
   return Math.max(0, AD_GOLD_VIDEOS_PER_DAY - adsToday(s, now).goldVideos);
 }
 
-export function rewardGoldVideo(s: GameState, now: number): GameState | null {
-  if (goldVideosLeft(s, now) <= 0) return null;
-  const a = adsToday(s, now);
-  return { ...s, gold: s.gold + AD_GOLD_PER_VIDEO, ads: { ...a, goldVideos: a.goldVideos + 1 } };
-}
-
-// ---------- Playbook 3: the Watch Ad pill on the home screen ----------
-
-/** What the pill pays right now: 30 minutes of what you make now, so it never becomes useless later. */
-export function adCashAmount(s: GameState, now: number) {
-  return Math.max(AD_CASH_MIN, Math.round(incomePerMin(s, now) * AD_CASH_MINUTES));
-}
-
-export type AdCashState =
+export type AdPillState =
   | { status: 'locked' } // first 4 minutes of play: not shown
-  | { status: 'ready'; left: number }
-  | { status: 'cooldown'; msLeft: number; left: number } // "Ready in 4:32"
-  | { status: 'capped'; msLeft: number }; // 5 used today: countdown to midnight
+  | { status: 'ready'; left: number } // "Watch Ad · +5 Gold"
+  | { status: 'cooldown'; msLeft: number; left: number } // "Ready in 6:59"
+  | { status: 'capped'; msLeft: number } // 5 of 5 used: countdown to midnight
+  | { status: 'instantUsed'; msLeft: number }; // Remove Ads: "1 of 1 used today", countdown to midnight
 
-function msToMidnight(now: number) {
-  const d = new Date(now);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - now;
-}
-
-export function adCashState(s: GameState, now: number): AdCashState {
-  if (s.playSec < AD_CASH_UNLOCK_SEC && s.prestige.count === 0) return { status: 'locked' };
+export function adPillState(s: GameState, now: number): AdPillState {
+  if (s.playSec < AD_PILL_UNLOCK_SEC && s.prestige.count === 0) return { status: 'locked' };
+  if (instantLeft(s, now) <= 0) return { status: 'instantUsed', msLeft: msToMidnight(now) };
   const a = adsToday(s, now);
-  const left = AD_CASH_PER_DAY - a.cashVideos;
+  const left = AD_GOLD_VIDEOS_PER_DAY - a.goldVideos;
   if (left <= 0) return { status: 'capped', msLeft: msToMidnight(now) };
-  const wait = a.lastCashAt + AD_CASH_COOLDOWN_MIN * 60000 - now;
+  const wait = a.lastVideoAt + AD_PILL_COOLDOWN_MIN * 60000 - now;
   if (wait > 0) return { status: 'cooldown', msLeft: wait, left };
   return { status: 'ready', left };
 }
 
-/** Pays the amount shown on the button (fixed when they tapped). Only when ready. */
-export function rewardAdCash(s: GameState, now: number, amount: number): GameState | null {
-  if (adCashState(s, now).status !== 'ready' || !(amount > 0)) return null;
+/** +5 Gold. Only when the pill is ready (cooldown and the 5-a-day cap). Wrap with withAdRule for the Remove Ads rule. */
+export function rewardGoldVideo(s: GameState, now: number): GameState | null {
+  const st = adPillState(s, now).status;
+  if (st !== 'ready') return null;
   const a = adsToday(s, now);
-  return { ...addMoney(s, amount), ads: { ...a, cashVideos: a.cashVideos + 1, lastCashAt: now } };
+  return { ...s, gold: s.gold + AD_GOLD_PER_VIDEO, ads: { ...a, goldVideos: a.goldVideos + 1, lastVideoAt: now } };
 }
 
 // ---------- Playbook 3: Starter Pack offer ----------
